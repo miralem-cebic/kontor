@@ -1,0 +1,14 @@
+/* Base */
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+#root{height:100%}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:4px}
+input:focus-visible,textarea:focus-visible{outline:none}
+kbd{font:500 11px/1 var(--font);padding:3px 6px;border:1px solid var(--line-2);border-bottom-width:2px;border-radius:4px;color:var(--text-2);background:var(--surface);white-space:nowrap}
+.ic{flex:none;display:block}
+.sp{flex:1}
+[hidden]{display:none!important}
+

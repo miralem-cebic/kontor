@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+.tmp/
+*.tmp
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor and IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test output
+test-results/
+playwright-report/

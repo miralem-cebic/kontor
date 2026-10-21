@@ -1,0 +1,79 @@
+# Continuous integration for pull requests and the main branch.
+# The job names below are required status checks for the main branch ruleset,
+# see "Repository settings" in CONTRIBUTING.md.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: pr-title
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check that the PR title follows Conventional Commits
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  markdown-lint:
+    name: markdown-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Lint Markdown files
+        uses: DavidAnson/markdownlint-cli2-action@v24
+        with:
+          globs: "**/*.md"
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The runner image ships Google Chrome; Playwright uses it (channel "chrome"), so no browser is downloaded.
+      - name: Build and run the file:// checks
+        run: |
+          npm ci
+          npm run build
+          npm run check:file
+          npx playwright test
+
+      - name: Upload traces of failed tests
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
+  build:
+    name: build
+    uses: ./.github/workflows/build.yml
+    with:
+      version: dev-${{ github.run_number }}

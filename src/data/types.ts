@@ -1,0 +1,37 @@
+// File formats of the company folder (see DEVELOPMENT.md, "Data format").
+
+import type { CompanyProfile } from '../domain/company';
+import { keysOf, type CompanyId } from './ids';
+
+/**
+ * Fields that are merged one by one when two devices changed company.json: the newer `fieldUpdatedAt` wins.
+ * Every field of the profile is listed; the compiler fails when a new profile field is missing here.
+ */
+const MERGEABLE: Record<keyof CompanyProfile, true> = {
+  name: true,
+  owner: true,
+  address: true,
+  contact: true,
+  logo: true,
+  tax: true,
+  bank: true,
+  invoiceDefaults: true,
+};
+export const MERGEABLE_FIELDS = keysOf(MERGEABLE);
+export type MergeableField = keyof CompanyProfile;
+
+/** company.json */
+export interface CompanyFile extends CompanyProfile {
+  schemaVersion: number;
+  id: CompanyId;
+  createdAt: string;
+  /** Time of the last change per field; set by every change (store/appStore.ts) */
+  fieldUpdatedAt: Partial<Record<MergeableField, string>>;
+}
+
+/** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */
+export interface BackupFile {
+  schemaVersion: number;
+  createdAt: string;
+  company: CompanyFile;
+}

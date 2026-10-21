@@ -3,23 +3,10 @@
 // of the draft and turns it into profile values. Nothing here touches files or the UI.
 
 import { err, ok, type Result } from '../data/result';
-import { ibanProblem, isValidBic, normalizeIban, type IbanProblem } from './iban';
-import { patternProblem, DEFAULT_INVOICE_PATTERN, type PatternProblem } from './numbering';
+import { Checker, DEFAULT_COUNTRY, TEXT_LIMITS, type Address, type ContactDetails, type FieldError } from './check';
+import { ibanProblem, isValidBic, normalizeIban } from './iban';
+import { patternProblem, DEFAULT_INVOICE_PATTERN } from './numbering';
 import { isValidGermanVatId, isValidTaxNumber, normalizeVatId } from './taxIds';
-
-export interface Address {
-  street: string;
-  postalCode: string;
-  city: string;
-  /** ISO 3166-1 alpha-2, for example "DE" */
-  country: string;
-}
-
-export interface Contact {
-  email: string;
-  /** Empty when not given */
-  phone: string;
-}
 
 /** Ist-Versteuerung (cash, § 20 UStG) or Soll-Versteuerung (accrual, § 16 UStG) */
 export type VatMethod = 'cash' | 'accrual';
@@ -75,7 +62,7 @@ export interface CompanyProfile {
   name: string;
   owner: string;
   address: Address;
-  contact: Contact;
+  contact: ContactDetails;
   logo: LogoRef | null;
   tax: TaxSettings;
   bank: BankAccount;
@@ -85,16 +72,12 @@ export interface CompanyProfile {
 /* ---------- Limits ---------- */
 
 export const LIMITS = {
+  ...TEXT_LIMITS,
   name: 120,
   owner: 120,
-  street: 120,
-  city: 80,
-  email: 254,
-  phone: 40,
   municipality: 80,
   bankHolder: 120,
   footer: 1000,
-  maxPaymentTermDays: 365,
 } as const;
 
 /** Lowest multiplier a municipality may set (§ 16 Abs. 4 Satz 2 GewStG) */
@@ -103,7 +86,6 @@ export const MIN_TRADE_TAX_MULTIPLIER_PERCENT = 200;
 export const MAX_TRADE_TAX_MULTIPLIER_PERCENT = 9999;
 
 export const DEFAULT_PAYMENT_TERM_DAYS = 14;
-export const DEFAULT_COUNTRY = 'DE';
 
 /* ---------- Draft ---------- */
 
@@ -194,26 +176,7 @@ export function draftFromProfile(p: CompanyProfile): CompanyDraft {
 
 /* ---------- Checks ---------- */
 
-export type FieldProblem =
-  | 'required'
-  | 'tooLong'
-  | 'email'
-  | 'phone'
-  | 'postalCode'
-  | 'country'
-  | 'taxIdRequired'
-  | 'taxNumber'
-  | 'vatId'
-  | 'multiplier'
-  | 'bic'
-  | 'paymentTerm'
-  | `iban.${IbanProblem}`
-  | `pattern.${PatternProblem}`;
-
-export interface FieldError {
-  field: DraftField;
-  problem: FieldProblem;
-}
+export type CompanyFieldError = FieldError<DraftField>;
 
 export const SECTIONS = ['master', 'tax', 'bank', 'invoice'] as const;
 export type Section = (typeof SECTIONS)[number];
@@ -233,64 +196,22 @@ export const SECTION_FIELDS: Record<Section, readonly DraftField[]> = {
   invoice: ['numberPattern', 'paymentTermDays', 'footer'],
 };
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE = /^[0-9+()/ -]+$/;
-const GERMAN_POSTAL_CODE = /^\d{5}$/;
-const OTHER_POSTAL_CODE = /^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/;
+type Read<T> = Result<T, CompanyFieldError[]>;
 
-class Checker {
-  readonly errors: FieldError[] = [];
+const ADDRESS_FIELDS = { street: 'street', postalCode: 'postalCode', city: 'city', country: 'country' } as const;
 
-  add(field: DraftField, problem: FieldProblem) {
-    this.errors.push({ field, problem });
-  }
-
-  /** A required text: trimmed, not empty, not longer than `max` */
-  text(field: DraftField, value: string, max: number): string {
-    const v = value.trim();
-    if (!v) this.add(field, 'required');
-    else if (v.length > max) this.add(field, 'tooLong');
-    return v;
-  }
-
-  /** An optional text: trimmed, not longer than `max` */
-  optionalText(field: DraftField, value: string, max: number): string {
-    const v = value.trim();
-    if (v.length > max) this.add(field, 'tooLong');
-    return v;
-  }
-
-  /** A choice that must have been made */
-  chosen<T>(field: DraftField, value: T | null): T | null {
-    if (value === null) this.add(field, 'required');
-    return value;
-  }
-
-  done<T>(value: () => T): Result<T, FieldError[]> {
-    return this.errors.length ? err(this.errors) : ok(value());
-  }
-}
-
-function readMaster(d: CompanyDraft): Result<SectionValues['master'], FieldError[]> {
-  const c = new Checker();
+function readMaster(d: CompanyDraft): Read<SectionValues['master']> {
+  const c = new Checker<DraftField>();
   const name = c.text('name', d.name, LIMITS.name);
   const owner = c.text('owner', d.owner, LIMITS.owner);
-  const street = c.text('street', d.street, LIMITS.street);
-  const city = c.text('city', d.city, LIMITS.city);
-  const country = d.country.trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(country)) c.add('country', 'country');
-  const postalCode = d.postalCode.trim();
-  if (!postalCode) c.add('postalCode', 'required');
-  else if (!(country === 'DE' ? GERMAN_POSTAL_CODE : OTHER_POSTAL_CODE).test(postalCode)) c.add('postalCode', 'postalCode');
-  const email = c.text('email', d.email, LIMITS.email);
-  if (email && email.length <= LIMITS.email && !EMAIL.test(email)) c.add('email', 'email');
-  const phone = c.optionalText('phone', d.phone, LIMITS.phone);
-  if (phone && phone.length <= LIMITS.phone && !PHONE.test(phone)) c.add('phone', 'phone');
-  return c.done(() => ({ name, owner, address: { street, postalCode, city, country }, contact: { email, phone } }));
+  const address = c.address(ADDRESS_FIELDS, d);
+  const email = c.email('email', d.email, true);
+  const phone = c.phone('phone', d.phone);
+  return c.done(() => ({ name, owner, address, contact: { email, phone } }));
 }
 
-function readTax(d: CompanyDraft): Result<SectionValues['tax'], FieldError[]> {
-  const c = new Checker();
+function readTax(d: CompanyDraft): Read<SectionValues['tax']> {
+  const c = new Checker<DraftField>();
   const taxNumber = d.taxNumber.trim();
   const vatId = normalizeVatId(d.vatId);
   if (!taxNumber && !vatId) c.add('taxNumber', 'taxIdRequired');
@@ -322,8 +243,8 @@ function readTax(d: CompanyDraft): Result<SectionValues['tax'], FieldError[]> {
   });
 }
 
-function readBank(d: CompanyDraft): Result<SectionValues['bank'], FieldError[]> {
-  const c = new Checker();
+function readBank(d: CompanyDraft): Read<SectionValues['bank']> {
+  const c = new Checker<DraftField>();
   const holder = c.text('bankHolder', d.bankHolder, LIMITS.bankHolder);
   const iban = normalizeIban(d.iban);
   if (!iban) c.add('iban', 'required');
@@ -336,19 +257,17 @@ function readBank(d: CompanyDraft): Result<SectionValues['bank'], FieldError[]> 
   return c.done(() => ({ bank: { holder, iban, bic } }));
 }
 
-function readInvoice(d: CompanyDraft): Result<SectionValues['invoice'], FieldError[]> {
-  const c = new Checker();
+function readInvoice(d: CompanyDraft): Read<SectionValues['invoice']> {
+  const c = new Checker<DraftField>();
   const numberPattern = d.numberPattern.trim();
   const problem = patternProblem(numberPattern);
   if (problem) c.add('numberPattern', `pattern.${problem}`);
-  const term = d.paymentTermDays.trim();
-  const paymentTermDays = Number(term);
-  if (!/^\d+$/.test(term) || paymentTermDays > LIMITS.maxPaymentTermDays) c.add('paymentTermDays', 'paymentTerm');
+  const paymentTermDays = c.paymentTerm('paymentTermDays', d.paymentTermDays);
   const footer = c.optionalText('footer', d.footer, LIMITS.footer);
   return c.done(() => ({ invoiceDefaults: { numberPattern, paymentTermDays, footer } }));
 }
 
-const READERS: { [S in Section]: (d: CompanyDraft) => Result<SectionValues[S], FieldError[]> } = {
+const READERS: { [S in Section]: (d: CompanyDraft) => Read<SectionValues[S]> } = {
   master: readMaster,
   tax: readTax,
   bank: readBank,
@@ -356,10 +275,10 @@ const READERS: { [S in Section]: (d: CompanyDraft) => Result<SectionValues[S], F
 };
 
 /** Checks one section of the draft; the values are returned only when every field of the section is valid. */
-export const readSection = <S extends Section>(section: S, draft: CompanyDraft): Result<SectionValues[S], FieldError[]> => READERS[section](draft);
+export const readSection = <S extends Section>(section: S, draft: CompanyDraft): Read<SectionValues[S]> => READERS[section](draft);
 
 /** Checks all sections; the profile (without logo) is returned only when every section is valid. */
-export function readProfile(draft: CompanyDraft): Result<Omit<CompanyProfile, 'logo'>, FieldError[]> {
+export function readProfile(draft: CompanyDraft): Read<Omit<CompanyProfile, 'logo'>> {
   const master = readMaster(draft);
   const tax = readTax(draft);
   const bank = readBank(draft);

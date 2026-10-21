@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeCompany, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeCompany, makeContact, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import type { CompanyFile } from '../../src/data/types';
-import { sampleProfile } from './fixtures';
+import { sampleContact, sampleProfile } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -109,14 +109,55 @@ describe('FsRepository', () => {
   });
 
   it('writes, lists and removes backups', async () => {
-    must(await repo.writeBackup('2026-10-20', company));
-    must(await repo.writeBackup('2026-10-21', company));
+    must(await repo.writeBackup('2026-10-20', { company, contacts: [] }));
+    must(await repo.writeBackup('2026-10-21', { company, contacts: [] }));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21', '2026-10-20']);
     const backups = await root.getDirectoryHandle('backups');
     const backup = JSON.parse(await text(backups, '2026-10-21.json'));
     expect(backup).toMatchObject({ schemaVersion: SCHEMA_VERSION, company: { id: company.id } });
     must(await repo.removeBackup('2026-10-20'));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21']);
-    expect((await repo.writeBackup('../x', company)).ok).toBe(false);
+    expect((await repo.writeBackup('../x', { company, contacts: [] })).ok).toBe(false);
+  });
+});
+
+describe('contacts in the folder', () => {
+  const contactsDir = async () => root.getDirectoryHandle('contacts', { create: true });
+
+  it('saves and loads contacts, deleted ones included', async () => {
+    const a = makeContact(sampleContact({ name: 'A' }));
+    const b = { ...makeContact(sampleContact({ name: 'B', customerNumber: '' })), deletedAt: nowIso() };
+    must(await repo.saveContact(a));
+    must(await repo.saveContact(b));
+    const { contacts, issues } = must(await new FsRepository(root.asHandle()).loadContacts());
+    expect(issues).toEqual([]);
+    expect(contacts.map((c) => c.name).sort()).toEqual(['A', 'B']);
+    expect(JSON.parse(await text(await contactsDir(), `${a.id}.json`)).schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it('a broken file is reported, the others still load; conflict copies are not read', async () => {
+    const ok1 = makeContact(sampleContact());
+    must(await repo.saveContact(ok1));
+    const dir = await contactsDir();
+    const broken = makeContact(sampleContact());
+    ((await dir.getFileHandle(`${broken.id}.json`, { create: true })) as MemFile).content = new Blob(['{ "id": 1 }']);
+    const renamed = makeContact(sampleContact());
+    ((await dir.getFileHandle('0f8fad5b-d9cb-469f-a165-70867728950e.json', { create: true })) as MemFile).content = new Blob([JSON.stringify(renamed)]);
+    ((await dir.getFileHandle(`${ok1.id}-LAPTOP.json`, { create: true })) as MemFile).content = new Blob([JSON.stringify(ok1)]);
+    const { contacts, issues } = must(await new FsRepository(root.asHandle()).loadContacts());
+    expect(contacts.map((c) => c.id)).toEqual([ok1.id]);
+    expect(issues.map((i) => i.file).sort()).toEqual([`contacts/${broken.id}.json`, 'contacts/0f8fad5b-d9cb-469f-a165-70867728950e.json'].sort());
+  });
+
+  it('merges a contact changed on another device, and a deletion survives a later edit elsewhere', async () => {
+    const c = makeContact(sampleContact());
+    must(await repo.saveContact(c));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadContacts()).contacts;
+    must(await other.saveContact({ ...theirs!, deletedAt: nowIso(), fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, deletedAt: nowIso() } }));
+    const mine = { ...c, notes: 'later note', fieldUpdatedAt: { ...c.fieldUpdatedAt, notes: nowIso() } };
+    const written = must(await repo.saveContact(mine));
+    expect(written.notes).toBe('later note');
+    expect(written.deletedAt).not.toBeNull();
   });
 });

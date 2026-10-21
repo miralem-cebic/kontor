@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { removeLogo, replaceLogo, useSession } from '../../app/session';
 import { LanguageSelect } from '../../components/LanguageSelect';
-import { draftFromProfile, readSection, type CompanyDraft, type FieldError, type Section } from '../../domain/company';
+import { draftFromProfile, readSection, type CompanyDraft, type CompanyFieldError, type Section } from '../../domain/company';
 import type { CompanyFile } from '../../data/types';
 import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
@@ -44,7 +44,7 @@ export function SettingsView() {
 function SectionCard({ company, section, title, Fields }: { company: CompanyFile; section: Section; title: MessageKey; Fields: ComponentType<FieldsProps> }) {
   const [draft, setDraft] = useState<CompanyDraft>(() => draftFromProfile(company));
   const [dirty, setDirty] = useState(false);
-  const [errors, setErrors] = useState<readonly FieldError[]>([]);
+  const [errors, setErrors] = useState<readonly CompanyFieldError[]>([]);
   const headingId = `settings-${section}`;
 
   // a change from elsewhere (another device, the logo) shows up unless this section is being edited

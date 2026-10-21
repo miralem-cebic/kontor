@@ -5,6 +5,7 @@ import { Icon, type IconName } from '../../components/Icon';
 import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
+import { ContactsView } from '../contacts/ContactsView';
 import { HomeView } from '../home/HomeView';
 import { SettingsView } from '../settings/SettingsView';
 import { CompanySwitcher } from './CompanySwitcher';
@@ -12,14 +13,14 @@ import { CompanySwitcher } from './CompanySwitcher';
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'settings';
+type View = 'home' | 'contacts' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
   { key: 'nav.quotes', icon: 'quote' },
   { key: 'nav.invoices', icon: 'invoice' },
   { key: 'nav.expenses', icon: 'expense' },
-  { key: 'nav.contacts', icon: 'contacts' },
+  { key: 'nav.contacts', icon: 'contacts', view: 'contacts' },
   { key: 'nav.taxes', icon: 'tax' },
   { key: 'nav.tools', icon: 'tools' },
   { key: 'nav.settings', icon: 'settings', view: 'settings' },
@@ -58,10 +59,23 @@ export function Shell() {
         </nav>
       </ErrorBoundary>
       <main className="main">
-        <ErrorBoundary name="main">{view === 'home' ? <HomeView /> : <SettingsView />}</ErrorBoundary>
+        <ErrorBoundary name="main">
+          <MainView view={view} />
+        </ErrorBoundary>
       </main>
     </div>
   );
+}
+
+function MainView({ view }: { view: View }) {
+  switch (view) {
+    case 'home':
+      return <HomeView />;
+    case 'contacts':
+      return <ContactsView />;
+    case 'settings':
+      return <SettingsView />;
+  }
 }
 
 function SaveStatus() {

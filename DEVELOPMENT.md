@@ -45,10 +45,12 @@ src/
                                Setup assistant actions (choose folder, finish), switching companies, logo
   app/crashReporting.ts        Global handlers for uncaught errors (emergency copy, then a toast)
   domain/                      Pure logic, no I/O:
+    check.ts                   Checker for form drafts, shared field checks (address, email, phone, payment term)
     money.ts                   Cents, basis points, quantities, rounding, tax totals, parsing and formatting
     iban.ts, taxIds.ts         IBAN/BIC, Steuernummer, USt-IdNr. (check digit)
     numbering.ts               Invoice number patterns ("RE-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
+    contact.ts                 Customers and suppliers: profile, form draft, checks, search
   data/
     types.ts                   File formats (company.json, backups)
     schema.ts                  SCHEMA_VERSION, factories
@@ -56,7 +58,7 @@ src/
     clock.ts                   Hybrid clock for change timestamps
     validate.ts                Hand-written checks for everything read from the folder or browser storage
     migrations.ts              Upgrade per file kind, then validate
-    merge.ts                   Field-level merge of company.json
+    merge.ts                   Field-level merge of company.json and contact files
     repository.ts              Repository interface, StorageError
     result.ts                  Result instead of exceptions
     persister.ts               Watches the store, writes changes (400 ms debounce), emergency copy in localStorage
@@ -70,7 +72,7 @@ src/
   store/prefs.ts               Per-browser settings: language, last company
   i18n/                        Texts in de and en
   features/                    setup (assistant), company (shared form fields, summary), shell (frame, switcher),
-                               settings, home, start
+                               contacts (list and form), settings, home, start
   components/                  Form fields, icon, toast, error boundary, language select
   lib/                         labels.ts (texts for error codes), sha256.ts
   styles/                      tokens.css, base.css, fonts.css, app.css
@@ -81,7 +83,7 @@ src/
 1. `boot()` checks the browser (`checkSupport`), then reads the list of known company folders (`handleStore`).
 2. No entry: the setup assistant. Otherwise the last opened company (`prefs.lastCompany`) or the first one.
 3. If the browser still has write permission, the company is loaded; otherwise "Continue with …" asks for permission (needs a click).
-4. Loading: `readCompany` (validated), then the store, the persister, an emergency copy from an earlier session if it is newer, the logo and the daily backup.
+4. Loading: `readCompany` (validated), the contacts (`loadContacts`; a broken file is left out and reported in a toast), then the store, the persister, an emergency copy from an earlier session if it is newer, the logo and the daily backup.
 5. The switcher opens another company: it asks for permission first (while the click counts as a user gesture), then writes what is pending and closes the current company.
 
 "Add company" runs the assistant while the current company stays open. A folder that already holds a company is opened directly. A folder that is empty becomes the company folder; in a folder that is not empty, a subfolder named after the company is created on "Finish". Nothing is written before "Finish": the logo first, `company.json` last, so a folder counts as set up only when it is complete.
@@ -91,8 +93,9 @@ src/
 1. The UI calls actions in `store/appStore.ts`. They change the state immediately and immutably.
 2. `Persister` compares object references and queues what changed; objects that are saved are kept in a `WeakSet`.
 3. After 400 ms it writes through the `Repository`. Repository operations return a `Result`; exceptions from the browser API are turned into results once, in `FsRepository`.
-4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
-5. `saveCompany` checks the file's `lastModified`. If someone else changed it since the last read, it reads the file again and merges field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another company or a newer format version is never overwritten.
+4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy of the unsaved company and contacts is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
+5. `saveCompany` and `saveContact` check the file's `lastModified`. If someone else changed it since the last read, they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
+6. Deleting a contact sets `deletedAt` (a mergeable field with its own timestamp): the file stays, the contact is hidden, and an edit made elsewhere later does not bring it back.
 
 ### Boundary rules
 
@@ -102,14 +105,14 @@ src/
 
 ## Data format (schema version 1)
 
-Phase 0 writes `company.json`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
+kontor writes `company.json`, `contacts/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
 ```text
 <company folder>/
   company.json            { schemaVersion, id, name, owner, address, contact, logo, tax, bank, invoiceDefaults, createdAt, fieldUpdatedAt }
   assets/logo-<hash>.<ext> logo files, named after the start of their SHA-256, never overwritten
-  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company }
-  contacts/<id>.json      customers and suppliers                                  (planned)
+  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts }
+  contacts/<id>.json      customers and suppliers, file name = contact ID; other names (conflict copies) are not read
   documents/<id>.json     quote | invoice | cancellation, with a snapshot of the master data (planned)
   documents/issued/<nr>.pdf|.xml  finalized output, never overwritten              (planned)
   numbering/<range>.json  assigned numbers and reservations                        (planned)
@@ -134,6 +137,8 @@ Phase 0 writes `company.json`, `assets/` and `backups/`. The rest of the layout 
 | `invoiceDefaults` | `numberPattern`, `paymentTermDays`, `footer` |
 | `fieldUpdatedAt` | timestamp per top-level field, for the merge |
 
+A contact file (`contacts/<id>.json`, types in `src/domain/contact.ts`) has `kind` (`company` or `person`), `roles` (`customer`, `supplier`), `name`, `nameLine2`, `contactPerson`, `customerNumber` (unique among active contacts), `address` (`null` or complete), `contact` (`email`, `phone`), `vatId` (EU), `leitwegId`, `orderReference` (default PO number), `paymentTermDays` (`null` = company default), `notes`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. Contacts were added in schema version 1 as a new kind of file; no existing file changed, so the version stayed.
+
 App-wide data is not in a company folder: the list of folder handles (IndexedDB `kontor`, store `companies`), the last company and the language (`localStorage` `kontor.prefs.v1`).
 
 ### Migrations
@@ -144,6 +149,6 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 
 - **Unit** (`tests/unit`): domain checks, validation, migrations, repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness.
 - **Property-based** (fast-check): money sums and rounding, gross/net splits, parsing and formatting, IBAN check digits, profile normalization. CI uses a fixed seed (`CI` is set); locally the seed is random. `FC_SEED=<seed>` repeats a failing run, `FC_RUNS=<n>` runs more cases.
-- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English.
+- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company).
 
 Test mode `?e2e`: the native folder picker is replaced by folders in `localStorage` (`data/fs/storageFs.ts`), and the list of companies is kept in `localStorage` too. `window.__e2e` provides `flush()` (wait for pending writes) and `nextFolder(name)` (the next folder picker returns this folder). Only active with this URL parameter.

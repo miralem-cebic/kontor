@@ -1,7 +1,8 @@
 // File formats of the company folder (see DEVELOPMENT.md, "Data format").
 
 import type { CompanyProfile } from '../domain/company';
-import { keysOf, type CompanyId } from './ids';
+import type { ContactProfile } from '../domain/contact';
+import { keysOf, type CompanyId, type ContactId } from './ids';
 
 /**
  * Fields that are merged one by one when two devices changed company.json: the newer `fieldUpdatedAt` wins.
@@ -29,9 +30,44 @@ export interface CompanyFile extends CompanyProfile {
   fieldUpdatedAt: Partial<Record<MergeableField, string>>;
 }
 
+/** Contact fields merged one by one; `deletedAt` is one of them, so a deletion survives edits made elsewhere. */
+const CONTACT_MERGEABLE: Record<keyof ContactProfile | 'deletedAt', true> = {
+  kind: true,
+  roles: true,
+  name: true,
+  nameLine2: true,
+  contactPerson: true,
+  customerNumber: true,
+  address: true,
+  contact: true,
+  vatId: true,
+  leitwegId: true,
+  orderReference: true,
+  paymentTermDays: true,
+  notes: true,
+  deletedAt: true,
+};
+export const CONTACT_MERGEABLE_FIELDS = keysOf(CONTACT_MERGEABLE);
+export type ContactMergeableField = keyof ContactProfile | 'deletedAt';
+
+/** contacts/<id>.json */
+export interface ContactFile extends ContactProfile {
+  schemaVersion: number;
+  id: ContactId;
+  createdAt: string;
+  /** Soft delete: a deleted contact stays in its file and is hidden in the app */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<ContactMergeableField, string>>;
+}
+
+/** What a backup holds */
+export interface BackupSnapshot {
+  company: CompanyFile;
+  contacts: readonly ContactFile[];
+}
+
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */
-export interface BackupFile {
+export interface BackupFile extends BackupSnapshot {
   schemaVersion: number;
   createdAt: string;
-  company: CompanyFile;
 }

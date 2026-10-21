@@ -118,8 +118,8 @@ const MESSAGES_SRC = {
 
   'invoice.pattern': { de: 'Rechnungsnummer', en: 'Invoice number' },
   'invoice.patternHint': {
-    de: 'Platzhalter: {YYYY} Jahr, {YY} Jahr zweistellig, {MM} Monat, {NNNN} laufende Nummer. Erlaubt sind Buchstaben, Ziffern, - und _.',
-    en: 'Placeholders: {YYYY} year, {YY} two-digit year, {MM} month, {NNNN} running number. Letters, digits, - and _ are allowed.',
+    de: 'Platzhalter: {YYYY} Jahr, {YY} Jahr zweistellig, {MM} Monat, {NNNN} laufende Nummer. Mit Jahr im Format beginnt die Nummer jedes Jahr neu bei 1. Erlaubt sind Buchstaben, Ziffern, - und _.',
+    en: 'Placeholders: {YYYY} year, {YY} two-digit year, {MM} month, {NNNN} running number. With a year in the format, the number starts again at 1 every year. Letters, digits, - and _ are allowed.',
   },
   'invoice.patternPreview': { de: 'Die erste Rechnung bekäme die Nummer {number}.', en: 'The first invoice would get the number {number}.' },
   'invoice.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },

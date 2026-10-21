@@ -1,6 +1,7 @@
 // Number patterns for invoices, for example "RE-{YYYY}-{NNNN}" → "RE-2026-0001".
 // The number is used as a file name (documents/issued/<number>.pdf), so only characters that are safe in
-// file names on every system are allowed. Assigning numbers (gap-free, never reused) is not done here, see ADR 0004.
+// file names on every system are allowed. Assigning numbers (gap-free, never reused, restarting every year when the
+// pattern contains {YYYY} or {YY}) is not done here, see ADR 0004.
 
 export const DEFAULT_INVOICE_PATTERN = 'RE-{YYYY}-{NNNN}';
 export const MAX_PATTERN_LENGTH = 40;

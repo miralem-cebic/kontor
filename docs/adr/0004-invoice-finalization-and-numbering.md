@@ -24,7 +24,8 @@ German law and the GoBD (principles for proper bookkeeping in electronic form) e
 - A number is assigned only when the document is issued, never for a draft, and is never reused, also not after a cancellation.
 - Before assigning, kontor reads the existing numbers and issued files, then writes a reservation (number, document ID, device, timestamp) to the range file, reads it back and checks that its reservation is the one that holds. On any conflict it stops and reports; it never silently assigns a number twice.
 - **Assumption for the MVP:** only one device writes to a company at a time. The reservation detects violations of this assumption; it does not make concurrent issuing safe. The README tells users not to edit one company on two devices at the same time.
-- Whether a counter restarts each year when the pattern contains a year is decided in Phase 1 and documented with it.
+- **Yearly restart:** when the pattern contains a year (`{YYYY}` or `{YY}`), the counter starts again at 1 in every calendar year, counted by the invoice date: `RE-2026-0042` is followed by `RE-2027-0001`. Without a year in the pattern the counter runs on across years (a month alone, `{MM}`, does not restart it). The range file keeps the last number per year.
+- Uniqueness is checked on the full formatted number against all issued documents of the company. Changing the pattern during a year therefore cannot produce a duplicate unnoticed.
 
 ## Consequences
 

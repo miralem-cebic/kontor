@@ -22,7 +22,7 @@ One person may run several businesses: a freelance activity and a trade, or a bu
 - Backups and exports are separate per company.
 - App-wide data (the list of folders, the last selection, the language) lives in the browser, not in any folder. Another browser or computer asks for the folder the first time.
 - Switching closes one company and opens another: pending writes are flushed first, and the browser may ask for permission.
-- Reports across companies (for one income tax return with several businesses) need to read several folders; this is left for later.
+- Reports across companies need to read several folders; this is left for later. It matters most for VAT: several businesses of one person are one business for VAT (§ 2 Abs. 1 Satz 2 UStG), so the small business limit and the advance return (UStVA) cover all of them together. Until kontor adds them up, the setup assistant tells users to choose the same VAT settings in every company of the same person.
 
 ## Alternatives considered
 

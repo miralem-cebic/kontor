@@ -9,6 +9,17 @@ Sie läuft vollständig im Browser und braucht keinen Server, keine Datenbank un
 
 > **Keine Steuerberatung.** kontor ist eine Ausfüllhilfe. Berechnungen, Rücklagen und Exporte sind Schätzungen auf Grundlage deiner Eingaben und ersetzen keine Beratung durch Steuerberater/innen. Prüfe Ergebnisse, bevor du sie beim Finanzamt einreichst.
 
+## Für wen ist kontor?
+
+| Tätigkeit | Kleinunternehmer (§ 19 UStG) | Regelbesteuerung mit Umsatzsteuer-Voranmeldung |
+| --- | --- | --- |
+| Freiberufler (§ 18 EStG) | ✓ | ✓ |
+| Gewerbliches Einzelunternehmen | ✓ | ✓ |
+
+kontor ist für Einzelunternehmen mit Einnahmen-Überschuss-Rechnung (§ 4 Abs. 3 EStG), solange keine Buchführungspflicht besteht (§ 141 AO, § 241a HGB). Nicht gedacht ist kontor für Kapitalgesellschaften wie GmbH und UG (sie müssen bilanzieren) und für Personengesellschaften wie GbR und Partnerschaft (ihr Gewinn wird gesondert und einheitlich festgestellt).
+
+**Mehrere Betriebe:** Wer zum Beispiel freiberuflich arbeitet und zusätzlich ein Gewerbe hat, legt dafür zwei Unternehmen an: Gewinn und Gewerbesteuer werden je Betrieb ermittelt. Für die Umsatzsteuer ist eine Person aber ein einziges Unternehmen (§ 2 Abs. 1 Satz 2 UStG): Die Kleinunternehmergrenze gilt für den Gesamtumsatz, und es gibt eine gemeinsame Voranmeldung. kontor rechnet die Umsätze mehrerer Unternehmen noch nicht zusammen.
+
 ## Stand
 
 Der aktuelle Stand enthält:

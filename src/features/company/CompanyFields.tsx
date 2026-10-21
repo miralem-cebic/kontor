@@ -41,6 +41,10 @@ export function TaxFields({ draft, set, errors }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
   return (
     <>
+      <div className="note" role="note">
+        <p>{t('tax.scope')}</p>
+        <p>{t('tax.scopeVat')}</p>
+      </div>
       <p className="f-intro">{t('tax.idsIntro')}</p>
       <Row>
         <TextField label={t('tax.taxNumber')} hint={t('tax.taxNumberHint')} value={draft.taxNumber} onChange={(taxNumber) => set({ taxNumber })} error={e('taxNumber')} maxLength={40} />

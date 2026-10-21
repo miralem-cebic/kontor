@@ -14,4 +14,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - App frame with the planned areas (dashboard, quotes, invoices, expenses, contacts, taxes, tools) shown as coming soon.
 - Daily backup of the company file in the company folder (14 days kept).
 - German and English interface.
+- The tax step of the setup assistant and the tax settings say who kontor is for (sole proprietors with cash-basis accounting, not corporations or partnerships) and that several businesses of one person share one VAT status.
 - Contacts: customers and suppliers, as company or private person, with address, invoice email, customer number (unique), EU VAT ID, Leitweg-ID for public buyers, default order or PO number, payment term and notes. Search and filter by role; deleting asks first and keeps the file, so documents that use the contact are not affected. A contact file that cannot be read is reported, the others still load. Contacts are part of the daily backup.

@@ -119,6 +119,7 @@ kontor writes `company.json`, `contacts/`, `assets/` and `backups/`. The rest of
   payments/<id>.json                                                               (planned)
   expenses/<id>.json      with receipt: { kind: 'file', path, sha256 } | { kind: 'link', url } (planned)
   belege/<year>/…         receipt files                                            (planned)
+  eingang/                inbox: files waiting to be assigned (F06)                 (planned)
   audit/<YYYY-MM>.jsonl   append-only                                              (planned)
   exports/                generated exports                                        (planned)
 ```

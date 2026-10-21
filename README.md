@@ -67,7 +67,8 @@ Architektur, Datenformat und alle Skripte stehen in [DEVELOPMENT.md](DEVELOPMENT
 
 ## Dokumentation
 
-- [Roadmap](docs/roadmap.md): geplante Funktionen und Finanzamt-Exporte
+- [Roadmap](docs/roadmap.md): geplante Funktionen, Weg zu Version 1.0 und Finanzamt-Exporte
+- [Wettbewerb](docs/competition.md): andere Anbieter und was sie exportieren
 - [Architekturentscheidungen](docs/adr/)
 - [Entwicklung](DEVELOPMENT.md), [Mitarbeit](CONTRIBUTING.md), [Verhaltenskodex](CODE_OF_CONDUCT.md), [Sicherheit](SECURITY.md), [Änderungen](CHANGELOG.md)
 

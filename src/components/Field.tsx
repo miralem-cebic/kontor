@@ -157,6 +157,34 @@ export function CheckField({ label, hint, checked, onChange }: Omit<Common, 'err
   );
 }
 
+/** A group of checkboxes with one error for the whole group (for example "choose at least one") */
+export function CheckGroup<K extends string>({
+  label,
+  error,
+  options,
+  onChange,
+  required,
+}: Omit<Common, 'hint'> & { options: readonly { key: K; label: string; checked: boolean }[]; onChange: (key: K, checked: boolean) => void; required?: boolean }) {
+  const id = useId();
+  return (
+    <fieldset className="field choice" aria-describedby={error ? `${id}-error` : undefined} aria-invalid={error ? true : undefined}>
+      <legend>
+        {label}
+        {required && <span className="f-req" aria-hidden="true"> *</span>}
+      </legend>
+      <div className="check-row">
+        {options.map((o) => (
+          <label key={o.key} className="check">
+            <input type="checkbox" checked={o.checked} onChange={(e) => onChange(o.key, e.target.checked)} />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      <Messages id={id} error={error} />
+    </fieldset>
+  );
+}
+
 export function Row({ children }: { children: ReactNode }) {
   return <div className="f-row">{children}</div>;
 }

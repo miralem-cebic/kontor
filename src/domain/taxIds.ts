@@ -28,3 +28,29 @@ export function isValidGermanVatId(input: string): boolean {
   const check = (11 - product) % 10;
   return check === Number(id[10]);
 }
+
+/** Country prefixes of VAT IDs in the EU (Greece uses EL, Northern Ireland XI) */
+const EU_VAT_PREFIXES = ['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK', 'XI'] as const;
+
+/**
+ * VAT ID of a business customer in the EU: country prefix and 2 to 12 letters or digits. German IDs also need a
+ * valid check digit. Only the form is checked; whether the ID is assigned can only be confirmed by the BZSt
+ * (qualified confirmation) or VIES.
+ */
+export function isPlausibleEuVatId(input: string): boolean {
+  const id = normalizeVatId(input);
+  const prefix = id.slice(0, 2);
+  if (!(EU_VAT_PREFIXES as readonly string[]).includes(prefix) || !/^[A-Z]{2}[0-9A-Z+*]{2,12}$/.test(id)) return false;
+  return prefix !== 'DE' || isValidGermanVatId(id);
+}
+
+/**
+ * Leitweg-ID of a public buyer (BT-10 in XRechnung): coarse address (2–12 digits), optional fine address
+ * (up to 30 letters or digits) and two check digits, separated by "-", at most 46 characters.
+ * Source: KoSIT, Formatspezifikation Leitweg-ID, https://www.xoev.de/xrechnung-16828
+ * Only the structure is checked here; the check digits are verified when e-invoices are built (Phase 2).
+ */
+export const isPlausibleLeitwegId = (input: string): boolean => {
+  const id = input.trim();
+  return id.length <= 46 && /^\d{2,12}(-[A-Za-z0-9]{1,30})?-\d{2}$/.test(id);
+};

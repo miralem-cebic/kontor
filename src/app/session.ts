@@ -8,16 +8,16 @@ import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany } from '../data/merge';
+import { mergeCompany, mergeContact, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
 import { emergencyKey, Persister } from '../data/persister';
 import { classifyError, type Asset, type StorageErrorKind } from '../data/repository';
 import { makeCompany } from '../data/schema';
-import type { CompanyFile } from '../data/types';
+import type { CompanyFile, ContactFile } from '../data/types';
 import { isRecord } from '../data/validate';
 import { t } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
-import { applyRecoveredCompany, loadCompany, resetApp, setLogoUrl, showToast, updateCompany, useApp } from '../store/appStore';
+import { applyRecovered, loadCompany, resetApp, setLogoUrl, showToast, updateCompany, useApp } from '../store/appStore';
 import { setLastCompany, usePrefs } from '../store/prefs';
 
 // Startup flow: check the browser → known company folders → permission → load → app.
@@ -159,19 +159,27 @@ async function load(entry: CompanyEntry) {
   await openLoaded(r, entry, res.value);
 }
 
+/** Opens a company whose company.json was read: its contacts, the persister, a recovered emergency copy, the logo, the backup */
 async function openLoaded(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
+  const loaded = await r.loadContacts();
+  if (!loaded.ok) return set({ phase: 'failed', error: loaded.error.kind, currentId: company.id });
+  const { contacts, issues } = loaded.value;
   repo = r;
-  loadCompany(company);
+  loadCompany(company, contacts);
   persister = new Persister(r);
   persister.start();
   // after the persister started with the file state as saved, so that it writes the recovered changes
-  const recovered = recoverEmergencyCopy(company);
-  if (recovered !== company) applyRecoveredCompany(recovered);
+  const recovered = recoverEmergencyCopy(company, contacts);
+  if (recovered) applyRecovered(recovered.company, recovered.contacts);
+  if (issues.length) {
+    console.warn('Some contacts could not be read', issues);
+    showToast(t('toast.unreadableContacts', { n: issues.length }));
+  }
   setLastCompany(company.id);
   if (entry.name !== company.name) await rememberCompany(entry.handle, company);
   set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false });
   void loadLogo();
-  void maintenance(r, company);
+  void maintenance(r);
 }
 
 async function rememberCompany(handle: FileSystemDirectoryHandle, company: CompanyFile) {
@@ -185,26 +193,42 @@ async function rememberCompany(handle: FileSystemDirectoryHandle, company: Compa
  * Unsaved changes from an earlier session (the folder was not reachable then). The copy is data like any other
  * file: it is used only if it passes the same checks, belongs to this company and is newer.
  */
-function recoverEmergencyCopy(company: CompanyFile): CompanyFile {
+function recoverEmergencyCopy(company: CompanyFile, contacts: readonly ContactFile[]): { company: CompanyFile; contacts: ContactFile[] } | null {
+  let copy: unknown;
   try {
     const raw = localStorage.getItem(emergencyKey(company.id));
-    if (!raw) return company;
-    const copy: unknown = JSON.parse(raw);
-    if (!isRecord(copy)) return company;
-    const saved = migrate('company', copy['company']);
-    if (saved.id !== company.id) return company;
-    const merged = mergeCompany(company, saved);
-    if (JSON.stringify(merged) === JSON.stringify(company)) return company;
-    showToast(t('toast.recovered'));
-    return merged;
+    if (!raw) return null;
+    copy = JSON.parse(raw);
   } catch {
-    return company;
+    return null;
   }
+  if (!isRecord(copy)) return null;
+  const read = <T>(run: () => T): T | null => {
+    try {
+      return run();
+    } catch {
+      return null;
+    }
+  };
+  const savedCompany = copy['company'] ? read(() => migrate('company', copy['company'])) : null;
+  const nextCompany = savedCompany?.id === company.id ? mergeCompany(company, savedCompany) : company;
+  const known = new Map(contacts.map((c) => [c.id, c]));
+  const savedContacts = Array.isArray(copy['contacts']) ? copy['contacts'].flatMap((x) => read(() => migrate('contact', x)) ?? []) : [];
+  const changedContacts = savedContacts.flatMap((saved) => {
+    const current = known.get(saved.id);
+    const merged = current ? mergeContact(current, saved) : saved;
+    return current && sameJson(merged, current) ? [] : [merged];
+  });
+  if (sameJson(nextCompany, company) && !changedContacts.length) return null;
+  showToast(t('toast.recovered'));
+  return { company: nextCompany, contacts: changedContacts };
 }
 
-/** Daily backup. Errors here must not disturb the work. */
-async function maintenance(r: FsRepository, company: CompanyFile) {
-  const res = await dailyBackup(r, company);
+/** Daily backup of the state in the store. Errors here must not disturb the work. */
+async function maintenance(r: FsRepository) {
+  const { company, contacts } = useApp.getState();
+  if (!company) return;
+  const res = await dailyBackup(r, { company, contacts: [...contacts.values()] });
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }
 

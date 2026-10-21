@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import type { LogoUpload } from '../../app/session';
 import { CheckField, Choice, Row, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
-import { checkLogo, LIMITS, type CompanyDraft, type FieldError, type VatMethod, type VatPeriod } from '../../domain/company';
+import { checkLogo, LIMITS, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
 import { formatNumber, patternProblem } from '../../domain/numbering';
 import { t } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
@@ -12,7 +12,7 @@ import { fieldError, logoProblemText } from '../../lib/labels';
 export interface FieldsProps {
   draft: CompanyDraft;
   set: (patch: Partial<CompanyDraft>) => void;
-  errors: readonly FieldError[];
+  errors: readonly CompanyFieldError[];
 }
 
 export function MasterFields({ draft, set, errors }: FieldsProps) {

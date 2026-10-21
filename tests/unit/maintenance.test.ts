@@ -3,11 +3,11 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { dailyBackup, KEEP_BACKUPS } from '../../src/data/maintenance';
 import { must } from '../../src/data/result';
-import { makeCompany } from '../../src/data/schema';
-import { sampleProfile } from './fixtures';
+import { makeCompany, makeContact } from '../../src/data/schema';
+import { sampleContact, sampleProfile } from './fixtures';
 
 let repo: FsRepository;
-const company = makeCompany(sampleProfile());
+const snapshot = { company: makeCompany(sampleProfile()), contacts: [] };
 
 beforeEach(() => {
   repo = new FsRepository(new MemDir('c').asHandle());
@@ -16,19 +16,30 @@ beforeEach(() => {
 describe('dailyBackup', () => {
   it('writes one backup per day', async () => {
     const day = new Date(2026, 9, 21, 9);
-    expect(must(await dailyBackup(repo, company, day))).toBe('2026-10-21');
-    expect(must(await dailyBackup(repo, company, new Date(2026, 9, 21, 18)))).toBeNull();
+    expect(must(await dailyBackup(repo, snapshot, day))).toBe('2026-10-21');
+    expect(must(await dailyBackup(repo, snapshot, new Date(2026, 9, 21, 18)))).toBeNull();
     expect(must(await repo.listBackups())).toHaveLength(1);
   });
 
   it(`keeps the newest ${KEEP_BACKUPS} daily backups and leaves other files alone`, async () => {
-    must(await repo.writeBackup('before-import', company));
-    for (let d = 1; d <= 20; d++) must(await dailyBackup(repo, company, new Date(2026, 9, d, 12)));
+    must(await repo.writeBackup('before-import', snapshot));
+    for (let d = 1; d <= 20; d++) must(await dailyBackup(repo, snapshot, new Date(2026, 9, d, 12)));
     const names = must(await repo.listBackups()).map((b) => b.name);
     expect(names).toContain('before-import');
     const daily = names.filter((n) => /^\d{4}-/.test(n));
     expect(daily).toHaveLength(KEEP_BACKUPS);
     expect(daily[0]).toBe('2026-10-20');
     expect(daily.at(-1)).toBe('2026-10-07');
+  });
+
+  it('the backup holds the company and its contacts', async () => {
+    const root = new MemDir('b');
+    const r = new FsRepository(root.asHandle());
+    const contact = makeContact(sampleContact());
+    must(await dailyBackup(r, { company: snapshot.company, contacts: [contact] }, new Date(2026, 9, 21)));
+    const file = await (await (await root.getDirectoryHandle('backups')).getFileHandle('2026-10-21.json')).getFile();
+    const backup = JSON.parse(await file.text());
+    expect(backup.company.id).toBe(snapshot.company.id);
+    expect(backup.contacts.map((c: { id: string }) => c.id)).toEqual([contact.id]);
   });
 });

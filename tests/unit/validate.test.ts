@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeCompany } from '../../src/data/schema';
+import { makeCompany, makeContact } from '../../src/data/schema';
 import { isValidId } from '../../src/data/validate';
-import { sampleProfile } from './fixtures';
+import { sampleContact, sampleProfile } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
 const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(makeCompany(sampleProfile()))), ...over }) as Record<string, unknown>;
@@ -66,4 +66,29 @@ describe('company.json validation', () => {
 describe('isValidId', () => {
   it.each(['abc', 'a-b_c', '0f8fad5b-d9cb-469f-a165-70867728950e'])('accepts %s', (id) => expect(isValidId(id)).toBe(true));
   it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'a b', 'a/b', '', 'x'.repeat(101), 5, null])('rejects %j', (id) => expect(isValidId(id)).toBe(false));
+});
+
+describe('contact file validation', () => {
+  const contactFile = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(makeContact(sampleContact()))), ...over }) as Record<string, unknown>;
+  const readContactFile = (raw: unknown) => migrate('contact', raw);
+
+  it('accepts a file written by the app, also without address and payment term', () => {
+    const raw = contactFile();
+    expect(readContactFile(raw)).toEqual(raw);
+    expect(readContactFile(contactFile({ address: null, paymentTermDays: null, deletedAt: '2026-10-21T10:00:00.000Z' })).deletedAt).toBe('2026-10-21T10:00:00.000Z');
+  });
+
+  it.each([
+    ['id', 'constructor'],
+    ['kind', 'robot'],
+    ['roles', { customer: 'yes', supplier: false }],
+    ['name', 'x'.repeat(121)],
+    ['address', { street: 'A', postalCode: '1', city: 'B' }],
+    ['paymentTermDays', 14.5],
+    ['paymentTermDays', 366],
+    ['deletedAt', 'gestern'],
+    ['fieldUpdatedAt', { deletedAt: 1 }],
+  ])('rejects %s = %j', (field, value) => {
+    expect(() => readContactFile(contactFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
 });

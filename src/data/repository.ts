@@ -1,10 +1,16 @@
 import type { Result } from './result';
-import type { CompanyFile } from './types';
+import type { BackupSnapshot, CompanyFile, ContactFile } from './types';
 
 export interface BackupInfo {
   name: string;
   lastModified: number;
   size: number;
+}
+
+/** A file that could not be read; the rest was loaded */
+export interface LoadIssue {
+  file: string;
+  message: string;
 }
 
 /** A failed storage operation: what went wrong, and the exception it came from (if any) */
@@ -20,8 +26,8 @@ export type StorageErrorKind = 'permission' | 'notFound' | 'quota' | 'newerSchem
  * only `data/fs/` talks to the File System Access API.
  *
  * Every operation returns a result: a failure is a value the caller has to handle.
- * `saveCompany` checks before writing whether the file was changed by someone else in the meantime;
- * it merges in that case and returns the state that was actually written.
+ * `saveCompany` and `saveContact` check before writing whether the file was changed by someone else in the
+ * meantime; they merge in that case and return the state that was actually written.
  */
 export interface Repository {
   /** Name of the folder, for display */
@@ -37,7 +43,11 @@ export interface Repository {
   /** Writes assets/<name>. An existing file of that name is kept: asset names contain their hash. */
   writeAsset(asset: Asset): Promise<Result<void, StorageError>>;
   readAsset(name: string): Promise<Result<File, StorageError>>;
-  writeBackup(name: string, company: CompanyFile): Promise<Result<void, StorageError>>;
+  /** All contacts, deleted ones included. A broken file is left out and reported; it does not stop the others. */
+  loadContacts(): Promise<Result<{ contacts: ContactFile[]; issues: LoadIssue[] }, StorageError>>;
+  /** Writes contacts/<id>.json, with the same conflict check and merge as `saveCompany` */
+  saveContact(contact: ContactFile): Promise<Result<ContactFile, StorageError>>;
+  writeBackup(name: string, snapshot: BackupSnapshot): Promise<Result<void, StorageError>>;
   listBackups(): Promise<Result<BackupInfo[], StorageError>>;
   /** Physical removal: only maintenance.ts calls it, for backups beyond the retention */
   removeBackup(name: string): Promise<Result<void, StorageError>>;

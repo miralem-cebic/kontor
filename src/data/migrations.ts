@@ -1,12 +1,19 @@
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany } from './validate';
-import type { CompanyFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, type Check } from './validate';
+import type { CompanyFile, ContactFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
 // (a kind whose format did not change gets `unchanged(n)`). See CLAUDE.md, "Schema changes".
 
-export type FileKind = 'company';
+/** The kinds of files and what each one is read as */
+interface FileTypes {
+  company: CompanyFile;
+  contact: ContactFile;
+}
+export type FileKind = keyof FileTypes;
+
+const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = { company: validateCompany, contact: validateContact };
 
 export interface Migration {
   from: number;
@@ -16,9 +23,10 @@ export interface Migration {
 /** A step for a file kind whose format did not change in this version */
 export const unchanged = (from: number): Migration => ({ from, up: (raw) => raw });
 
-/** Version 1 is the first format: no steps yet. */
+/** Version 1 is the first format: no steps yet. Contacts were added in version 1 as a new kind of file. */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
   company: [],
+  contact: [],
 };
 
 export class NewerSchemaError extends Error {
@@ -58,10 +66,10 @@ export function upgrade(kind: FileKind, raw: unknown, steps: readonly Migration[
 }
 
 /** Reads a file of the given kind: upgrade, then validate. Throws InvalidFileError or NewerSchemaError. */
-export function migrate(kind: FileKind, raw: unknown): CompanyFile {
+export function migrate<K extends FileKind>(kind: K, raw: unknown): FileTypes[K] {
   const doc = upgrade(kind, raw);
   try {
-    return validateCompany(doc, kind);
+    return VALIDATORS[kind](doc, kind);
   } catch (e) {
     if (e instanceof InvalidRecordError) throw new InvalidFileError(e.message);
     throw e;

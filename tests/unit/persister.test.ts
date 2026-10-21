@@ -5,7 +5,7 @@ import { emergencyKey, Persister } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
 import { makeCompany, nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
-import { MemoryStorage, sampleProfile } from './fixtures';
+import { MemoryStorage, sampleContact, sampleProfile } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -21,7 +21,7 @@ beforeEach(async () => {
   const company = makeCompany(sampleProfile());
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()));
+  A.loadCompany(must(await repo.readCompany()), []);
   persister = new Persister(repo);
   persister.start();
 });
@@ -89,5 +89,41 @@ describe('updateCompany', () => {
     const before = A.useApp.getState().company;
     A.updateCompany({ name: before!.name, bank: { ...before!.bank } });
     expect(A.useApp.getState().company).toBe(before);
+  });
+});
+
+describe('Persister with contacts', () => {
+  const contactsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadContacts()).contacts;
+
+  it('writes a new contact, its changes and its deletion', async () => {
+    const id = A.addContact(sampleContact());
+    await persister.flush();
+    expect((await contactsOnDisk()).map((c) => c.name)).toEqual(['Kunde GmbH']);
+
+    A.updateContact(id, sampleContact({ name: 'Kunde AG' }));
+    const stamped = A.useApp.getState().contacts.get(id)!;
+    expect(stamped.fieldUpdatedAt.name! > stamped.createdAt).toBe(true);
+    await persister.flush();
+    expect((await contactsOnDisk())[0]?.name).toBe('Kunde AG');
+
+    A.deleteContact(id);
+    await persister.flush();
+    const [deleted] = await contactsOnDisk();
+    expect(deleted?.deletedAt).toBeTruthy();
+    expect(deleted?.fieldUpdatedAt.deletedAt).toBe(deleted?.deletedAt);
+  });
+
+  it('keeps unsaved contacts in the emergency copy', async () => {
+    const orig = repo.saveContact.bind(repo);
+    repo.saveContact = async () => err({ kind: 'quota', cause: new Error('full') });
+    const id = A.addContact(sampleContact({ name: 'Unsaved' }));
+    await persister.flush();
+    const company = A.useApp.getState().company!;
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    expect(copy.company).toBeNull();
+    expect(copy.contacts.map((c: { id: string }) => c.id)).toEqual([id]);
+    repo.saveContact = orig;
+    await persister.retry();
+    expect((await contactsOnDisk()).map((c) => c.name)).toEqual(['Unsaved']);
   });
 });

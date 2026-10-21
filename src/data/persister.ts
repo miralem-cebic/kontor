@@ -1,8 +1,8 @@
-import { integrateWrittenCompany, setSaveStatus, useApp, type AppState } from '../store/appStore';
+import { integrateWrittenCompany, integrateWrittenContact, setSaveStatus, useApp, type AppState } from '../store/appStore';
 import type { CompanyId } from './ids';
 import { classifyError, type Repository, type StorageError } from './repository';
 import { err, ok, type Result } from './result';
-import type { CompanyFile } from './types';
+import type { CompanyFile, ContactFile } from './types';
 
 // Watches the app state and writes what changed, debounced. Objects that come from the folder or were already
 // written are kept in `clean` and do not trigger another write. When a write fails, the change stays in the queue
@@ -25,8 +25,9 @@ export class Persister {
 
   /** Starts watching; the state at this moment counts as saved */
   start() {
-    const company = useApp.getState().company;
+    const { company, contacts } = useApp.getState();
     if (company) this.clean.add(company);
+    for (const c of contacts.values()) this.clean.add(c);
     this.unsubscribe = useApp.subscribe((next, prev) => this.diff(next, prev));
     window.addEventListener('beforeunload', this.onUnload);
   }
@@ -50,6 +51,11 @@ export class Persister {
   };
 
   private diff(next: AppState, prev: AppState) {
+    if (next.contacts !== prev.contacts) {
+      for (const contact of next.contacts.values()) {
+        if (contact !== prev.contacts.get(contact.id) && !this.clean.has(contact)) this.enqueueContact(contact);
+      }
+    }
     const company = next.company;
     if (!company || company === prev.company || this.clean.has(company)) return;
     this.enqueue('company', async () => {
@@ -62,6 +68,16 @@ export class Persister {
         this.clean.add(r.value);
         integrateWrittenCompany(company, r.value);
       }
+      return ok(undefined);
+    });
+  }
+
+  private enqueueContact(contact: ContactFile) {
+    this.enqueue(`contact:${contact.id}`, async () => {
+      const r = await this.repo.saveContact(contact);
+      if (!r.ok) return r;
+      this.clean.add(r.value);
+      if (r.value !== contact) integrateWrittenContact(contact, r.value);
       return ok(undefined);
     });
   }
@@ -115,12 +131,15 @@ export class Persister {
     return this.flush();
   }
 
-  /** Copy of the unsaved company in the browser, in case the folder cannot be reached (also after a crash) */
+  /** Copy of the unsaved company and contacts in the browser, in case the folder cannot be reached (also after a crash) */
   writeEmergencyCopy() {
-    const company = useApp.getState().company;
-    if (!company || this.clean.has(company)) return;
+    const { company, contacts } = useApp.getState();
+    if (!company) return;
+    const dirty = [...contacts.values()].filter((c) => !this.clean.has(c));
+    if (this.clean.has(company) && !dirty.length) return;
     try {
-      localStorage.setItem(emergencyKey(company.id), JSON.stringify({ at: new Date().toISOString(), company } satisfies EmergencyCopy));
+      const copy: EmergencyCopy = { at: new Date().toISOString(), company: this.clean.has(company) ? null : company, contacts: dirty };
+      localStorage.setItem(emergencyKey(company.id), JSON.stringify(copy));
     } catch {
       /* storage not available */
     }
@@ -137,7 +156,10 @@ export class Persister {
   }
 }
 
+/** What the emergency copy holds. Copies written before contacts existed have only `company`. */
 export interface EmergencyCopy {
   at: string;
-  company: CompanyFile;
+  /** null when only contacts were unsaved */
+  company: CompanyFile | null;
+  contacts: ContactFile[];
 }

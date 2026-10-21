@@ -1,5 +1,6 @@
 import type { SessionError } from '../app/session';
-import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type FieldError, type FieldProblem, type LogoProblem, type DraftField } from '../domain/company';
+import type { FieldError, FieldProblem } from '../domain/check';
+import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { t, type MessageKey } from '../i18n';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
@@ -14,9 +15,13 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   taxIdRequired: 'problem.taxIdRequired',
   taxNumber: 'problem.taxNumber',
   vatId: 'problem.vatId',
+  euVatId: 'problem.euVatId',
+  leitwegId: 'problem.leitwegId',
   multiplier: 'problem.multiplier',
   bic: 'problem.bic',
   paymentTerm: 'problem.paymentTerm',
+  roleRequired: 'problem.roleRequired',
+  numberTaken: 'problem.numberTaken',
   'iban.format': 'problem.ibanFormat',
   'iban.country': 'problem.ibanCountry',
   'iban.length': 'problem.ibanLength',
@@ -32,7 +37,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
 export const problemText = (p: FieldProblem): string => t(PROBLEM_KEY[p], { min: MIN_TRADE_TAX_MULTIPLIER_PERCENT });
 
 /** The text of the first error of a field, or undefined */
-export function fieldError(errors: readonly FieldError[], field: DraftField): string | undefined {
+export function fieldError<F extends string>(errors: readonly FieldError<F>[], field: F): string | undefined {
   const e = errors.find((x) => x.field === field);
   return e ? problemText(e.problem) : undefined;
 }

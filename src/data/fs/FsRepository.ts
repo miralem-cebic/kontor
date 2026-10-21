@@ -1,21 +1,24 @@
-import { mergeCompany, sameJson } from '../merge';
+import { mergeCompany, mergeContact, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
-import { classifyError, type Asset, type BackupInfo, type Repository, type StorageError } from '../repository';
+import { classifyError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { BackupFile, CompanyFile } from '../types';
+import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
-// Folder structure (Phase 0; see DEVELOPMENT.md for the planned rest):
+// Folder structure (see DEVELOPMENT.md for the planned rest):
 //   company.json
+//   contacts/<id>.json         one file per customer or supplier
 //   assets/<file>              logo files, named after their hash, never overwritten
-//   backups/<YYYY-MM-DD>.json  daily copy of company.json
+//   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', assets: 'assets', backups: 'backups' } as const;
 
 const BACKUP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+/** A contact file is named after its ID; other names (conflict copies of sync clients) are not read */
+const CONTACT_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
 const isNotFound = (e: unknown) => e instanceof DOMException && e.name === 'NotFoundError';
 
 /** Runs a storage operation: an exception from the browser API becomes a failed result, once, here. */
@@ -96,33 +99,71 @@ export class FsRepository implements Repository {
   }
 
   saveCompany(company: CompanyFile) {
-    return attempt(() => this.runSaveCompany(company));
+    return attempt(() => this.writeChecked(this.root, FILES.company, FILES.company, company, (raw) => migrate('company', raw), mergeCompany));
+  }
+
+  loadContacts() {
+    return attempt(async () => {
+      const dir = await this.root.getDirectoryHandle(DIRS.contacts, { create: true });
+      const contacts: ContactFile[] = [];
+      const issues: LoadIssue[] = [];
+      for await (const [name, h] of dir.entries()) {
+        if (h.kind !== 'file' || !CONTACT_FILE.test(name)) continue;
+        const path = `${DIRS.contacts}/${name}`;
+        try {
+          const file = await (h as FileSystemFileHandle).getFile();
+          this.known.set(path, file.lastModified);
+          const contact = migrate('contact', JSON.parse(await file.text()));
+          if (`${contact.id}.json` !== name) throw new InvalidFileError('The file name does not match the contact ID');
+          contacts.push(contact);
+        } catch (e) {
+          issues.push({ file: path, message: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return { contacts, issues };
+    });
+  }
+
+  saveContact(contact: ContactFile) {
+    return attempt(async () => {
+      const dir = await this.root.getDirectoryHandle(DIRS.contacts, { create: true });
+      const name = `${contact.id}.json`;
+      return this.writeChecked(dir, name, `${DIRS.contacts}/${name}`, contact, (raw) => migrate('contact', raw), mergeContact);
+    });
   }
 
   /**
-   * Writes with a conflict check: if company.json was changed by someone else since the last read, it is read
-   * again and merged field by field. A file that cannot be read as company file stops the save, so that nothing
-   * from a newer app version or another company is overwritten; a half-written file (sync client) is replaced.
+   * Writes with a conflict check: if the file was changed by someone else since the last read, it is read again
+   * and merged field by field. A file that cannot be read as this kind of file (newer app version, another
+   * record) stops the save, so that nothing is overwritten that this app cannot merge; a half-written file
+   * (sync client) is replaced. Returns `record` itself when nothing had to be merged.
    */
-  private async runSaveCompany(company: CompanyFile): Promise<CompanyFile> {
-    const data: CompanyFile = { ...company, schemaVersion: SCHEMA_VERSION };
+  private async writeChecked<T extends { id: string; schemaVersion: number }>(
+    dir: FileSystemDirectoryHandle,
+    name: string,
+    path: string,
+    record: T,
+    read: (raw: unknown) => T,
+    merge: (local: T, remote: T) => T,
+  ): Promise<T> {
+    const data: T = { ...record, schemaVersion: SCHEMA_VERSION };
     let next = data;
     try {
-      const file = await (await this.root.getFileHandle(FILES.company)).getFile();
-      const known = this.known.get(FILES.company);
+      const file = await (await dir.getFileHandle(name)).getFile();
+      const known = this.known.get(path);
       if (known === undefined || file.lastModified > known) {
         const text = await file.text();
         if (text.trim()) {
-          const remote = migrate('company', JSON.parse(text));
-          if (remote.id !== company.id) throw new InvalidFileError('company.json in this folder belongs to another company');
-          next = mergeCompany(data, remote);
+          const remote = read(JSON.parse(text));
+          if (remote.id !== record.id) throw new InvalidFileError(`${path} belongs to another record`);
+          next = merge(data, remote);
         }
       }
     } catch (e) {
       if (!isNotFound(e) && !(e instanceof SyntaxError)) throw e;
     }
-    this.known.set(FILES.company, await writeJson(this.root, FILES.company, next));
-    return sameJson(next, data) ? company : next;
+    this.known.set(path, await writeJson(dir, name, next));
+    return sameJson(next, data) ? record : next;
   }
 
   writeAsset(asset: Asset) {
@@ -146,11 +187,11 @@ export class FsRepository implements Repository {
 
   /* ---------- Backups ---------- */
 
-  writeBackup(name: string, company: CompanyFile) {
+  writeBackup(name: string, snapshot: BackupSnapshot) {
     return attempt(async () => {
       if (!BACKUP_NAME.test(name)) throw new UnsafeFileNameError(name);
       const dir = await this.root.getDirectoryHandle(DIRS.backups, { create: true });
-      const backup: BackupFile = { schemaVersion: SCHEMA_VERSION, createdAt: new Date().toISOString(), company };
+      const backup: BackupFile = { schemaVersion: SCHEMA_VERSION, createdAt: new Date().toISOString(), ...snapshot };
       await writeJson(dir, `${name}.json`, backup);
     });
   }

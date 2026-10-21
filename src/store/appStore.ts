@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { keysOf } from '../data/ids';
-import { mergeCompany, sameJson } from '../data/merge';
+import type { ContactProfile } from '../domain/contact';
+import { keysOf, type ContactId } from '../data/ids';
+import { mergeCompany, mergeContact, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { nowIso } from '../data/schema';
-import type { CompanyFile, MergeableField } from '../data/types';
+import { makeContact, nowIso } from '../data/schema';
+import type { CompanyFile, ContactFile, ContactMergeableField, MergeableField } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
 // and the persister (data/persister.ts) writes in the background. Components never write files.
@@ -18,13 +19,15 @@ export interface Toast {
 export interface AppState {
   /** The open company, or null before one is loaded */
   company: CompanyFile | null;
+  /** Contacts of the open company by ID, deleted ones included (they are hidden in the UI) */
+  contacts: ReadonlyMap<ContactId, ContactFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -36,39 +39,47 @@ export function resetApp() {
   set({ ...initial });
 }
 
-/** A company as read from its folder */
-export function loadCompany(company: CompanyFile) {
-  set({ company, save: { state: 'saved' } });
+const byId = (contacts: readonly ContactFile[]) => new Map(contacts.map((c) => [c.id, c]));
+
+/** A company and its contacts as read from the folder */
+export function loadCompany(company: CompanyFile, contacts: readonly ContactFile[]) {
+  set({ company, contacts: byId(contacts), save: { state: 'saved' } });
 }
 
-/** Unsaved changes from an earlier session, merged into the loaded company; the persister writes them */
-export function applyRecoveredCompany(company: CompanyFile) {
-  if (get().company?.id === company.id) set({ company });
+/** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
+export function applyRecovered(company: CompanyFile, contacts: readonly ContactFile[]) {
+  if (get().company?.id !== company.id) return;
+  set((s) => ({ company, contacts: contacts.length ? new Map([...s.contacts, ...byId(contacts)]) : s.contacts }));
+}
+
+interface Stamped<F extends string> {
+  fieldUpdatedAt: Partial<Record<F, string>>;
+}
+
+/**
+ * The record with the changed fields of `patch`. Every changed field gets a new `fieldUpdatedAt`, which the
+ * merge relies on. Returns `current` itself when nothing changed.
+ */
+function withChanges<F extends string, T extends Stamped<F> & Record<F, unknown>>(current: T, patch: Partial<Pick<T, F>>, at = nowIso()): T {
+  const next: T = { ...current, fieldUpdatedAt: { ...current.fieldUpdatedAt } };
+  let changed = false;
+  for (const field of keysOf<F>(patch)) {
+    const value = patch[field];
+    if (value === undefined || sameJson(value, current[field])) continue;
+    next[field] = value as T[F];
+    next.fieldUpdatedAt[field] = at;
+    changed = true;
+  }
+  return changed ? next : current;
 }
 
 export type CompanyPatch = Partial<Pick<CompanyFile, MergeableField>>;
 
-function assign<F extends MergeableField>(target: CompanyFile, patch: CompanyPatch, field: F): boolean {
-  const value = patch[field];
-  if (value === undefined || sameJson(value, target[field])) return false;
-  target[field] = value as CompanyFile[F];
-  return true;
-}
-
-/** Changes fields of the company. Every changed field gets a new `fieldUpdatedAt`, which the merge relies on. */
 export function updateCompany(patch: CompanyPatch) {
   const current = get().company;
   if (!current) return;
-  const next: CompanyFile = { ...current, fieldUpdatedAt: { ...current.fieldUpdatedAt } };
-  const at = nowIso();
-  let changed = false;
-  for (const field of keysOf(patch)) {
-    if (assign(next, patch, field)) {
-      next.fieldUpdatedAt[field] = at;
-      changed = true;
-    }
-  }
-  if (changed) set({ company: next });
+  const next = withChanges<MergeableField, CompanyFile>(current, patch);
+  if (next !== current) set({ company: next });
 }
 
 /**
@@ -80,6 +91,43 @@ export function integrateWrittenCompany(sent: CompanyFile, written: CompanyFile)
   if (!current || current.id !== written.id) return;
   set({ company: current === sent ? written : mergeCompany(current, written) });
 }
+
+/* ---------- Contacts ---------- */
+
+function putContact(contact: ContactFile) {
+  set((s) => ({ contacts: new Map(s.contacts).set(contact.id, contact) }));
+}
+
+/** A new contact from a checked profile (the form's draft is never stored). Returns its ID. */
+export function addContact(profile: ContactProfile): ContactId {
+  const contact = makeContact(profile);
+  putContact(contact);
+  return contact.id;
+}
+
+export function updateContact(id: ContactId, profile: ContactProfile) {
+  const current = get().contacts.get(id);
+  if (!current) return;
+  const next = withChanges<ContactMergeableField, ContactFile>(current, profile);
+  if (next !== current) putContact(next);
+}
+
+/** Soft delete: the file stays, the contact is hidden */
+export function deleteContact(id: ContactId) {
+  const current = get().contacts.get(id);
+  if (!current || current.deletedAt) return;
+  const at = nowIso();
+  putContact(withChanges<ContactMergeableField, ContactFile>(current, { deletedAt: at }, at));
+}
+
+/** Like `integrateWrittenCompany`, for one contact */
+export function integrateWrittenContact(sent: ContactFile, written: ContactFile) {
+  const current = get().contacts.get(written.id);
+  if (!current) return;
+  putContact(current === sent ? written : mergeContact(current, written));
+}
+
+/* ---------- UI ---------- */
 
 export function setLogoUrl(url: string | null) {
   const old = get().logoUrl;

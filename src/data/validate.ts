@@ -12,10 +12,8 @@ import {
   LOGO_FILE,
   MAX_TRADE_TAX_MULTIPLIER_PERCENT,
   MIN_TRADE_TAX_MULTIPLIER_PERCENT,
-  type Address,
   type BankAccount,
   type BusinessType,
-  type Contact,
   type InvoiceDefaults,
   type LogoRef,
   type LogoType,
@@ -24,10 +22,12 @@ import {
   type VatPeriod,
   type VatScheme,
 } from '../domain/company';
+import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
+import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
-import { MERGEABLE_FIELDS, type CompanyFile, type MergeableField } from './types';
+import { CONTACT_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type CompanyFile, type ContactFile } from './types';
 
 export class InvalidRecordError extends Error {
   override name = 'InvalidRecordError';
@@ -39,7 +39,7 @@ export class InvalidRecordError extends Error {
   }
 }
 
-type Check<T> = (value: unknown, path: string) => T;
+export type Check<T> = (value: unknown, path: string) => T;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -73,6 +73,7 @@ const idOf =
   (v, path) =>
     isValidId(v) ? brandId<B>(v) : fail(path, `expected an ID, got ${describe(v)}`);
 const companyId = idOf<'CompanyId'>();
+const contactId = idOf<'ContactId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -140,7 +141,7 @@ const address = objectOf<Address>({
   country: (v, path) => (typeof v === 'string' && /^[A-Z]{2}$/.test(v) ? v : fail(path, `expected a country code, got ${describe(v)}`)),
 });
 
-const contact = objectOf<Contact>({ email: text(LIMITS.email), phone: text(LIMITS.phone) });
+const contactDetails = objectOf<ContactDetails>({ email: text(LIMITS.email), phone: text(LIMITS.phone) });
 
 const logoType = oneOf<LogoType>(['image/png', 'image/jpeg', 'image/svg+xml']);
 
@@ -194,15 +195,17 @@ const invoiceDefaults = objectOf<InvoiceDefaults>({
 });
 
 /** Only the known fields are kept: the keys come from the file and must not become arbitrary keys of the record. */
-const fieldTimestamps: Check<Partial<Record<MergeableField, string>>> = (v, path) => {
-  if (!isRecord(v)) return fail(path, `expected an object, got ${describe(v)}`);
-  const out: Partial<Record<MergeableField, string>> = {};
-  for (const field of MERGEABLE_FIELDS) {
-    const value = v[field];
-    if (value !== undefined) out[field] = dateTime(value, `${path}.${field}`);
-  }
-  return out;
-};
+const fieldTimestamps =
+  <F extends string>(fields: readonly F[]): Check<Partial<Record<F, string>>> =>
+  (v, path) => {
+    if (!isRecord(v)) return fail(path, `expected an object, got ${describe(v)}`);
+    const out: Partial<Record<F, string>> = {};
+    for (const field of fields) {
+      const value = v[field];
+      if (value !== undefined) out[field] = dateTime(value, `${path}.${field}`);
+    }
+    return out;
+  };
 
 export const validateCompany: Check<CompanyFile> = objectOf<CompanyFile>({
   schemaVersion: num,
@@ -210,11 +213,34 @@ export const validateCompany: Check<CompanyFile> = objectOf<CompanyFile>({
   name: text(LIMITS.name),
   owner: text(LIMITS.owner),
   address,
-  contact,
+  contact: contactDetails,
   logo: nullable(logo),
   tax,
   bank,
   invoiceDefaults,
   createdAt: dateTime,
-  fieldUpdatedAt: fieldTimestamps,
+  fieldUpdatedAt: fieldTimestamps(MERGEABLE_FIELDS),
+});
+
+const roles = objectOf<ContactRoles>({ customer: bool, supplier: bool });
+
+export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
+  schemaVersion: num,
+  id: contactId,
+  kind: oneOf<ContactKind>(['company', 'person']),
+  roles,
+  name: text(CONTACT_LIMITS.name),
+  nameLine2: text(CONTACT_LIMITS.nameLine2),
+  contactPerson: text(CONTACT_LIMITS.contactPerson),
+  customerNumber: text(CONTACT_LIMITS.customerNumber),
+  address: nullable(address),
+  contact: contactDetails,
+  vatId: text(CONTACT_LIMITS.vatId),
+  leitwegId: text(46),
+  orderReference: text(CONTACT_LIMITS.orderReference),
+  paymentTermDays: nullable(int(0, TEXT_LIMITS.maxPaymentTermDays)),
+  notes: text(CONTACT_LIMITS.notes),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(CONTACT_MERGEABLE_FIELDS),
 });

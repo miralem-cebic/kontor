@@ -11,14 +11,15 @@ Sie läuft vollständig im Browser und braucht keinen Server, keine Datenbank un
 
 ## Stand
 
-Version 0.1 (Phase 0) enthält das Grundgerüst:
+Der aktuelle Stand enthält:
 
 - **Einrichtungsassistent:** Ordner, Stammdaten mit Logo, Steuer (Kleinunternehmer nach § 19 UStG, Soll-/Ist-Versteuerung, Voranmeldungszeitraum, Freiberuf oder Gewerbe mit Hebesatz), Bankverbindung mit IBAN-Prüfung, Rechnungsnummern-Format, Zahlungsziel und Fußzeile.
 - **Mehrere Unternehmen:** Jedes Unternehmen hat einen eigenen Ordner. Ein Umschalter wechselt zwischen ihnen.
+- **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Angebote, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Bankkonten, Angebote, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

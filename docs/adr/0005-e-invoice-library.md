@@ -1,12 +1,14 @@
 # 0005: Library for e-invoices
 
-- Status: Proposed (decide before Phase 2)
+- Status: Accepted
 - Date: 2026-10-21
 - Spike: branch `spike/e-invoice`, folder `spikes/e-invoice` (not merged into `main`)
 
 ## Context
 
 kontor has to create e-invoices (ZUGFeRD / Factur-X profile EN 16931 or XRECHNUNG as PDF/A-3 with embedded XML, and plain XRechnung CII XML) and read incoming ones (XRechnung XML, ZUGFeRD PDF). Every business must be able to receive e-invoices since 2025, small businesses included.
+
+kontor does not stop at reading: every business can issue legally compliant e-invoices, also where the law does not require it yet (small businesses under § 19 UStG, regular businesses in the transition period). The size of the app is not a criterion: it is opened from disk, not downloaded.
 
 The candidate was `@e-invoice-eu/core` 3.4.1, which says it runs in the browser. The spike checked it against kontor's build: one classic IIFE script opened via `file://`, a Content Security Policy with `script-src 'self'` (no `unsafe-eval`) and `connect-src 'none'`. It ran in Chrome 155 with the same Vite setup and CSP plugin as the app, and a sample invoice with two VAT rates (19 % and 7 %).
 
@@ -32,7 +34,7 @@ Not covered by the spike:
 - The PDF still lacks the output intent with an embedded sRGB ICC profile that PDF/A requires.
 - Font subsetting failed for a WOFF file in fontkit (`serializeFont`). Embedding the whole font worked; subsetting has to be tried with TTF files.
 
-## Decision (proposed)
+## Decision
 
 - Do **not** use `@e-invoice-eu/core` in the app. It needs `unsafe-eval`, loads files over the network, and its ZUGFeRD path does not run in the browser. A fork without Ajv's runtime compilation would be a maintenance burden of its own.
 - Build the e-invoice layer in kontor:
@@ -40,12 +42,15 @@ Not covered by the spike:
   - A CII serializer with DOM APIs; UBL later if needed.
   - A reader for incoming CII and UBL with `DOMParser`/XPath, and for ZUGFeRD via the embedded file.
   - ZUGFeRD / Factur-X with `@cantoo/pdf-lib` and `@pdf-lib/fontkit`. Phase 1 needs both anyway for the invoice PDF. Add XMP, the output intent with an sRGB ICC profile, and embedded TTF fonts.
-- Validate generated fixtures in CI with the KoSIT validator (XRechnung configuration) and veraPDF (PDF/A-3B). `@e-invoice-eu/core` can be a dev dependency in Node to cross-check our XML against a second implementation.
+- "Legally compliant" is checked, not assumed. Fixtures for every supported case are generated from kontor's own code and validated in CI: the KoSIT validator with the XRechnung configuration for the XML, veraPDF (PDF/A-3B) and a ZUGFeRD validator (for example Mustang) for the PDF. The cases cover at least: regular VAT with 19 % and 7 %, small business (VAT category E with the exemption reason "Kleinunternehmer gemäß § 19 UStG"), reverse charge (§ 13b UStG, category AE), intra-community supply (category K, VAT IDs of both parties), credit note and cancellation, partial payment terms. A failing validation fails the build; a format is offered in the app only once its fixtures pass.
+- Every e-invoice format is available to every business. For regular businesses it becomes the default once the transition period ends for them; small businesses can choose it.
+- `@e-invoice-eu/core` can be a dev dependency in Node to cross-check our XML against a second implementation.
 
 ## Consequences
 
-- The app's runtime dependencies grow by `@cantoo/pdf-lib` and `@pdf-lib/fontkit`, about 1.3 MB minified (about 0.6 MB gzip), in Phase 1 for the PDF. The build stays one script; under `file://` the size costs load time from disk, not network.
-- kontor owns the EN 16931 mapping and has to follow new XRechnung versions (currently 3.0) itself. CI validation against the official artefacts is the safety net.
+- The app's runtime dependencies grow by `@cantoo/pdf-lib` and `@pdf-lib/fontkit`, about 1.3 MB minified, in Phase 1 for the PDF. This is accepted: the build stays one script, read from disk.
+- kontor owns the EN 16931 mapping and has to follow new XRechnung versions (currently 3.0) itself. The CI validation against the official artefacts is the safety net; updating the validator configuration is part of every XRechnung release.
+- The CI needs Java for the validators.
 - The CSP stays as it is: no `unsafe-eval`, no network.
 
 ## Alternatives considered

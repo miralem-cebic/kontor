@@ -1,0 +1,5 @@
+/* Inter locally (fontsource), embedded as a data: URL in the build. Latin covers German umlauts, ß and €. */
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';

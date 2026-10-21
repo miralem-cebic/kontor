@@ -1,0 +1,262 @@
+// All interface texts, German first. Adding a key here is enough: TypeScript fails if a language is missing.
+
+import type { Lang } from './languages';
+
+type Tr = Readonly<Record<Lang, string>>;
+
+const MESSAGES_SRC = {
+  'common.loading': { de: 'Wird geladen …', en: 'Loading …' },
+  'common.cancel': { de: 'Abbrechen', en: 'Cancel' },
+  'common.back': { de: 'Zurück', en: 'Back' },
+  'common.next': { de: 'Weiter', en: 'Continue' },
+  'common.dismiss': { de: 'Schließen', en: 'Dismiss' },
+  'common.language': { de: 'Sprache', en: 'Language' },
+
+  'disclaimer.text': {
+    de: 'kontor ist eine Ausfüllhilfe. Berechnungen und Exporte sind Schätzungen und ersetzen keine Steuerberatung.',
+    en: 'kontor helps you fill in forms. Calculations and exports are estimates and are no substitute for tax advice.',
+  },
+
+  'setup.progress': { de: 'Schritte der Einrichtung', en: 'Setup steps' },
+  'setup.finish': { de: 'Fertig', en: 'Finish' },
+  'setup.step.browser': { de: 'Browser', en: 'Browser' },
+  'setup.step.folder': { de: 'Ordner', en: 'Folder' },
+  'setup.step.master': { de: 'Stammdaten', en: 'Company details' },
+  'setup.step.tax': { de: 'Steuer', en: 'Tax' },
+  'setup.step.bank': { de: 'Bank', en: 'Bank' },
+  'setup.step.invoice': { de: 'Rechnungen', en: 'Invoices' },
+  'setup.step.summary': { de: 'Zusammenfassung', en: 'Summary' },
+
+  'setup.browser.text': {
+    de: 'kontor läuft vollständig in diesem Browser. Deine Daten liegen als Dateien in einem Ordner, den du auswählst.',
+    en: 'kontor runs entirely in this browser. Your data is stored as files in a folder you choose.',
+  },
+  'setup.browser.folderAccess': { de: 'Zugriff auf Ordner (File System Access API)', en: 'Folder access (File System Access API)' },
+  'setup.browser.storage': { de: 'Speicher für die Liste deiner Unternehmen (IndexedDB)', en: 'Storage for the list of your companies (IndexedDB)' },
+  'setup.browser.secure': { de: 'Sicherer Kontext für Prüfsummen', en: 'Secure context for checksums' },
+  'setup.browser.privacy': {
+    de: 'kontor sendet nichts ins Internet. Es gibt keinen Server und kein Benutzerkonto.',
+    en: 'kontor sends nothing to the internet. There is no server and no user account.',
+  },
+
+  'setup.folder.text': {
+    de: 'Wähle einen Ordner für dieses Unternehmen, zum Beispiel einen neuen, leeren Ordner auf deinem Rechner, in OneDrive, SharePoint, Nextcloud oder Dropbox. Jedes Unternehmen bekommt einen eigenen Ordner.',
+    en: 'Choose a folder for this company, for example a new, empty folder on your computer, in OneDrive, SharePoint, Nextcloud or Dropbox. Every company gets its own folder.',
+  },
+  'setup.folder.existing': {
+    de: 'Wählst du einen Ordner, der schon ein kontor-Unternehmen enthält, wird es direkt geöffnet.',
+    en: 'If you choose a folder that already contains a kontor company, it is opened right away.',
+  },
+  'setup.folder.choose': { de: 'Ordner wählen', en: 'Choose folder' },
+  'setup.folder.other': { de: 'Anderen Ordner wählen', en: 'Choose another folder' },
+  'setup.folder.empty': {
+    de: 'Der Ordner „{name}“ ist leer. Das Unternehmen wird darin angelegt.',
+    en: 'The folder “{name}” is empty. The company will be set up in it.',
+  },
+  'setup.folder.notEmpty': {
+    de: 'Der Ordner „{name}“ enthält schon Dateien. kontor legt darin beim Abschluss einen Unterordner mit dem Firmennamen an.',
+    en: 'The folder “{name}” already contains files. When you finish, kontor creates a subfolder named after the company in it.',
+  },
+
+  'setup.summary.text': {
+    de: 'Bitte prüfe deine Angaben. Du kannst alles später unter „Einstellungen“ ändern.',
+    en: 'Please check your details. You can change everything later under “Settings”.',
+  },
+  'setup.summary.folder': { de: 'Ordner: „{name}“', en: 'Folder: “{name}”' },
+  'setup.summary.subfolder': { de: 'Ordner: Unterordner „{sub}“ in „{name}“', en: 'Folder: subfolder “{sub}” in “{name}”' },
+
+  'company.name': { de: 'Firmenname', en: 'Company name' },
+  'company.owner': { de: 'Inhaber/in', en: 'Owner' },
+  'company.ownerHint': { de: 'Vor- und Nachname, wie auf der Rechnung', en: 'First and last name, as on the invoice' },
+  'company.street': { de: 'Straße und Hausnummer', en: 'Street and number' },
+  'company.postalCode': { de: 'PLZ', en: 'Postal code' },
+  'company.city': { de: 'Ort', en: 'City' },
+  'company.country': { de: 'Land', en: 'Country' },
+  'company.countryHint': { de: 'z. B. DE', en: 'e.g. DE' },
+  'company.email': { de: 'E-Mail', en: 'Email' },
+  'company.phone': { de: 'Telefon', en: 'Phone' },
+
+  'tax.idsIntro': {
+    de: 'Auf jeder Rechnung steht deine Steuernummer oder deine USt-IdNr. (§ 14 Abs. 4 UStG). Gib mindestens eine an.',
+    en: 'Every invoice shows your tax number or your VAT ID (§ 14 (4) UStG). Enter at least one.',
+  },
+  'tax.taxNumber': { de: 'Steuernummer', en: 'Tax number (Steuernummer)' },
+  'tax.taxNumberHint': { de: 'Vom Finanzamt, z. B. 12/345/67890', en: 'From the tax office, e.g. 12/345/67890' },
+  'tax.vatId': { de: 'USt-IdNr.', en: 'VAT ID (USt-IdNr.)' },
+  'tax.vatIdHint': { de: 'Vom Bundeszentralamt für Steuern, z. B. DE123456788', en: 'From the Federal Central Tax Office, e.g. DE123456788' },
+  'tax.smallBusiness': { de: 'Kleinunternehmerregelung (§ 19 UStG)', en: 'Small business scheme (§ 19 UStG)' },
+  'tax.smallBusinessHint': {
+    de: 'Als Kleinunternehmer weist du keine Umsatzsteuer aus. Ob die Regelung für dich gilt, klärst du mit dem Finanzamt.',
+    en: 'As a small business you do not charge VAT. Whether the scheme applies to you is decided with the tax office.',
+  },
+  'tax.smallBusinessYes': { de: 'Ja, ich bin Kleinunternehmer', en: 'Yes, I use the small business scheme' },
+  'tax.smallBusinessNo': { de: 'Nein, ich weise Umsatzsteuer aus', en: 'No, I charge VAT' },
+  'tax.method': { de: 'Versteuerung', en: 'VAT accounting' },
+  'tax.methodAccrual': { de: 'Soll-Versteuerung', en: 'Accrual (Soll-Versteuerung)' },
+  'tax.methodAccrualHint': { de: 'Umsatzsteuer, sobald die Leistung erbracht ist (Regelfall)', en: 'VAT once the service is delivered (the default)' },
+  'tax.methodCash': { de: 'Ist-Versteuerung', en: 'Cash (Ist-Versteuerung)' },
+  'tax.methodCashHint': { de: 'Umsatzsteuer, sobald das Geld eingegangen ist (auf Antrag, § 20 UStG)', en: 'VAT once the money is received (on application, § 20 UStG)' },
+  'tax.period': { de: 'Umsatzsteuer-Voranmeldung', en: 'Advance VAT return' },
+  'tax.periodMonthly': { de: 'Monatlich', en: 'Monthly' },
+  'tax.periodQuarterly': { de: 'Vierteljährlich', en: 'Quarterly' },
+  'tax.periodYearly': { de: 'Nur Jahreserklärung', en: 'Annual return only' },
+  'tax.extension': { de: 'Dauerfristverlängerung', en: 'Permanent extension (Dauerfristverlängerung)' },
+  'tax.extensionHint': { de: 'Die Voranmeldung ist einen Monat später fällig (§ 46 UStDV).', en: 'The advance return is due one month later (§ 46 UStDV).' },
+  'tax.business': { de: 'Tätigkeit', en: 'Type of business' },
+  'tax.freelance': { de: 'Freiberuflich', en: 'Freelance (freier Beruf)' },
+  'tax.freelanceHint': { de: 'Freie Berufe nach § 18 EStG, keine Gewerbesteuer', en: 'Liberal professions under § 18 EStG, no trade tax' },
+  'tax.trade': { de: 'Gewerbe', en: 'Trade (Gewerbe)' },
+  'tax.tradeHint': { de: 'Gewerbesteuer nach dem Hebesatz deiner Gemeinde', en: 'Trade tax at the multiplier of your municipality' },
+  'tax.municipality': { de: 'Gemeinde', en: 'Municipality' },
+  'tax.multiplier': { de: 'Hebesatz in %', en: 'Multiplier in %' },
+  'tax.multiplierHint': { de: 'z. B. 400', en: 'e.g. 400' },
+
+  'bank.holder': { de: 'Kontoinhaber/in', en: 'Account holder' },
+  'bank.iban': { de: 'IBAN', en: 'IBAN' },
+  'bank.bic': { de: 'BIC', en: 'BIC' },
+  'bank.bicHint': { de: 'Optional', en: 'Optional' },
+
+  'invoice.pattern': { de: 'Rechnungsnummer', en: 'Invoice number' },
+  'invoice.patternHint': {
+    de: 'Platzhalter: {YYYY} Jahr, {YY} Jahr zweistellig, {MM} Monat, {NNNN} laufende Nummer. Erlaubt sind Buchstaben, Ziffern, - und _.',
+    en: 'Placeholders: {YYYY} year, {YY} two-digit year, {MM} month, {NNNN} running number. Letters, digits, - and _ are allowed.',
+  },
+  'invoice.patternPreview': { de: 'Die erste Rechnung bekäme die Nummer {number}.', en: 'The first invoice would get the number {number}.' },
+  'invoice.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },
+  'invoice.paymentTermHint': { de: '0 bedeutet „sofort fällig“', en: '0 means “due immediately”' },
+  'invoice.footer': { de: 'Fußzeile', en: 'Footer' },
+  'invoice.footerHint': { de: 'Erscheint unten auf Angeboten und Rechnungen', en: 'Shown at the bottom of quotes and invoices' },
+
+  'logo.label': { de: 'Logo', en: 'Logo' },
+  'logo.preview': { de: 'Vorschau des Logos', en: 'Logo preview' },
+  'logo.choose': { de: 'Logo auswählen', en: 'Choose logo' },
+  'logo.replace': { de: 'Anderes Logo', en: 'Replace logo' },
+  'logo.remove': { de: 'Entfernen', en: 'Remove' },
+  'logo.hint': { de: 'PNG, JPG oder SVG, höchstens 1 MB. Optional.', en: 'PNG, JPG or SVG, at most 1 MB. Optional.' },
+  'logo.empty': { de: 'Die Datei ist leer.', en: 'The file is empty.' },
+  'logo.tooLarge': { de: 'Die Datei ist größer als {max}.', en: 'The file is larger than {max}.' },
+  'logo.unsupported': { de: 'Nur PNG, JPG und SVG werden unterstützt.', en: 'Only PNG, JPG and SVG are supported.' },
+
+  'problem.required': { de: 'Bitte ausfüllen.', en: 'Please fill in.' },
+  'problem.tooLong': { de: 'Zu lang.', en: 'Too long.' },
+  'problem.email': { de: 'Bitte eine gültige E-Mail-Adresse eingeben.', en: 'Please enter a valid email address.' },
+  'problem.phone': { de: 'Nur Ziffern, Leerzeichen und + ( ) / - sind erlaubt.', en: 'Only digits, spaces and + ( ) / - are allowed.' },
+  'problem.postalCode': { de: 'Bitte eine gültige Postleitzahl eingeben (in Deutschland fünf Ziffern).', en: 'Please enter a valid postal code (five digits in Germany).' },
+  'problem.country': { de: 'Bitte einen Ländercode aus zwei Buchstaben eingeben, z. B. DE.', en: 'Please enter a two-letter country code, e.g. DE.' },
+  'problem.taxIdRequired': { de: 'Bitte die Steuernummer oder die USt-IdNr. angeben.', en: 'Please enter the tax number or the VAT ID.' },
+  'problem.taxNumber': { de: 'Eine Steuernummer hat 10 bis 13 Ziffern.', en: 'A tax number has 10 to 13 digits.' },
+  'problem.vatId': { de: 'Keine gültige deutsche USt-IdNr. (DE und neun Ziffern, Prüfziffer stimmt nicht).', en: 'Not a valid German VAT ID (DE and nine digits, the check digit does not match).' },
+  'problem.multiplier': { de: 'Bitte eine ganze Zahl ab {min} eingeben.', en: 'Please enter a whole number of at least {min}.' },
+  'problem.bic': { de: 'Keine gültige BIC (8 oder 11 Zeichen).', en: 'Not a valid BIC (8 or 11 characters).' },
+  'problem.paymentTerm': { de: 'Bitte eine ganze Zahl von 0 bis 365 eingeben.', en: 'Please enter a whole number from 0 to 365.' },
+  'problem.ibanFormat': { de: 'Eine IBAN beginnt mit dem Ländercode und zwei Prüfziffern.', en: 'An IBAN starts with the country code and two check digits.' },
+  'problem.ibanCountry': { de: 'IBANs aus diesem Land werden nicht unterstützt (nur SEPA-Länder).', en: 'IBANs from this country are not supported (SEPA countries only).' },
+  'problem.ibanLength': { de: 'Die IBAN hat für dieses Land nicht die richtige Länge.', en: 'The IBAN does not have the right length for this country.' },
+  'problem.ibanChecksum': { de: 'Die Prüfziffer der IBAN stimmt nicht. Bitte auf Tippfehler prüfen.', en: 'The IBAN check digits do not match. Please check for typos.' },
+  'problem.patternEmpty': { de: 'Bitte ein Format eingeben, z. B. RE-{YYYY}-{NNNN}.', en: 'Please enter a format, e.g. RE-{YYYY}-{NNNN}.' },
+  'problem.patternTooLong': { de: 'Das Format ist zu lang (höchstens 40 Zeichen).', en: 'The format is too long (at most 40 characters).' },
+  'problem.patternCharacter': { de: 'Nur Buchstaben, Ziffern, - und _ sind erlaubt.', en: 'Only letters, digits, - and _ are allowed.' },
+  'problem.patternToken': { de: 'Unbekannter Platzhalter. Erlaubt sind {YYYY}, {YY}, {MM} und {N…}.', en: 'Unknown placeholder. Allowed are {YYYY}, {YY}, {MM} and {N…}.' },
+  'problem.patternNoCounter': { de: 'Das Format braucht eine laufende Nummer, z. B. {NNNN}.', en: 'The format needs a running number, e.g. {NNNN}.' },
+  'problem.patternCounters': { de: 'Das Format darf nur eine laufende Nummer enthalten.', en: 'The format may contain only one running number.' },
+
+  'error.permission': { de: 'Kein Zugriff auf den Ordner. Bitte Zugriff erlauben oder den Ordner neu wählen.', en: 'No access to the folder. Please allow access or choose the folder again.' },
+  'error.notFound': { de: 'Der Ordner oder eine Datei darin wurde nicht gefunden.', en: 'The folder or a file in it was not found.' },
+  'error.quota': { de: 'Auf dem Speicherort ist kein Platz mehr frei.', en: 'There is no space left at the storage location.' },
+  'error.newerSchema': {
+    de: 'Dieser Ordner wurde mit einer neueren kontor-Version gespeichert. Bitte kontor aktualisieren.',
+    en: 'This folder was saved by a newer version of kontor. Please update kontor.',
+  },
+  'error.invalid': { de: 'Eine Datei im Ordner ist beschädigt oder hat ein unbekanntes Format.', en: 'A file in the folder is damaged or has an unknown format.' },
+  'error.other': { de: 'Ein unerwarteter Fehler ist aufgetreten.', en: 'An unexpected error occurred.' },
+  'error.otherCompany': {
+    de: 'Der Ordner enthält inzwischen ein anderes Unternehmen.',
+    en: 'The folder now contains a different company.',
+  },
+  'error.copiedCompany': {
+    de: 'Dieses Unternehmen ist schon mit einem anderen Ordner verbunden. Der gewählte Ordner ist vermutlich eine Kopie.',
+    en: 'This company is already connected to another folder. The chosen folder is probably a copy.',
+  },
+  'error.noFolder': { de: 'Bitte zuerst einen Ordner wählen.', en: 'Please choose a folder first.' },
+
+  'summary.edit': { de: 'Ändern', en: 'Edit' },
+  'summary.editNamed': { de: '{name} ändern', en: 'Edit {name}' },
+  'summary.none': { de: '–', en: '–' },
+  'summary.address': { de: 'Anschrift', en: 'Address' },
+  'summary.logoYes': { de: 'Ausgewählt', en: 'Selected' },
+  'summary.vat': { de: 'Umsatzsteuer', en: 'VAT' },
+  'summary.smallBusiness': { de: 'Kleinunternehmer (§ 19 UStG)', en: 'Small business (§ 19 UStG)' },
+  'summary.extension': { de: 'mit Dauerfristverlängerung', en: 'with permanent extension' },
+  'summary.trade': { de: 'Gewerbe, {municipality}, Hebesatz {multiplier} %', en: 'Trade, {municipality}, multiplier {multiplier} %' },
+  'summary.firstNumber': { de: 'erste Nummer {number}', en: 'first number {number}' },
+  'summary.days': { de: '{n} Tage', en: '{n} days' },
+
+  'switcher.label': { de: 'Unternehmen: {name}. Wechseln', en: 'Company: {name}. Switch' },
+  'switcher.menu': { de: 'Unternehmen', en: 'Companies' },
+  'switcher.companies': { de: 'Unternehmen', en: 'Companies' },
+  'switcher.add': { de: 'Unternehmen hinzufügen', en: 'Add company' },
+
+  'nav.label': { de: 'Navigation', en: 'Navigation' },
+  'nav.dashboard': { de: 'Übersicht', en: 'Dashboard' },
+  'nav.quotes': { de: 'Angebote', en: 'Quotes' },
+  'nav.invoices': { de: 'Rechnungen', en: 'Invoices' },
+  'nav.expenses': { de: 'Ausgaben', en: 'Expenses' },
+  'nav.contacts': { de: 'Kontakte', en: 'Contacts' },
+  'nav.taxes': { de: 'Steuern', en: 'Taxes' },
+  'nav.tools': { de: 'Werkzeuge', en: 'Tools' },
+  'nav.settings': { de: 'Einstellungen', en: 'Settings' },
+  'nav.soon': { de: 'bald', en: 'soon' },
+  'nav.soonHint': { de: 'Dieser Bereich folgt in einer späteren Version.', en: 'This area follows in a later version.' },
+
+  'save.saving': { de: 'Speichern …', en: 'Saving …' },
+  'save.saved': { de: 'Gespeichert', en: 'Saved' },
+  'save.failed': { de: 'Nicht gespeichert: {reason}', en: 'Not saved: {reason}' },
+  'save.retry': { de: 'Erneut versuchen', en: 'Try again' },
+
+  'home.title': { de: 'Übersicht', en: 'Dashboard' },
+  'home.welcome': { de: '{name} ist eingerichtet.', en: '{name} is set up.' },
+  'home.next': {
+    de: 'Hier erscheinen bald Gewinn, offene Forderungen und die Steuer-Rücklage. Angebote, Rechnungen und Ausgaben folgen in den nächsten Versionen.',
+    en: 'Profit, open receivables and the tax reserve will appear here. Quotes, invoices and expenses follow in the next versions.',
+  },
+
+  'settings.title': { de: 'Einstellungen', en: 'Settings' },
+  'settings.app': { de: 'App', en: 'App' },
+  'settings.save': { de: 'Speichern', en: 'Save' },
+  'settings.discard': { de: 'Verwerfen', en: 'Discard' },
+  'settings.applied': { de: '{section} gespeichert', en: '{section} saved' },
+  'settings.companyId': { de: 'Unternehmens-ID', en: 'Company ID' },
+  'settings.knownCompanies': { de: 'Unternehmen in diesem Browser', en: 'Companies in this browser' },
+
+  'start.unsupportedTitle': { de: 'Dieser Browser wird nicht unterstützt', en: 'This browser is not supported' },
+  'start.unsupportedText': {
+    de: 'kontor speichert deine Daten über die File System Access API in einem Ordner. Bitte öffne kontor in Google Chrome oder Microsoft Edge (index.html per Doppelklick).',
+    en: 'kontor stores your data in a folder through the File System Access API. Please open kontor in Google Chrome or Microsoft Edge (double-click index.html).',
+  },
+  'start.reconnectTitle': { de: 'Willkommen zurück', en: 'Welcome back' },
+  'start.reconnectText': {
+    de: 'Der Browser fragt nach jedem Neustart, ob kontor wieder auf den Ordner zugreifen darf.',
+    en: 'After every restart, the browser asks whether kontor may access the folder again.',
+  },
+  'start.continueWith': { de: 'Weiter mit „{name}“', en: 'Continue with “{name}”' },
+  'start.failedTitle': { de: 'Das Unternehmen konnte nicht geöffnet werden', en: 'The company could not be opened' },
+  'start.retry': { de: 'Erneut versuchen', en: 'Try again' },
+  'start.open': { de: '„{name}“ öffnen', en: 'Open “{name}”' },
+
+  'toast.recovered': {
+    de: 'Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.',
+    en: 'Unsaved changes from the last session were restored.',
+  },
+
+  'crash.toast': { de: 'Ein Fehler ist aufgetreten. Ungespeicherte Änderungen wurden gesichert.', en: 'An error occurred. Unsaved changes were kept.' },
+  'crash.title': { de: 'Dieser Bereich konnte nicht angezeigt werden.', en: 'This part could not be shown.' },
+  'crash.text': { de: 'Der Rest der App funktioniert weiter. Ungespeicherte Änderungen bleiben erhalten.', en: 'The rest of the app keeps working. Unsaved changes are kept.' },
+  'crash.retry': { de: 'Erneut versuchen', en: 'Try again' },
+  'crash.copy': { de: 'Diagnose kopieren', en: 'Copy diagnostics' },
+  'crash.copied': { de: 'Diagnose kopiert', en: 'Diagnostics copied' },
+  'crash.copyFailed': { de: 'Kopieren nicht möglich', en: 'Could not copy' },
+} satisfies Record<string, Tr>;
+
+export type MessageKey = keyof typeof MESSAGES_SRC;
+
+export const MESSAGES: Record<MessageKey, Tr> = MESSAGES_SRC;

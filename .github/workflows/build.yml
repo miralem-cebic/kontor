@@ -1,0 +1,69 @@
+# Reusable build workflow. Called by ci.yml for pull requests and by release.yml for tags.
+# Runs lint, tests and the production build, then packages dist/ into a zip with a SHA-256 checksum.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version label used in the package file name
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # Directory with the finished application (Vite build output, see DEVELOPMENT.md).
+  APP_DIR: dist
+
+jobs:
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        if: ${{ hashFiles('package.json') != '' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install, test and build
+        if: ${{ hashFiles('package.json') != '' }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+          npm audit --omit=dev --audit-level=high
+          npm run typecheck
+          npm run lint --if-present
+          npm test --if-present
+          npm run build
+
+      - name: Create package and checksum
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ ! -d "$APP_DIR" ]; then
+            echo "::error::APP_DIR '$APP_DIR' does not exist. Set APP_DIR in .github/workflows/build.yml."
+            exit 1
+          fi
+          mkdir -p release
+          ARCHIVE="kontor-${VERSION}.zip"
+          (cd "$APP_DIR" && zip -r -q "$GITHUB_WORKSPACE/release/$ARCHIVE" .)
+          (cd release && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
+          ls -lh release
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kontor-package
+          path: release/
+          if-no-files-found: error
+          retention-days: 14

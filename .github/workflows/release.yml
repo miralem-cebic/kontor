@@ -1,0 +1,98 @@
+# Publishes a GitHub release whenever a version tag such as v1.2.0 is pushed.
+# Release notes combine the matching CHANGELOG.md section with GitHub's generated notes.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-tag:
+    name: verify-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository with full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Ensure the tag points to a commit on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Release tags must point to a commit on main. Tag ${GITHUB_REF_NAME} does not."
+            exit 1
+          fi
+
+  build:
+    name: build
+    needs: verify-tag
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download package
+        uses: actions/download-artifact@v8
+        with:
+          name: kontor-package
+          path: release
+
+      - name: Build release notes
+        run: |
+          VERSION="${TAG#v}"
+          NOTES="$RUNNER_TEMP/release-notes.md"
+
+          # 1. Hand-written section for this version from CHANGELOG.md
+          awk -v heading="## [${VERSION}]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > "$RUNNER_TEMP/changelog-section.md"
+
+          if [ -s "$RUNNER_TEMP/changelog-section.md" ]; then
+            cat "$RUNNER_TEMP/changelog-section.md" > "$NOTES"
+          else
+            echo "::warning::No CHANGELOG.md section found for ${VERSION}. Using generated notes only."
+            : > "$NOTES"
+          fi
+
+          # 2. Generated notes: pull requests since the previous release, grouped by .github/release.yml
+          {
+            echo
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="$TAG" --jq '.body'
+          } >> "$NOTES"
+
+          echo "--- release notes ---"
+          cat "$NOTES"
+
+      - name: Create GitHub release
+        run: |
+          PRERELEASE_FLAG=""
+          if [[ "$TAG" == *-* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          gh release create "$TAG" release/* \
+            --verify-tag \
+            --title "kontor ${TAG}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            $PRERELEASE_FLAG

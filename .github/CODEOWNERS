@@ -1,0 +1,5 @@
+# Code owners are automatically requested for review when someone opens a pull request
+# that modifies the files they own. See CONTRIBUTING.md for the review process.
+
+*                       @miralem-cebic
+/.github/               @miralem-cebic

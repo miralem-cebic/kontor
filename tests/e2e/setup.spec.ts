@@ -33,6 +33,9 @@ test('the setup assistant checks each step and writes the company folder', async
 
   // tax: regular VAT with its follow-up questions, trade with multiplier
   await expect(page.getByRole('heading', { name: 'Steuer' })).toBeVisible();
+  // who kontor is for, and that VAT covers all businesses of one person
+  await expect(page.getByRole('note')).toContainText('kontor ist für Einzelunternehmen');
+  await expect(page.getByRole('note')).toContainText('Kleinunternehmerregelung und Voranmeldung gelten für alle Betriebe zusammen');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Bitte die Steuernummer oder die USt-IdNr. angeben.')).toBeVisible();
   await page.getByLabel('USt-IdNr.').fill('DE136695977');

@@ -76,6 +76,14 @@ const MESSAGES_SRC = {
   'company.email': { de: 'E-Mail', en: 'Email' },
   'company.phone': { de: 'Telefon', en: 'Phone' },
 
+  'tax.scope': {
+    de: 'kontor ist für Einzelunternehmen: Freiberufler und Gewerbetreibende mit Einnahmen-Überschuss-Rechnung (§ 4 Abs. 3 EStG), solange keine Buchführungspflicht besteht (§ 141 AO, § 241a HGB). Für GmbH, UG, GbR oder Partnerschaften ist kontor nicht gedacht.',
+    en: 'kontor is for sole proprietors: freelancers and traders who use cash-basis accounting (EÜR, § 4 (3) EStG), as long as they are not required to keep double-entry books (§ 141 AO, § 241a HGB). It is not meant for a GmbH, UG, GbR or partnership.',
+  },
+  'tax.scopeVat': {
+    de: 'Hast du mehrere Betriebe, zum Beispiel eine freiberufliche Tätigkeit und ein Gewerbe, bist du für die Umsatzsteuer ein einziges Unternehmen (§ 2 Abs. 1 Satz 2 UStG): Kleinunternehmerregelung und Voranmeldung gelten für alle Betriebe zusammen. Wähle dafür in jedem Unternehmen dieselbe Einstellung. kontor rechnet die Umsätze mehrerer Unternehmen noch nicht zusammen.',
+    en: 'If you run several businesses, for example a freelance activity and a trade, you are one single business for VAT (§ 2 (1) sentence 2 UStG): the small business scheme and the advance return cover all of them together. Choose the same settings for them in every company. kontor does not add up the turnover of several companies yet.',
+  },
   'tax.idsIntro': {
     de: 'Auf jeder Rechnung steht deine Steuernummer oder deine USt-IdNr. (§ 14 Abs. 4 UStG). Gib mindestens eine an.',
     en: 'Every invoice shows your tax number or your VAT ID (§ 14 (4) UStG). Enter at least one.',

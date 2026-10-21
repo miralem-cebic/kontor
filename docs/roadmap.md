@@ -4,6 +4,12 @@ kontor follows the feature set of epufix (Austria), adapted to German law: quote
 
 Calculators and exports are estimates and filling aids, not tax advice. Every year-dependent value comes from `src/domain/tax/params/<year>.ts`, with its legal source and tests.
 
+## Scope
+
+kontor is for sole proprietors with cash-basis accounting (EÜR, § 4 Abs. 3 EStG): freelancers (§ 18 EStG) and traders, each either as small business (§ 19 UStG) or with regular VAT and advance returns, as long as no double-entry bookkeeping is required (§ 141 AO, § 241a HGB). Out of scope: corporations (GmbH, UG) and partnerships (GbR, Partnerschaft).
+
+One person with several businesses (for example a freelance activity and a trade) keeps one company folder per business: profit (EÜR) and trade tax are determined per business. For VAT the person is one single business (Unternehmenseinheit, § 2 Abs. 1 Satz 2 UStG): the small business limits apply to the total turnover, and there is one advance return. The setup assistant says so; adding up the turnover across companies is planned with the dashboard (Phase 4) and the UStVA filling aid (R1).
+
 ## Phases
 
 ### Phase 0: foundation (done, 0.1.0)
@@ -40,7 +46,7 @@ Tooling, `file://` build with CSP, data layer (repository, validation, migration
 
 ### Phase 4: dashboard and tax reserve
 
-- Profit of the current year, open receivables, small business limits (previous year 25,000 €, current year 100,000 €, from the tax parameters).
+- Profit of the current year, open receivables, small business limits (previous year 25,000 €, current year 100,000 €, from the tax parameters). The limits count the turnover of all companies of the same person that are known to this browser, because VAT treats them as one business (see Scope).
 - Reserve per month: income tax, solidarity surcharge, church tax if any, trade tax and the VAT payable.
 - Every number links to the bookings behind it.
 
@@ -77,7 +83,7 @@ Sending returns to ELSTER directly needs the native ERiC library and a registrat
 
 | Stage | Content | Benefit |
 | --- | --- | --- |
-| R1 | **UStVA filling aid** per period: tax bases and tax by form field (for example 81, 86, 66, 83; § 13b, intra-community), cash or accrual accounting, due date (10th of the following month, one month later with permanent extension). A view for typing into "Mein ELSTER", plus PDF and CSV. Field numbers come from `tax/params/<year>.ts`, checked against the current form. | Regular businesses do the advance return in minutes |
+| R1 | **UStVA filling aid** per period, one return for all companies of the same person (see Scope): tax bases and tax by form field (for example 81, 86, 66, 83; § 13b, intra-community), cash or accrual accounting, due date (10th of the following month, one month later with permanent extension). A view for typing into "Mein ELSTER", plus PDF and CSV. Field numbers come from `tax/params/<year>.ts`, checked against the current form. | Regular businesses do the advance return in minutes |
 | R2 | **Income tax prepayments:** forecast of the annual profit → estimated income tax, solidarity surcharge, church tax and trade tax versus the assessed prepayments (10 March, 10 June, 10 September, 10 December). A hint when an adjustment request might make sense. | No surprise back payment |
 | R3 | **Anlage EÜR:** totals per line, year-end view, PDF and CSV. | Fill in without a tax advisor |
 | R4 | **Package for the tax advisor:** ZIP with the booking list (CSV), all receipts or receipt links, issued invoices (PDF/XML), account mapping. | Replaces the shoebox |

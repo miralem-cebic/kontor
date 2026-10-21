@@ -1,6 +1,7 @@
 # kontor
 
 [![CI](https://github.com/miralem-cebic/kontor/actions/workflows/ci.yml/badge.svg)](https://github.com/miralem-cebic/kontor/actions/workflows/ci.yml)
+[![Lizenz: MIT](https://img.shields.io/github/license/miralem-cebic/kontor)](LICENSE)
 
 **kontor** ist eine lokale App für Angebote, Rechnungen und die Einnahmen-Überschuss-Rechnung (EÜR) für Selbständige, Freiberufler und Kleinunternehmer in Deutschland.
 
@@ -57,3 +58,7 @@ Architektur, Datenformat und alle Skripte stehen in [DEVELOPMENT.md](DEVELOPMENT
 - [Roadmap](docs/roadmap.md): geplante Funktionen und Finanzamt-Exporte
 - [Architekturentscheidungen](docs/adr/)
 - [Entwicklung](DEVELOPMENT.md), [Mitarbeit](CONTRIBUTING.md), [Verhaltenskodex](CODE_OF_CONDUCT.md), [Sicherheit](SECURITY.md), [Änderungen](CHANGELOG.md)
+
+## Lizenz
+
+Veröffentlicht unter der MIT-Lizenz, siehe [LICENSE](LICENSE).

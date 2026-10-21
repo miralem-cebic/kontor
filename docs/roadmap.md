@@ -10,22 +10,24 @@ Calculators and exports are estimates and filling aids, not tax advice. Every ye
 
 Tooling, `file://` build with CSP, data layer (repository, validation, migrations, merge, persister, daily backup), money and IBAN basics, setup assistant, several companies with switcher, settings, German and English.
 
-### Phase 1: contacts, quotes, invoices
+### Phase 1: customers, bank accounts, quotes, invoices
 
-- Contacts: customers and suppliers (`contacts/<id>.json`), with VAT ID for EU business customers.
+- **Customer management** (customers and suppliers, `contacts/<id>.json`): company or private person, name and additional name line, address, contact person, email for invoices, phone, customer number, VAT ID (EU business customers), Leitweg-ID for public authorities (buyer reference, BT-10), a default order or PO number (purchase order reference, BT-13; can be changed on every document), payment term and notes per customer.
+- **Bank accounts:** several accounts per company (for example two current accounts and PayPal), one of them the default for invoices; the invoice shows the account chosen for it. The single bank account of `company.json` becomes a list in a schema migration.
 - Quotes with "valid until"; a quote becomes an invoice with one click.
 - Invoices with the mandatory content of § 14 Abs. 4 UStG; small amount invoices (§ 33 UStDV, up to 250 € gross).
 - Small business: no VAT column, note on § 19 UStG. Regular: 19 %, 7 %, 0 %; reverse charge § 13b UStG ("Steuerschuldnerschaft des Leistungsempfängers"); intra-community supplies with the VAT IDs of both parties.
 - Date or period of service.
 - PDF with logo, bank details and optional GiroCode (EPC QR).
 - Finalization: issuing assigns the number, writes `documents/issued/<number>.pdf` and its SHA-256, and an audit entry. Corrections only through cancellation or correction invoices ([ADR 0004](adr/0004-invoice-finalization-and-numbering.md)).
-- Payments, including partial payments; open and overdue invoices.
+- Payments, including partial payments, each booked to one of the bank accounts; open and overdue invoices.
+- **Customer accounts:** per customer the invoices, payments, credit notes and the open balance; payment reminders (Zahlungserinnerung, Mahnung) for overdue invoices.
 
 ### Phase 2: e-invoices
 
 - **Outgoing:** ZUGFeRD / Factur-X (profile EN 16931 or XRECHNUNG, PDF/A-3 with embedded XML) and plain XRechnung XML (CII; UBL optional). Optional for small businesses; mandatory for regular businesses after the transition periods (2027 with a previous-year turnover above 800,000 €, otherwise 2028).
 - **Incoming** (every business must be able to receive e-invoices since 2025, small businesses included): drop an XRechnung XML or a ZUGFeRD PDF → readable view → expense with prefilled fields.
-- Generated fixtures are validated in CI with the KoSIT validator (Java, GitHub Action), not in the browser.
+- Every business can issue legally compliant e-invoices, also where the law does not require it yet. Fixtures for every supported case (regular VAT, small business, reverse charge, intra-community supply, credit note, cancellation) are validated in CI with the KoSIT validator, veraPDF and a ZUGFeRD validator (Java, GitHub Action), not in the browser. A format is offered only once its fixtures pass.
 - Library decision: [ADR 0005](adr/0005-e-invoice-library.md).
 
 ### Phase 3: expenses and receipts
@@ -34,12 +36,31 @@ Tooling, `file://` build with CSP, data layer (repository, validation, migration
 - Receipt as a file copied into the company folder (`belege/<year>/<id>-<name>`, with SHA-256) or as a link (`https://…` to SharePoint, Nextcloud or OneDrive; only http and https). With a link, keeping the receipt is up to its storage location; the UI says so.
 - Categories map to an Anlage EÜR line and to SKR03/SKR04 accounts (for the DATEV export).
 - CSV import of existing bookings with column mapping.
+- **Bank statements:** import per bank account (CSV; CAMT.053 later), match transactions with invoices (payments) and expenses, show what is not matched yet.
 
 ### Phase 4: dashboard and tax reserve
 
 - Profit of the current year, open receivables, small business limits (previous year 25,000 €, current year 100,000 €, from the tax parameters).
 - Reserve per month: income tax, solidarity surcharge, church tax if any, trade tax and the VAT payable.
 - Every number links to the bookings behind it.
+
+### Phase 5: recurring income and expenses
+
+- **Retainers and subscriptions you sell:** a recurring invoice per customer with lines, interval (monthly, quarterly, yearly), start and optional end. The service period follows the interval.
+- **Subscriptions you pay** (software, rent, insurance): a recurring expense with amount, VAT rate, category and supplier, prefilled each period. Each period still needs its own receipt; missing receipts are listed.
+- kontor runs only while it is open, so nothing happens in the background: on opening, it lists what is due and creates drafts. Issuing a recurring invoice stays an explicit step, because it assigns the number and finalizes the invoice (ADR 0004).
+- The dashboard and the prepayment forecast (R2) include the recurring amounts that are still to come in the year.
+
+### Phase 6: Excel export
+
+- Every list (invoices, payments, customers and customer accounts, expenses, bank transactions) and the EÜR as `.xlsx`, with amounts as numbers and dates as dates, so they can be used for further calculations.
+- The writer must run under the CSP of the build; the library (or own SpreadsheetML with a zip library) is chosen in a spike, like ADR 0005.
+
+### Later (version 2.0 or 3.0): time tracking
+
+- Projects per customer, time entries (manual and with a timer), hourly rates per project or customer, billable or not.
+- Billable time becomes invoice lines (hours as quantity in thousandths, see ADR 0003); a time entry is billed only once.
+- Reports per project and customer.
 
 ### Tools without a company folder
 

@@ -2,8 +2,10 @@ import type { BankDetails } from '../../src/domain/bankAccount';
 import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
+import type { DocumentLine } from '../../src/domain/document';
 import type { ItemProfile } from '../../src/domain/item';
-import { basisPoints, cents } from '../../src/domain/money';
+import { basisPoints, cents, quantity } from '../../src/domain/money';
+import type { QuoteContent } from '../../src/domain/quote';
 import { makeCompany } from '../../src/data/schema';
 import type { CompanyFile } from '../../src/data/types';
 
@@ -88,6 +90,28 @@ export const sampleItem = (over: Partial<ItemProfile> = {}): ItemProfile => ({
   unit: 'HUR',
   netPrice: cents(8500),
   vatRate: basisPoints(1900),
+  ...over,
+});
+
+/** A line of 12.5 hours at 85 € and 19 % */
+export const sampleLine = (over: Partial<DocumentLine> = {}): DocumentLine => ({
+  name: 'Webdesign',
+  description: '',
+  quantity: quantity(12_500),
+  unit: 'HUR',
+  unitPrice: cents(8500),
+  vatRate: basisPoints(1900),
+  ...over,
+});
+
+/** A quote with one line at 19 % and one at 7 % */
+export const sampleQuote = (over: Partial<QuoteContent> = {}): QuoteContent => ({
+  date: '2026-10-22',
+  validUntil: '2026-11-21',
+  subject: 'Website-Relaunch',
+  introText: 'Sehr geehrte Damen und Herren,',
+  closingText: '',
+  lines: [sampleLine(), sampleLine({ name: 'Lektorat', quantity: quantity(1000), unit: 'LS', unitPrice: cents(30000), vatRate: basisPoints(700) })],
   ...over,
 });
 

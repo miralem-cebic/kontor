@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
-import { makeContact, makeItem, SCHEMA_VERSION } from '../../src/data/schema';
-import { sampleCompany, sampleContact, sampleItem } from './fixtures';
+import { makeContact, makeItem, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import { sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
 
 const company = () => JSON.parse(JSON.stringify(sampleCompany())) as Record<string, unknown>;
 
@@ -80,9 +80,12 @@ describe('version 1 → 2: several bank accounts', () => {
     }
   });
 
-  it('item files came with version 2; one without a version is read like any other file', () => {
-    const { schemaVersion: _v, ...raw } = JSON.parse(JSON.stringify(makeItem(sampleItem()))) as Record<string, unknown>;
-    expect(migrate('item', raw)).toEqual({ ...raw, schemaVersion: 2 });
+  it('item and document files came with version 2; one without a version is read like any other file', () => {
+    const { schemaVersion: _v, ...item } = JSON.parse(JSON.stringify(makeItem(sampleItem()))) as Record<string, unknown>;
+    expect(migrate('item', item)).toEqual({ ...item, schemaVersion: 2 });
+    const quote = makeQuote(makeContact(sampleContact()).id, sampleQuote());
+    const { schemaVersion: _w, ...document } = JSON.parse(JSON.stringify(quote)) as Record<string, unknown>;
+    expect(migrate('document', document)).toEqual({ ...document, schemaVersion: 2 });
   });
 
   it('contact files of version 1 stay as they are', () => {

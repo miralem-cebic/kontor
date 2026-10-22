@@ -3,7 +3,7 @@
 
 import { err, ok, type Result } from '../data/result';
 import { ibanProblem, isValidBic, normalizeIban, type IbanProblem } from './iban';
-import { cents, parseCents, type Cents, type MoneyLocale } from './money';
+import { cents, parseCents, parseQuantity, quantity, type Cents, type MoneyLocale, type Quantity } from './money';
 import type { PatternProblem } from './numbering';
 
 export type FieldProblem =
@@ -27,6 +27,11 @@ export type FieldProblem =
   | 'itemNumberTaken'
   | 'price'
   | 'priceNegative'
+  | 'quantity'
+  | 'lineTooLarge'
+  | 'tooManyLines'
+  | 'date'
+  | 'validUntil'
   | `iban.${IbanProblem}`
   | `pattern.${PatternProblem}`;
 
@@ -140,6 +145,17 @@ export class Checker<F extends string> {
     if (amount === null || amount > max) this.add(field, 'price');
     else if (amount < 0) this.add(field, 'priceNegative');
     return amount ?? cents(0);
+  }
+
+  /** A required quantity typed in the interface language: not 0, at most `max` thousandths either way */
+  quantity(field: F, value: string, locale: MoneyLocale, max: number): Quantity {
+    if (!value.trim()) {
+      this.add(field, 'required');
+      return quantity(0);
+    }
+    const qty = parseQuantity(value, locale);
+    if (qty === null || qty === 0 || Math.abs(qty) > max) this.add(field, 'quantity');
+    return qty ?? quantity(0);
   }
 
   /** A whole number of days from 0 to the limit */

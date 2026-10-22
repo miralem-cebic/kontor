@@ -205,3 +205,40 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .f-row>.w-unit{flex:0 1 180px}
 .f-row>.w-rate{flex:0 1 140px}
+
+/* Documents: lines, catalogue picker, totals */
+.page-note{margin:0 0 12px}
+.f-row>.w-date{flex:0 1 180px}
+.muted-badge{color:var(--text-2);background:var(--muted-soft)}
+.lines{display:flex;flex-direction:column;gap:10px}
+.line{margin:0;padding:12px 0 0;border:0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;min-width:0}
+.line:first-child{border-top:0;padding-top:0}
+.line-main{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 10px}
+.line-no{flex:0 0 22px;height:34px;margin-top:22px;display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--text-3)}
+.line-main>.l-name{flex:1 1 200px}
+.line-main>.l-quantity{flex:0 1 90px}
+.line-main>.l-unit{flex:0 1 130px}
+.line-main>.l-price{flex:0 1 160px}
+.line-main>.l-rate{flex:0 1 90px}
+.line-main>.l-total{flex:0 0 110px;align-items:flex-end}
+.l-total output{height:34px;display:flex;align-items:center;font-variant-numeric:tabular-nums;font-weight:500}
+.line-sub{display:flex;align-items:flex-end;gap:10px;padding-left:32px}
+.l-actions{display:flex;gap:2px;padding-bottom:4px}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.icon-btn:disabled:hover{background:transparent;color:var(--text-2)}
+.picker{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.picker .search-in{max-width:none}
+.picker-list{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.picker-list li{border-top:1px solid var(--line)}
+.picker-list li:first-child{border-top:0}
+.picker-list .row-link{padding:8px 10px}
+.picker-list .row-link:hover{background:var(--hover)}
+.totals-box{display:flex;flex-direction:column;align-items:flex-end;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.totals{display:grid;grid-template-columns:auto auto;gap:4px 24px;margin:0;font-variant-numeric:tabular-nums}
+.totals dt{color:var(--text-2)}
+.totals dd{margin:0;text-align:right}
+.totals .grand{font-weight:600;color:var(--text);font-size:15px;padding-top:4px}
+@media (max-width:720px){
+  .line-sub{padding-left:0}
+  .line-no{display:none}
+}

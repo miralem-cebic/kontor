@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeContact, makeItem } from '../../src/data/schema';
+import { makeContact, makeItem, makeQuote } from '../../src/data/schema';
+import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
-import { sampleCompany, sampleContact, sampleItem, sampleProfile } from './fixtures';
+import { sampleCompany, sampleContact, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
 const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(sampleCompany())), ...over }) as Record<string, unknown>;
@@ -144,5 +145,56 @@ describe('item file validation', () => {
     ['fieldUpdatedAt', { netPrice: 'today' }],
   ])('rejects %s = %j', (field, value) => {
     expect(() => readItemFile(itemFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
+});
+
+describe('document file validation', () => {
+  const quoteFile = (over: Record<string, unknown> = {}) =>
+    ({ ...JSON.parse(JSON.stringify(makeQuote(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), sampleQuote()))), ...over }) as Record<string, unknown>;
+  const readDocument = (raw: unknown) => migrate('document', raw);
+  const withLine = (over: Record<string, unknown>) => ({ lines: [{ ...sampleLine(), ...over }] });
+
+  it('accepts a file written by the app, also without lines and deleted', () => {
+    const raw = quoteFile();
+    expect(readDocument(raw)).toEqual(raw);
+    expect(readDocument(quoteFile({ lines: [], deletedAt: '2026-10-21T10:00:00.000Z' })).lines).toEqual([]);
+  });
+
+  it('accepts a valid-until date before the quote date (reported by the form, not here)', () => {
+    expect(readDocument(quoteFile({ validUntil: '2026-01-01' })).validUntil).toBe('2026-01-01');
+  });
+
+  it.each([
+    ['kind', 'invoice'],
+    ['customerId', '__proto__'],
+    ['customerId', null],
+    ['date', '22.10.2026'],
+    ['date', '2026-02-30'],
+    ['validUntil', ''],
+    ['subject', 'x'.repeat(201)],
+    ['introText', 5],
+    ['lines', {}],
+    ['lines', Array.from({ length: 201 }, () => sampleLine())],
+    ['fieldUpdatedAt', { lines: 'now' }],
+  ])('rejects %s = %j', (field, value) => {
+    expect(() => readDocument(quoteFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
+
+  it.each([
+    ['quantity', 0],
+    ['quantity', 1.5],
+    ['quantity', 1_000_000_000],
+    ['unitPrice', -1],
+    ['unitPrice', 10.5],
+    ['vatRate', 1600],
+    ['unit', 'Stunde'],
+    ['name', null],
+  ])('rejects a line with %s = %j', (field, value) => {
+    expect(() => readDocument(quoteFile(withLine({ [field]: value })))).toThrow(InvalidFileError);
+  });
+
+  it('rejects a line whose amount is too large, so that every total stays exact', () => {
+    expect(() => readDocument(quoteFile(withLine({ quantity: 2000, unitPrice: 99_999_999_999 })))).toThrow(InvalidFileError);
+    expect(readDocument(quoteFile(withLine({ quantity: -1000, unitPrice: 99_999_999_999 }))).lines[0]?.quantity).toBe(-1000);
   });
 });

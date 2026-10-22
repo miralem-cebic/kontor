@@ -4,7 +4,8 @@ import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { ItemProfile } from '../domain/item';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type ItemId } from './ids';
+import type { QuoteContent } from '../domain/quote';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -102,11 +103,42 @@ export interface ItemFile extends ItemProfile {
   fieldUpdatedAt: Partial<Record<ItemMergeableField, string>>;
 }
 
+/** Quote fields merged one by one. The lines are one field: the later change of the lines wins as a whole. */
+const DOCUMENT_MERGEABLE: Record<keyof QuoteContent | 'customerId' | 'deletedAt', true> = {
+  customerId: true,
+  date: true,
+  validUntil: true,
+  subject: true,
+  introText: true,
+  closingText: true,
+  lines: true,
+  deletedAt: true,
+};
+export const DOCUMENT_MERGEABLE_FIELDS = keysOf(DOCUMENT_MERGEABLE);
+export type DocumentMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
+
+/** documents/<id>.json with `kind: 'quote'`: a quote, a draft for now */
+export interface QuoteFile extends QuoteContent {
+  schemaVersion: number;
+  id: DocumentId;
+  kind: 'quote';
+  /** The customer; the quote shows the contact's current data until it is issued (later: a snapshot) */
+  customerId: ContactId;
+  createdAt: string;
+  /** Soft delete: a deleted quote stays in its file and is hidden in the app */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<DocumentMergeableField, string>>;
+}
+
+/** documents/<id>.json; invoices will join the quotes here */
+export type DocumentFile = QuoteFile;
+
 /** What a backup holds */
 export interface BackupSnapshot {
   company: CompanyFile;
   contacts: readonly ContactFile[];
   items: readonly ItemFile[];
+  documents: readonly DocumentFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

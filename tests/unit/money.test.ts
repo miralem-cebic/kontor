@@ -6,10 +6,12 @@ import {
   divideRounded,
   formatCents,
   formatDecimal,
+  formatQuantity,
   formatRate,
   lineNet,
   MoneyRangeError,
   parseCents,
+  parseQuantity,
   percentOf,
   quantity,
   splitGross,
@@ -184,4 +186,36 @@ describe('text', () => {
     expect(formatRate(basisPoints(1900), 'en')).toBe('19%');
     expect(formatRate(basisPoints(12345), 'en')).toBe('123.45%');
   });
+});
+
+describe('quantities as text', () => {
+  it.each([
+    ['2', 2000],
+    ['1,5', 1500],
+    ['0,25', 250],
+    ['0,125', 125],
+    ['-1', -1000],
+    ['1.000', 1_000_000],
+    [' 12,5 ', 12_500],
+  ])('parses "%s" (de)', (input, expected) => expect(parseQuantity(input, 'de')).toBe(expected));
+
+  it.each(['', '1,2345', '1.5', 'zwei', '1,', '2 Stück'])('rejects "%s" (de)', (input) => expect(parseQuantity(input, 'de')).toBeNull());
+
+  it('parses English input', () => {
+    expect(parseQuantity('1.5', 'en')).toBe(1500);
+    expect(parseQuantity('1,000.5', 'en')).toBe(1_000_500);
+  });
+
+  it('formats without trailing zeros', () => {
+    expect(formatQuantity(quantity(1000), 'de')).toBe('1');
+    expect(formatQuantity(quantity(12_500), 'de')).toBe('12,5');
+    expect(formatQuantity(quantity(-250), 'de')).toBe('-0,25');
+    expect(formatQuantity(quantity(1_234_125), 'en')).toBe('1,234.125');
+  });
+
+  it('reads back what it formats', () =>
+    fc.assert(
+      fc.property(fc.integer({ min: -999_999_999, max: 999_999_999 }).map(quantity), fc.constantFrom('de' as const, 'en' as const), (q, locale) => parseQuantity(formatQuantity(q, locale), locale) === q),
+      params,
+    ));
 });

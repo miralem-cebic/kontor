@@ -1,9 +1,9 @@
-import { mergeCompany, mergeContact, mergeItem, sameJson } from '../merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile, ItemFile } from '../types';
+import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
@@ -11,11 +11,12 @@ import { writeFile, writeJson } from './jsonFile';
 //   company.json
 //   contacts/<id>.json         one file per customer or supplier
 //   items/<id>.json            one file per item or service of the catalogue
+//   documents/<id>.json        one file per quote
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', assets: 'assets', backups: 'backups' } as const;
 
 const BACKUP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 /** A record file (contact, item) is named after its ID; other names (conflict copies of sync clients) are not read */
@@ -123,6 +124,17 @@ export class FsRepository implements Repository {
 
   saveItem(item: ItemFile) {
     return attempt(() => this.saveRecord(DIRS.items, item, (raw) => migrate('item', raw), mergeItem));
+  }
+
+  loadDocuments() {
+    return attempt(async () => {
+      const { records, issues } = await this.loadRecords(DIRS.documents, (raw) => migrate('document', raw));
+      return { documents: records, issues };
+    });
+  }
+
+  saveDocument(document: DocumentFile) {
+    return attempt(() => this.saveRecord(DIRS.documents, document, (raw) => migrate('document', raw), mergeDocument));
   }
 
   /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */

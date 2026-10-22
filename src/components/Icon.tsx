@@ -2,6 +2,7 @@ const P = {
   check: 'M5 12.5l4.2 4.2L19 7',
   chevR: 'M9 6l6 6-6 6',
   chevD: 'M6 9l6 6 6-6',
+  chevU: 'M6 15l6-6 6 6',
   chevL: 'M15 6l-6 6 6 6',
   plus: 'M12 5v14M5 12h14',
   x: 'M6 6l12 12M18 6L6 18',

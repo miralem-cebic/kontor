@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - `company.json` has schema version 2: the one bank account becomes a list of accounts with a default. A company folder is upgraded when it is read and saved in the new format with the next change; older versions of kontor then report that the folder was saved by a newer version.
+- The content area is a panel with rounded corners on a slightly darker frame, and cards and lists are white on a light grey background, so they stand out better (light and dark mode).
 
 ### Fixed
 

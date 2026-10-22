@@ -141,7 +141,7 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   expect(errors).toEqual([]);
 });
 
-test('a small business quotes without VAT; an old quote is marked as expired', async ({ page }) => {
+test('a small business quotes without VAT; an old quote is marked as expired and can be filtered', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto(APP_URL);
   await setUpCompany(page, { name: 'Klein Design' });
@@ -171,5 +171,24 @@ test('a small business quotes without VAT; an old quote is marked as expired', a
   await expect(row).toContainText('ohne Betreff');
   await expect(row).toContainText('abgelaufen');
   await expect(row).toContainText('180,00 €');
+
+  // a valid quote next to it; the filter shows either kind, with the counts
+  await page.getByRole('button', { name: 'Neues Angebot' }).click();
+  await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
+  await page.getByLabel('Betreff').fill('Wartung');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  const rows = page.getByRole('table').getByRole('row');
+  const filter = page.getByRole('group', { name: 'Nach Gültigkeit filtern' });
+  await expect(filter.getByRole('button')).toHaveText(['Alle 2', 'Gültig 1', 'Abgelaufen 1']);
+  await expect(rows).toHaveCount(3);
+  await filter.getByRole('button', { name: /^Abgelaufen/ }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toContainText('02.01.2020');
+  await filter.getByRole('button', { name: /^Gültig/ }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toContainText('Wartung');
+  await page.getByRole('searchbox').fill('nichts');
+  await expect(filter.getByRole('button')).toHaveText(['Alle 0', 'Gültig 0', 'Abgelaufen 0']);
+  await expect(page.getByText('Keine Angebote gefunden.')).toBeVisible();
   expect(errors).toEqual([]);
 });

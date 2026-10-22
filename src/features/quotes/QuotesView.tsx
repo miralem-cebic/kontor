@@ -8,7 +8,7 @@ import { formatCents } from '../../domain/money';
 import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, QUOTE_LIMITS, quoteMatches, readQuote, type QuoteDraft, type QuoteField, type QuoteFieldError } from '../../domain/quote';
 import type { DocumentId } from '../../data/ids';
 import type { ContactFile, QuoteFile } from '../../data/types';
-import { currentLang, fmt, t } from '../../i18n';
+import { currentLang, fmt, t, type MessageKey } from '../../i18n';
 import { fieldError } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
@@ -17,6 +17,13 @@ import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 // the checked quote into the store (and the persister writes it). Quotes are drafts until numbering and the PDF come.
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: DocumentId };
+type ValidityFilter = 'all' | 'valid' | 'expired';
+
+const VALIDITY_FILTERS: { value: ValidityFilter; label: MessageKey }[] = [
+  { value: 'all', label: 'quotes.filterAll' },
+  { value: 'valid', label: 'quotes.filterValid' },
+  { value: 'expired', label: 'quotes.filterExpired' },
+];
 
 const useSmallBusiness = () => useApp((s) => s.company?.tax.vat.kind === 'smallBusiness');
 const formatDate = (iso: string) => fmt(toLocalDate(iso), 'P');
@@ -50,11 +57,14 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
   const contacts = useApp((s) => s.contacts);
   const smallBusiness = useSmallBusiness();
   const [query, setQuery] = useState('');
+  const [validity, setValidity] = useState<ValidityFilter>('all');
   const searchId = useId();
   const active = useMemo(() => [...documents.values()].filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
   const customerName = (q: QuoteFile) => contacts.get(q.customerId)?.name ?? '';
-  const shown = active.filter((q) => quoteMatches(q, customerName(q), query));
   const today = isoDateOf(new Date());
+  const inFilter = (q: QuoteFile, f: ValidityFilter) => f === 'all' || isExpired(q, today) === (f === 'expired');
+  const matching = active.filter((q) => quoteMatches(q, customerName(q), query));
+  const shown = matching.filter((q) => inFilter(q, validity));
   const lang = currentLang();
 
   return (
@@ -79,6 +89,13 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               {t('quotes.search')}
             </label>
             <input id={searchId} className="search-in" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('quotes.searchPlaceholder')} />
+            <div className="seg" role="group" aria-label={t('quotes.filter')}>
+              {VALIDITY_FILTERS.map((f) => (
+                <button key={f.value} type="button" className={validity === f.value ? 'on' : ''} aria-pressed={validity === f.value} onClick={() => setValidity(f.value)}>
+                  {t(f.label)} <span className="seg-n">{matching.filter((q) => inFilter(q, f.value)).length}</span>
+                </button>
+              ))}
+            </div>
           </div>
           {shown.length === 0 ? (
             <p className="empty" role="status">

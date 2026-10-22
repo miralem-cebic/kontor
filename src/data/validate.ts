@@ -24,10 +24,14 @@ import {
 import { ACCOUNT_LIMITS, MAX_ACCOUNTS } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
 import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
+import { ITEM_LIMITS } from '../domain/item';
+import { cents, type BasisPoints, type Cents } from '../domain/money';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
+import { UNITS, type UnitCode } from '../domain/units';
+import { isVatRate } from '../domain/vat';
 import { observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
-import { CONTACT_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type BankAccount, type Banking, type CompanyFile, type ContactFile } from './types';
+import { CONTACT_MERGEABLE_FIELDS, ITEM_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type BankAccount, type Banking, type CompanyFile, type ContactFile, type ItemFile } from './types';
 
 export class InvalidRecordError extends Error {
   override name = 'InvalidRecordError';
@@ -75,6 +79,7 @@ const idOf =
 const companyId = idOf<'CompanyId'>();
 const contactId = idOf<'ContactId'>();
 const accountId = idOf<'AccountId'>();
+const itemId = idOf<'ItemId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -278,4 +283,21 @@ export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(CONTACT_MERGEABLE_FIELDS),
+});
+
+const vatRate: Check<BasisPoints> = (v, path) => (isVatRate(v) ? v : fail(path, `expected a VAT rate, got ${describe(v)}`));
+const netPrice: Check<Cents> = (v, path) => cents(int(0, ITEM_LIMITS.maxNetPrice)(v, path));
+
+export const validateItem: Check<ItemFile> = objectOf<ItemFile>({
+  schemaVersion: num,
+  id: itemId,
+  number: text(ITEM_LIMITS.number),
+  name: text(ITEM_LIMITS.name),
+  description: text(ITEM_LIMITS.description),
+  unit: oneOf<UnitCode>(UNITS),
+  netPrice,
+  vatRate,
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(ITEM_MERGEABLE_FIELDS),
 });

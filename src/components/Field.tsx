@@ -46,7 +46,7 @@ export function TextField({
   required?: boolean;
   type?: 'text' | 'email' | 'tel';
   autoComplete?: string;
-  inputMode?: 'text' | 'numeric' | 'email' | 'tel';
+  inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'tel';
   maxLength?: number;
   className?: string;
 }) {
@@ -89,6 +89,41 @@ export function TextArea({ label, hint, error, value, onChange, maxLength }: Com
         aria-describedby={describedBy(id, hint, error)}
         maxLength={maxLength}
       />
+      <Messages id={id} hint={hint} error={error} />
+    </div>
+  );
+}
+
+/** A drop-down list with a fixed set of options */
+export function SelectField<T extends string>({
+  label,
+  hint,
+  error,
+  value,
+  options,
+  onChange,
+  className,
+}: Common & { value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; className?: string }) {
+  const id = useId();
+  return (
+    <div className={'field' + (className ? ` ${className}` : '')}>
+      <label htmlFor={id}>{label}</label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => {
+          const picked = options.find((o) => o.value === e.target.value);
+          if (picked) onChange(picked.value);
+        }}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, hint, error)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
       <Messages id={id} hint={hint} error={error} />
     </div>
   );

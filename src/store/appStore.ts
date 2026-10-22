@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
-import { keysOf, type AccountId, type ContactId } from '../data/ids';
-import { mergeCompany, mergeContact, sameJson } from '../data/merge';
+import type { ItemProfile } from '../domain/item';
+import { keysOf, type AccountId, type ContactId, type ItemId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeItem, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeAccount, makeContact, nowIso } from '../data/schema';
-import type { BankAccount, Banking, CompanyFile, ContactFile, ContactMergeableField, MergeableField } from '../data/types';
+import { makeAccount, makeContact, makeItem, nowIso } from '../data/schema';
+import type { BankAccount, Banking, CompanyFile, ContactFile, ContactMergeableField, ItemFile, ItemMergeableField, MergeableField } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
 // and the persister (data/persister.ts) writes in the background. Components never write files.
@@ -22,13 +23,15 @@ export interface AppState {
   company: CompanyFile | null;
   /** Contacts of the open company by ID, deleted ones included (they are hidden in the UI) */
   contacts: ReadonlyMap<ContactId, ContactFile>;
+  /** Items of the catalogue by ID, deleted ones included (they are hidden in the UI) */
+  items: ReadonlyMap<ItemId, ItemFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -40,17 +43,27 @@ export function resetApp() {
   set({ ...initial });
 }
 
-const byId = (contacts: readonly ContactFile[]) => new Map(contacts.map((c) => [c.id, c]));
+const byId = <T extends { id: string }>(records: readonly T[]) => new Map<T['id'], T>(records.map((r) => [r.id, r]));
 
-/** A company and its contacts as read from the folder */
-export function loadCompany(company: CompanyFile, contacts: readonly ContactFile[]) {
-  set({ company, contacts: byId(contacts), save: { state: 'saved' } });
+/** The records of a company folder besides company.json */
+export interface CompanyRecords {
+  contacts: readonly ContactFile[];
+  items: readonly ItemFile[];
+}
+
+/** A company and its records as read from the folder */
+export function loadCompany(company: CompanyFile, { contacts, items }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, contacts: readonly ContactFile[]) {
+export function applyRecovered(company: CompanyFile, { contacts, items }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
-  set((s) => ({ company, contacts: contacts.length ? new Map([...s.contacts, ...byId(contacts)]) : s.contacts }));
+  set((s) => ({
+    company,
+    contacts: contacts.length ? new Map([...s.contacts, ...byId(contacts)]) : s.contacts,
+    items: items.length ? new Map([...s.items, ...byId(items)]) : s.items,
+  }));
 }
 
 interface Stamped<F extends string> {
@@ -170,6 +183,41 @@ export function integrateWrittenContact(sent: ContactFile, written: ContactFile)
   const current = get().contacts.get(written.id);
   if (!current) return;
   putContact(current === sent ? written : mergeContact(current, written));
+}
+
+/* ---------- Items ---------- */
+
+function putItem(item: ItemFile) {
+  set((s) => ({ items: new Map(s.items).set(item.id, item) }));
+}
+
+/** A new item from a checked profile (the form's draft is never stored). Returns its ID. */
+export function addItem(profile: ItemProfile): ItemId {
+  const item = makeItem(profile);
+  putItem(item);
+  return item.id;
+}
+
+export function updateItem(id: ItemId, profile: ItemProfile) {
+  const current = get().items.get(id);
+  if (!current) return;
+  const next = withChanges<ItemMergeableField, ItemFile>(current, profile);
+  if (next !== current) putItem(next);
+}
+
+/** Soft delete: the file stays, the item is hidden */
+export function deleteItem(id: ItemId) {
+  const current = get().items.get(id);
+  if (!current || current.deletedAt) return;
+  const at = nowIso();
+  putItem(withChanges<ItemMergeableField, ItemFile>(current, { deletedAt: at }, at));
+}
+
+/** Like `integrateWrittenCompany`, for one item */
+export function integrateWrittenItem(sent: ItemFile, written: ItemFile) {
+  const current = get().items.get(written.id);
+  if (!current) return;
+  putItem(current === sent ? written : mergeItem(current, written));
 }
 
 /* ---------- UI ---------- */

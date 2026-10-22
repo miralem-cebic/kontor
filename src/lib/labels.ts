@@ -1,6 +1,7 @@
 import type { SessionError } from '../app/session';
 import type { FieldError, FieldProblem } from '../domain/check';
 import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
+import type { UnitCode } from '../domain/units';
 import { t, type MessageKey } from '../i18n';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
@@ -23,6 +24,9 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   roleRequired: 'problem.roleRequired',
   numberTaken: 'problem.numberTaken',
   accountTaken: 'problem.accountTaken',
+  itemNumberTaken: 'problem.itemNumberTaken',
+  price: 'problem.price',
+  priceNegative: 'problem.priceNegative',
   'iban.format': 'problem.ibanFormat',
   'iban.country': 'problem.ibanCountry',
   'iban.length': 'problem.ibanLength',
@@ -64,3 +68,23 @@ const LOGO_PROBLEM_KEY: Record<LogoProblem, MessageKey> = {
 };
 
 export const logoProblemText = (p: LogoProblem): string => t(LOGO_PROBLEM_KEY[p], { max: `${MAX_LOGO_BYTES / 1_000_000} MB` });
+
+const UNIT_KEY: Record<UnitCode, MessageKey> = {
+  H87: 'unit.H87',
+  HUR: 'unit.HUR',
+  MIN: 'unit.MIN',
+  DAY: 'unit.DAY',
+  WEE: 'unit.WEE',
+  MON: 'unit.MON',
+  ANN: 'unit.ANN',
+  LS: 'unit.LS',
+  KMT: 'unit.KMT',
+  MTR: 'unit.MTR',
+  MTK: 'unit.MTK',
+  MTQ: 'unit.MTQ',
+  KGM: 'unit.KGM',
+  LTR: 'unit.LTR',
+  SET: 'unit.SET',
+};
+
+export const unitText = (u: UnitCode): string => t(UNIT_KEY[u]);

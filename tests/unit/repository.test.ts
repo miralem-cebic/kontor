@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeContact, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeItem, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import type { CompanyFile } from '../../src/data/types';
-import { sampleCompany, sampleContact } from './fixtures';
+import { cents } from '../../src/domain/money';
+import { sampleCompany, sampleContact, sampleItem } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -110,15 +111,15 @@ describe('FsRepository', () => {
   });
 
   it('writes, lists and removes backups', async () => {
-    must(await repo.writeBackup('2026-10-20', { company, contacts: [] }));
-    must(await repo.writeBackup('2026-10-21', { company, contacts: [] }));
+    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [] }));
+    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [] }));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21', '2026-10-20']);
     const backups = await root.getDirectoryHandle('backups');
     const backup = JSON.parse(await text(backups, '2026-10-21.json'));
     expect(backup).toMatchObject({ schemaVersion: SCHEMA_VERSION, company: { id: company.id } });
     must(await repo.removeBackup('2026-10-20'));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21']);
-    expect((await repo.writeBackup('../x', { company, contacts: [] })).ok).toBe(false);
+    expect((await repo.writeBackup('../x', { company, contacts: [], items: [] })).ok).toBe(false);
   });
 });
 
@@ -160,5 +161,41 @@ describe('contacts in the folder', () => {
     const written = must(await repo.saveContact(mine));
     expect(written.notes).toBe('later note');
     expect(written.deletedAt).not.toBeNull();
+  });
+});
+
+describe('items in the folder', () => {
+  it('saves and loads items, deleted ones included', async () => {
+    const a = makeItem(sampleItem({ name: 'A' }));
+    const b = { ...makeItem(sampleItem({ name: 'B', number: '' })), deletedAt: nowIso() };
+    must(await repo.saveItem(a));
+    must(await repo.saveItem(b));
+    const { items, issues } = must(await new FsRepository(root.asHandle()).loadItems());
+    expect(issues).toEqual([]);
+    expect(items.map((i) => i.name).sort()).toEqual(['A', 'B']);
+    const dir = await root.getDirectoryHandle('items');
+    expect(JSON.parse(await text(dir, `${a.id}.json`))).toMatchObject({ schemaVersion: SCHEMA_VERSION, netPrice: 8500, unit: 'HUR' });
+  });
+
+  it('a broken file is reported, the others still load', async () => {
+    const good = makeItem(sampleItem());
+    must(await repo.saveItem(good));
+    const dir = await root.getDirectoryHandle('items');
+    const broken = makeItem(sampleItem());
+    ((await dir.getFileHandle(`${broken.id}.json`, { create: true })) as MemFile).content = new Blob([JSON.stringify({ ...broken, netPrice: 85.5 })]);
+    const { items, issues } = must(await new FsRepository(root.asHandle()).loadItems());
+    expect(items.map((i) => i.id)).toEqual([good.id]);
+    expect(issues.map((i) => i.file)).toEqual([`items/${broken.id}.json`]);
+  });
+
+  it('merges an item changed on another device field by field', async () => {
+    const item = makeItem(sampleItem());
+    must(await repo.saveItem(item));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadItems()).items;
+    must(await other.saveItem({ ...theirs!, netPrice: cents(9500), fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, netPrice: nowIso() } }));
+    const mine = { ...item, name: 'Webdesign und Pflege', fieldUpdatedAt: { ...item.fieldUpdatedAt, name: nowIso() } };
+    const written = must(await repo.saveItem(mine));
+    expect(written).toMatchObject({ name: 'Webdesign und Pflege', netPrice: 9500 });
   });
 });

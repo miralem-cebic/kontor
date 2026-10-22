@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
-import { makeContact, SCHEMA_VERSION } from '../../src/data/schema';
-import { sampleCompany, sampleContact } from './fixtures';
+import { makeContact, makeItem, SCHEMA_VERSION } from '../../src/data/schema';
+import { sampleCompany, sampleContact, sampleItem } from './fixtures';
 
 const company = () => JSON.parse(JSON.stringify(sampleCompany())) as Record<string, unknown>;
 
@@ -78,6 +78,11 @@ describe('version 1 → 2: several bank accounts', () => {
     for (const bank of [null, 'DE89', { holder: 'A' }, { holder: 'A', iban: 'de89 3704', bic: '' }]) {
       expect(() => migrate('company', { ...companyV1(), bank })).toThrow(InvalidFileError);
     }
+  });
+
+  it('item files came with version 2; one without a version is read like any other file', () => {
+    const { schemaVersion: _v, ...raw } = JSON.parse(JSON.stringify(makeItem(sampleItem()))) as Record<string, unknown>;
+    expect(migrate('item', raw)).toEqual({ ...raw, schemaVersion: 2 });
   });
 
   it('contact files of version 1 stay as they are', () => {

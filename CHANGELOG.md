@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The tax step of the setup assistant and the tax settings say who kontor is for (sole proprietors with cash-basis accounting, not corporations or partnerships) and that several businesses of one person share one VAT status.
 - Contacts: customers and suppliers, as company or private person, with address, invoice email, customer number (unique), EU VAT ID, Leitweg-ID for public buyers, default order or PO number, payment term and notes. Search and filter by role; deleting asks first and keeps the file, so documents that use the contact are not affected. A contact file that cannot be read is reported, the others still load. Contacts are part of the daily backup.
 - Bank accounts: a company can have several accounts, bank accounts with IBAN and PayPal, managed in the settings. One of them is the default for invoices and cannot be removed; another account can be made the default. The same IBAN or PayPal address cannot be added twice. A removed account stays in the company file, so documents and payments that use it are not affected.
+- Catalogue of items and services: number, name, description, unit, net price and VAT rate (19 %, 7 % or 0 %), with search, edit and delete (the file stays). Prices are typed and shown in the interface language; a small business sees prices without VAT. The units are the codes e-invoices use. Items are part of the daily backup and of the emergency copy.
 
 ### Changed
 

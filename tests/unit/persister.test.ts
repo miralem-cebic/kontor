@@ -6,7 +6,7 @@ import { err, must } from '../../src/data/result';
 import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleItem } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -22,7 +22,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), []);
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [] });
   persister = new Persister(repo);
   persister.start();
 });
@@ -178,5 +178,43 @@ describe('Persister with contacts', () => {
     repo.saveContact = orig;
     await persister.retry();
     expect((await contactsOnDisk()).map((c) => c.name)).toEqual(['Unsaved']);
+  });
+});
+
+describe('Persister with items', () => {
+  const itemsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadItems()).items;
+
+  it('writes a new item, its changes and its deletion', async () => {
+    const id = A.addItem(sampleItem());
+    await persister.flush();
+    expect((await itemsOnDisk()).map((i) => i.name)).toEqual(['Webdesign']);
+
+    A.updateItem(id, sampleItem({ name: 'Webentwicklung' }));
+    const stamped = A.useApp.getState().items.get(id)!;
+    expect(stamped.fieldUpdatedAt.name! > stamped.createdAt).toBe(true);
+    expect(stamped.fieldUpdatedAt.netPrice).toBe(stamped.createdAt);
+    await persister.flush();
+    expect((await itemsOnDisk())[0]?.name).toBe('Webentwicklung');
+
+    A.deleteItem(id);
+    await persister.flush();
+    const [deleted] = await itemsOnDisk();
+    expect(deleted?.deletedAt).toBeTruthy();
+    expect(deleted?.fieldUpdatedAt.deletedAt).toBe(deleted?.deletedAt);
+  });
+
+  it('keeps unsaved items in the emergency copy', async () => {
+    const orig = repo.saveItem.bind(repo);
+    repo.saveItem = async () => err({ kind: 'quota', cause: new Error('full') });
+    const id = A.addItem(sampleItem({ name: 'Unsaved' }));
+    await persister.flush();
+    const company = A.useApp.getState().company!;
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    expect(copy.company).toBeNull();
+    expect(copy.contacts).toEqual([]);
+    expect(copy.items.map((i: { id: string }) => i.id)).toEqual([id]);
+    repo.saveItem = orig;
+    await persister.retry();
+    expect((await itemsOnDisk()).map((i) => i.name)).toEqual(['Unsaved']);
   });
 });

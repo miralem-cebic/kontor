@@ -80,7 +80,7 @@ src/
   features/                    setup (assistant), company (shared form fields, summary), shell (frame, switcher),
                                quotes, documents (line editor, totals), contacts (list and form), items (catalogue),
                                settings (with the bank accounts card), home, start
-  components/                  Form fields, icon, toast, error boundary, language select
+  components/                  Form fields, icon, toast, error boundary, language select, side panel with jump marks
   lib/                         labels.ts (texts for error codes), sha256.ts
   styles/                      tokens.css, base.css, fonts.css, app.css
 ```

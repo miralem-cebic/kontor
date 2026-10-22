@@ -100,6 +100,28 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   await page.getByRole('button', { name: 'Position 3 entfernen' }).click();
   await expect(line(page, 3)).toHaveCount(0);
 
+  // a deduction may lower the lines of its rate, but not below zero; the check shows while typing
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 3).getByLabel('Bezeichnung').fill('Rabatt');
+  await line(page, 3).getByLabel('Menge').fill('-2');
+  await line(page, 3).getByLabel('Einzelpreis netto €').fill('300');
+  await line(page, 3).getByLabel('USt.').selectOption('700');
+  const negative = page.getByText('Die Summe der Positionen darf nicht negativ sein, auch nicht je Steuersatz.', { exact: false });
+  await expect(negative).toBeVisible();
+  await line(page, 3).getByLabel('Menge').fill('-1');
+  await expect(negative).toHaveCount(0);
+  await expect(totals).toContainText('Gesamtbetrag1.264,38 €');
+  await page.getByRole('button', { name: 'Position 3 entfernen' }).click();
+
+  // the side panel jumps to a section and marks it
+  const sections = page.getByRole('navigation', { name: 'Abschnitte des Angebots' });
+  await sections.getByRole('button', { name: 'Schlusstext' }).click();
+  await expect(page.getByRole('heading', { name: 'Schlusstext' })).toBeFocused();
+  await expect(sections.getByRole('button', { name: 'Schlusstext' })).toHaveAttribute('aria-current', 'location');
+  await sections.getByRole('button', { name: 'Angebot' }).click();
+  await expect(page.getByRole('heading', { name: 'Angebot', exact: true })).toBeFocused();
+  await expect(sections.getByRole('button', { name: 'Angebot' })).toHaveAttribute('aria-current', 'location');
+
   // move the free line up
   await expect(page.getByRole('button', { name: 'Position 1 nach oben' })).toBeDisabled();
   await page.getByRole('button', { name: 'Position 2 nach oben' }).click();

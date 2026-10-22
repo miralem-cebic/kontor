@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CheckGroup, Choice, Row, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import {
   byContactName,
   CONTACT_LIMITS,
@@ -170,6 +171,11 @@ function ContactEditor({ contact, onDone }: { contact: ContactFile | null; onDon
     }
   };
   const e = (f: ContactField) => fieldError(errors, f);
+  const sections: JumpSection[] = [
+    { id: 'contact-sec-who', title: t('contacts.sectionWho'), icon: 'contacts' },
+    { id: 'contact-sec-address', title: t('contacts.sectionAddress'), icon: 'home' },
+    { id: 'contact-sec-invoicing', title: t('contacts.sectionInvoicing'), icon: 'invoice' },
+  ];
 
   const save = () => {
     const r = readContact(draft, isNumberTaken);
@@ -201,7 +207,7 @@ function ContactEditor({ contact, onDone }: { contact: ContactFile | null; onDon
   ];
 
   return (
-    <div className="page">
+    <div className="page with-panel">
       <header className="top">
         <button type="button" className="icon-btn" onClick={onDone} aria-label={t('contacts.backToList')}>
           <Icon n="chevL" />
@@ -210,105 +216,108 @@ function ContactEditor({ contact, onDone }: { contact: ContactFile | null; onDon
           {contact ? contact.name : t('contacts.new')}
         </h1>
       </header>
-      <form
-        className="form contact-form"
-        noValidate
-        onSubmit={(ev) => {
-          ev.preventDefault();
-          save();
-        }}
-      >
-        <section className="card" aria-labelledby="contact-who">
-          <h2 id="contact-who">{t('contacts.sectionWho')}</h2>
-          <Choice<ContactKind> label={t('contacts.kind')} value={draft.kind} options={kindOptions} onChange={(kind) => set({ kind })} required />
-          <CheckGroup<'customer' | 'supplier'>
-            label={t('contacts.role')}
-            options={[
-              { key: 'customer', label: t('contacts.roleCustomer'), checked: draft.customer },
-              { key: 'supplier', label: t('contacts.roleSupplier'), checked: draft.supplier },
-            ]}
-            onChange={(key, value) => set(key === 'customer' ? { customer: value } : { supplier: value })}
-            error={e('customer')}
-            required
-          />
-          <TextField
-            label={draft.kind === 'company' ? t('contacts.nameCompany') : t('contacts.namePerson')}
-            value={draft.name}
-            onChange={(name) => set({ name })}
-            error={e('name')}
-            required
-            maxLength={CONTACT_LIMITS.name}
-          />
-          <TextField label={t('contacts.nameLine2')} hint={t('contacts.nameLine2Hint')} value={draft.nameLine2} onChange={(nameLine2) => set({ nameLine2 })} error={e('nameLine2')} maxLength={CONTACT_LIMITS.nameLine2} />
-          {draft.kind === 'company' && (
-            <TextField label={t('contacts.contactPerson')} value={draft.contactPerson} onChange={(contactPerson) => set({ contactPerson })} error={e('contactPerson')} maxLength={CONTACT_LIMITS.contactPerson} />
-          )}
-          <TextField className="w-num" label={t('contacts.number')} value={draft.customerNumber} onChange={(customerNumber) => set({ customerNumber })} error={e('customerNumber')} maxLength={CONTACT_LIMITS.customerNumber} />
-        </section>
-
-        <section className="card" aria-labelledby="contact-address">
-          <h2 id="contact-address">{t('contacts.sectionAddress')}</h2>
-          <p className="f-intro">{t('contacts.addressHint')}</p>
-          <TextField label={t('company.street')} value={draft.street} onChange={(street) => set({ street })} error={e('street')} maxLength={TEXT_LIMITS.street} autoComplete="off" />
-          <Row>
-            <TextField className="w-postal" label={t('company.postalCode')} value={draft.postalCode} onChange={(postalCode) => set({ postalCode })} error={e('postalCode')} autoComplete="off" />
-            <TextField label={t('company.city')} value={draft.city} onChange={(city) => set({ city })} error={e('city')} maxLength={TEXT_LIMITS.city} autoComplete="off" />
-            <TextField className="w-country" label={t('company.country')} hint={t('company.countryHint')} value={draft.country} onChange={(country) => set({ country })} error={e('country')} maxLength={2} autoComplete="off" />
-          </Row>
-          <Row>
-            <TextField label={t('contacts.email')} type="email" value={draft.email} onChange={(email) => set({ email })} error={e('email')} inputMode="email" maxLength={TEXT_LIMITS.email} autoComplete="off" />
-            <TextField label={t('company.phone')} type="tel" value={draft.phone} onChange={(phone) => set({ phone })} error={e('phone')} inputMode="tel" maxLength={TEXT_LIMITS.phone} autoComplete="off" />
-          </Row>
-        </section>
-
-        <section className="card" aria-labelledby="contact-invoicing">
-          <h2 id="contact-invoicing">{t('contacts.sectionInvoicing')}</h2>
-          <Row>
-            <TextField label={t('contacts.vatId')} hint={t('contacts.vatIdHint')} value={draft.vatId} onChange={(vatId) => set({ vatId })} error={e('vatId')} maxLength={CONTACT_LIMITS.vatId} />
-            <TextField label={t('contacts.leitwegId')} hint={t('contacts.leitwegIdHint')} value={draft.leitwegId} onChange={(leitwegId) => set({ leitwegId })} error={e('leitwegId')} maxLength={46} />
-          </Row>
-          <Row>
-            <TextField label={t('contacts.orderReference')} hint={t('contacts.orderReferenceHint')} value={draft.orderReference} onChange={(orderReference) => set({ orderReference })} error={e('orderReference')} maxLength={CONTACT_LIMITS.orderReference} />
-            <TextField
-              className="w-num"
-              label={t('invoice.paymentTerm')}
-              hint={t('contacts.paymentTermHint', { days: defaultTerm })}
-              value={draft.paymentTermDays}
-              onChange={(paymentTermDays) => set({ paymentTermDays })}
-              error={e('paymentTermDays')}
-              inputMode="numeric"
-              maxLength={3}
+      <div className="split">
+        <JumpNav label={t('contacts.sections')} sections={sections} />
+        <form
+          className="form contact-form"
+          noValidate
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            save();
+          }}
+        >
+          <section className="card" id="contact-sec-who" aria-labelledby="contact-who">
+            <h2 id="contact-who" tabIndex={-1}>{t('contacts.sectionWho')}</h2>
+            <Choice<ContactKind> label={t('contacts.kind')} value={draft.kind} options={kindOptions} onChange={(kind) => set({ kind })} required />
+            <CheckGroup<'customer' | 'supplier'>
+              label={t('contacts.role')}
+              options={[
+                { key: 'customer', label: t('contacts.roleCustomer'), checked: draft.customer },
+                { key: 'supplier', label: t('contacts.roleSupplier'), checked: draft.supplier },
+              ]}
+              onChange={(key, value) => set(key === 'customer' ? { customer: value } : { supplier: value })}
+              error={e('customer')}
+              required
             />
-          </Row>
-          <TextArea label={t('contacts.notes')} value={draft.notes} onChange={(notes) => set({ notes })} error={e('notes')} maxLength={CONTACT_LIMITS.notes} />
-        </section>
+            <TextField
+              label={draft.kind === 'company' ? t('contacts.nameCompany') : t('contacts.namePerson')}
+              value={draft.name}
+              onChange={(name) => set({ name })}
+              error={e('name')}
+              required
+              maxLength={CONTACT_LIMITS.name}
+            />
+            <TextField label={t('contacts.nameLine2')} hint={t('contacts.nameLine2Hint')} value={draft.nameLine2} onChange={(nameLine2) => set({ nameLine2 })} error={e('nameLine2')} maxLength={CONTACT_LIMITS.nameLine2} />
+            {draft.kind === 'company' && (
+              <TextField label={t('contacts.contactPerson')} value={draft.contactPerson} onChange={(contactPerson) => set({ contactPerson })} error={e('contactPerson')} maxLength={CONTACT_LIMITS.contactPerson} />
+            )}
+            <TextField className="w-num" label={t('contacts.number')} value={draft.customerNumber} onChange={(customerNumber) => set({ customerNumber })} error={e('customerNumber')} maxLength={CONTACT_LIMITS.customerNumber} />
+          </section>
 
-        <div className="card-actions">
-          <button type="submit" className="btn primary">
-            {t('contacts.save')}
-          </button>
-          <button type="button" className="btn" onClick={onDone}>
-            {t('common.cancel')}
-          </button>
-          <span className="sp" />
-          {contact &&
-            (confirmDelete ? (
-              <div className="confirm" role="group" aria-label={t('contacts.deleteConfirm')}>
-                <span>{t('contacts.deleteConfirm')}</span>
-                <button type="button" className="btn danger" onClick={remove} autoFocus>
+          <section className="card" id="contact-sec-address" aria-labelledby="contact-address">
+            <h2 id="contact-address" tabIndex={-1}>{t('contacts.sectionAddress')}</h2>
+            <p className="f-intro">{t('contacts.addressHint')}</p>
+            <TextField label={t('company.street')} value={draft.street} onChange={(street) => set({ street })} error={e('street')} maxLength={TEXT_LIMITS.street} autoComplete="off" />
+            <Row>
+              <TextField className="w-postal" label={t('company.postalCode')} value={draft.postalCode} onChange={(postalCode) => set({ postalCode })} error={e('postalCode')} autoComplete="off" />
+              <TextField label={t('company.city')} value={draft.city} onChange={(city) => set({ city })} error={e('city')} maxLength={TEXT_LIMITS.city} autoComplete="off" />
+              <TextField className="w-country" label={t('company.country')} hint={t('company.countryHint')} value={draft.country} onChange={(country) => set({ country })} error={e('country')} maxLength={2} autoComplete="off" />
+            </Row>
+            <Row>
+              <TextField label={t('contacts.email')} type="email" value={draft.email} onChange={(email) => set({ email })} error={e('email')} inputMode="email" maxLength={TEXT_LIMITS.email} autoComplete="off" />
+              <TextField label={t('company.phone')} type="tel" value={draft.phone} onChange={(phone) => set({ phone })} error={e('phone')} inputMode="tel" maxLength={TEXT_LIMITS.phone} autoComplete="off" />
+            </Row>
+          </section>
+
+          <section className="card" id="contact-sec-invoicing" aria-labelledby="contact-invoicing">
+            <h2 id="contact-invoicing" tabIndex={-1}>{t('contacts.sectionInvoicing')}</h2>
+            <Row>
+              <TextField label={t('contacts.vatId')} hint={t('contacts.vatIdHint')} value={draft.vatId} onChange={(vatId) => set({ vatId })} error={e('vatId')} maxLength={CONTACT_LIMITS.vatId} />
+              <TextField label={t('contacts.leitwegId')} hint={t('contacts.leitwegIdHint')} value={draft.leitwegId} onChange={(leitwegId) => set({ leitwegId })} error={e('leitwegId')} maxLength={46} />
+            </Row>
+            <Row>
+              <TextField label={t('contacts.orderReference')} hint={t('contacts.orderReferenceHint')} value={draft.orderReference} onChange={(orderReference) => set({ orderReference })} error={e('orderReference')} maxLength={CONTACT_LIMITS.orderReference} />
+              <TextField
+                className="w-num"
+                label={t('invoice.paymentTerm')}
+                hint={t('contacts.paymentTermHint', { days: defaultTerm })}
+                value={draft.paymentTermDays}
+                onChange={(paymentTermDays) => set({ paymentTermDays })}
+                error={e('paymentTermDays')}
+                inputMode="numeric"
+                maxLength={3}
+              />
+            </Row>
+            <TextArea label={t('contacts.notes')} value={draft.notes} onChange={(notes) => set({ notes })} error={e('notes')} maxLength={CONTACT_LIMITS.notes} />
+          </section>
+
+          <div className="card-actions">
+            <button type="submit" className="btn primary">
+              {t('contacts.save')}
+            </button>
+            <button type="button" className="btn" onClick={onDone}>
+              {t('common.cancel')}
+            </button>
+            <span className="sp" />
+            {contact &&
+              (confirmDelete ? (
+                <div className="confirm" role="group" aria-label={t('contacts.deleteConfirm')}>
+                  <span>{t('contacts.deleteConfirm')}</span>
+                  <button type="button" className="btn danger" onClick={remove} autoFocus>
+                    {t('contacts.delete')}
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
                   {t('contacts.delete')}
                 </button>
-                <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
-                  {t('common.cancel')}
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
-                {t('contacts.delete')}
-              </button>
-            ))}
-        </div>
-      </form>
+              ))}
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

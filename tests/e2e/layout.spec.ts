@@ -19,3 +19,23 @@ test('the page itself does not scroll, only the content area', async ({ page }) 
   }
   expect(errors).toEqual([]);
 });
+
+test('the forms for contacts, items and quotes have fields of the same width', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio' });
+  const cardWidth = () => page.locator('.card').first().evaluate((e) => e.getBoundingClientRect().width);
+  const widths: number[] = [];
+  for (const [area, button] of [
+    ['Kontakte', 'Neuer Kontakt'],
+    ['Artikel & Leistungen', 'Neuer Artikel'],
+    ['Angebote', 'Neues Angebot'],
+  ]) {
+    await page.getByRole('button', { name: area, exact: true }).click();
+    await page.getByRole('button', { name: button }).click();
+    widths.push(await cardWidth());
+    await page.getByRole('button', { name: 'Abbrechen' }).click();
+  }
+  expect(new Set(widths).size, widths.join()).toBe(1);
+  expect(errors).toEqual([]);
+});

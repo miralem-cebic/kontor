@@ -49,7 +49,7 @@ export function SettingsView() {
   }, []);
   if (!company) return null;
   return (
-    <div className="page wide">
+    <div className="page with-panel">
       <header className="top">
         <h1>{t('settings.title')}</h1>
       </header>

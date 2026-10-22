@@ -1,15 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import { byContactName } from '../../domain/contact';
 import { isoDateOf, toLocalDate } from '../../domain/dates';
-import { documentTotals, draftTotals, type LineFieldPath } from '../../domain/document';
+import { documentTotals, draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
 import { formatCents } from '../../domain/money';
 import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, QUOTE_LIMITS, quoteMatches, readQuote, type QuoteDraft, type QuoteField, type QuoteFieldError } from '../../domain/quote';
 import type { DocumentId } from '../../data/ids';
 import type { ContactFile, QuoteFile } from '../../data/types';
 import { currentLang, fmt, t, type MessageKey } from '../../i18n';
-import { fieldError } from '../../lib/labels';
+import { fieldError, problemText } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 
@@ -164,16 +165,24 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
     const next = { ...draft, ...patch };
     setDraft(next);
     if (checked) {
-      const r = readQuote(next, lang);
+      const r = readQuote(next, lang, smallBusiness);
       setErrors(r.ok ? [] : r.error);
     }
   };
   const e = (f: QuoteField) => fieldError(errors, f);
+  const totals = draftTotals(draft.lines, lang, smallBusiness);
+  // a negative sum shows up while it is typed, not only on "Save"
+  const lineError = (path: LineFieldPath | 'lines') => e(path) ?? (path === 'lines' && hasNegativeRate(totals) ? problemText('negativeTotal') : undefined);
+  const sections: JumpSection[] = [
+    { id: 'quote-sec-head', title: t('quotes.sectionQuote'), icon: 'quote' },
+    { id: 'quote-sec-lines', title: t('lines.title'), icon: 'invoice' },
+    { id: 'quote-sec-closing', title: t('quotes.closingText'), icon: 'text' },
+  ];
   const options = customerOptions(contacts, draft.customerId);
   const customerName = (id: string) => [...contacts.values()].find((c) => c.id === id)?.name ?? '';
 
   const save = () => {
-    const r = readQuote(draft, lang);
+    const r = readQuote(draft, lang, smallBusiness);
     const customer = r.ok ? [...contacts.values()].find((c) => c.id === r.value.customerId) : undefined;
     if (!r.ok || !customer) {
       setChecked(true);
@@ -200,7 +209,7 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
   const title = quote ? [customerName(quote.customerId), quote.subject].filter(Boolean).join(' · ') : t('quotes.new');
 
   return (
-    <div className="page wide">
+    <div className="page with-panel">
       <header className="top">
         <button type="button" className="icon-btn" onClick={onDone} aria-label={t('quotes.backToList')}>
           <Icon n="chevL" />
@@ -209,70 +218,75 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
           {title}
         </h1>
       </header>
-      <form
-        className="form quote-form"
-        noValidate
-        onSubmit={(ev) => {
-          ev.preventDefault();
-          save();
-        }}
-      >
-        <section className="card" aria-labelledby="quote-head">
-          <h2 id="quote-head">{t('quotes.sectionQuote')}</h2>
-          <SelectField
-            label={t('quotes.customer')}
-            hint={options.length === 0 ? t('quotes.noCustomers') : undefined}
-            value={draft.customerId}
-            options={[{ value: '', label: t('quotes.customerChoose') }, ...options]}
-            onChange={(customerId) => set({ customerId })}
-            error={e('customerId')}
-            required
-          />
-          <Row>
-            <TextField className="w-date" type="date" label={t('quotes.date')} value={draft.date} onChange={(date) => set({ date })} error={e('date')} required />
-            <TextField className="w-date" type="date" label={t('quotes.validUntil')} value={draft.validUntil} onChange={(validUntil) => set({ validUntil })} error={e('validUntil')} required />
-          </Row>
-          <TextField label={t('quotes.subject')} hint={t('quotes.subjectHint')} value={draft.subject} onChange={(subject) => set({ subject })} error={e('subject')} maxLength={QUOTE_LIMITS.subject} />
-          <TextArea label={t('quotes.introText')} hint={t('quotes.introTextHint')} value={draft.introText} onChange={(introText) => set({ introText })} error={e('introText')} maxLength={QUOTE_LIMITS.text} />
-        </section>
+      <div className="split">
+        <JumpNav label={t('quotes.sections')} sections={sections} />
+        <form
+          className="form quote-form"
+          noValidate
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            save();
+          }}
+        >
+          <section className="card" id="quote-sec-head" aria-labelledby="quote-head">
+            <h2 id="quote-head" tabIndex={-1}>{t('quotes.sectionQuote')}</h2>
+            <SelectField
+              label={t('quotes.customer')}
+              hint={options.length === 0 ? t('quotes.noCustomers') : undefined}
+              value={draft.customerId}
+              options={[{ value: '', label: t('quotes.customerChoose') }, ...options]}
+              onChange={(customerId) => set({ customerId })}
+              error={e('customerId')}
+              required
+            />
+            <Row>
+              <TextField className="w-date" type="date" label={t('quotes.date')} value={draft.date} onChange={(date) => set({ date })} error={e('date')} required />
+              <TextField className="w-date" type="date" label={t('quotes.validUntil')} value={draft.validUntil} onChange={(validUntil) => set({ validUntil })} error={e('validUntil')} required />
+            </Row>
+            <TextField label={t('quotes.subject')} hint={t('quotes.subjectHint')} value={draft.subject} onChange={(subject) => set({ subject })} error={e('subject')} maxLength={QUOTE_LIMITS.subject} />
+            <TextArea label={t('quotes.introText')} hint={t('quotes.introTextHint')} value={draft.introText} onChange={(introText) => set({ introText })} error={e('introText')} maxLength={QUOTE_LIMITS.text} />
+          </section>
 
-        <section className="card" aria-labelledby="quote-lines">
-          <h2 id="quote-lines">{t('lines.title')}</h2>
-          <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={(path: LineFieldPath | 'lines') => e(path)} smallBusiness={smallBusiness} />
-          <Totals totals={draftTotals(draft.lines, lang, smallBusiness)} smallBusiness={smallBusiness} />
-        </section>
+          <section className="card" id="quote-sec-lines" aria-labelledby="quote-lines">
+            <h2 id="quote-lines" tabIndex={-1}>
+              {t('lines.title')}
+            </h2>
+            <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={lineError} smallBusiness={smallBusiness} />
+            <Totals totals={totals} smallBusiness={smallBusiness} />
+          </section>
 
-        <section className="card" aria-labelledby="quote-closing">
-          <h2 id="quote-closing">{t('quotes.closingText')}</h2>
-          <TextArea label={t('quotes.closingText')} hint={t('quotes.closingTextHint')} value={draft.closingText} onChange={(closingText) => set({ closingText })} error={e('closingText')} maxLength={QUOTE_LIMITS.text} />
-        </section>
+          <section className="card" id="quote-sec-closing" aria-labelledby="quote-closing">
+            <h2 id="quote-closing" tabIndex={-1}>{t('quotes.closingText')}</h2>
+            <TextArea label={t('quotes.closingText')} hint={t('quotes.closingTextHint')} value={draft.closingText} onChange={(closingText) => set({ closingText })} error={e('closingText')} maxLength={QUOTE_LIMITS.text} />
+          </section>
 
-        <div className="card-actions">
-          <button type="submit" className="btn primary">
-            {t('quotes.save')}
-          </button>
-          <button type="button" className="btn" onClick={onDone}>
-            {t('common.cancel')}
-          </button>
-          <span className="sp" />
-          {quote &&
-            (confirmDelete ? (
-              <div className="confirm" role="group" aria-label={t('quotes.deleteConfirm')}>
-                <span>{t('quotes.deleteConfirm')}</span>
-                <button type="button" className="btn danger" onClick={remove} autoFocus>
+          <div className="card-actions">
+            <button type="submit" className="btn primary">
+              {t('quotes.save')}
+            </button>
+            <button type="button" className="btn" onClick={onDone}>
+              {t('common.cancel')}
+            </button>
+            <span className="sp" />
+            {quote &&
+              (confirmDelete ? (
+                <div className="confirm" role="group" aria-label={t('quotes.deleteConfirm')}>
+                  <span>{t('quotes.deleteConfirm')}</span>
+                  <button type="button" className="btn danger" onClick={remove} autoFocus>
+                    {t('quotes.delete')}
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
                   {t('quotes.delete')}
                 </button>
-                <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
-                  {t('common.cancel')}
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
-                {t('quotes.delete')}
-              </button>
-            ))}
-        </div>
-      </form>
+              ))}
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -34,8 +34,8 @@ kontor cannot offer a live bank connection, direct ELSTER submission, AI receipt
 
 | Release | Content |
 | --- | --- |
-| **1.0** | Phases 1, 2, 3, 3.5 and 4 with all Must features (F01–F12, I1–I7), plus R1, R3, R4 and R5 |
-| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13–F17 |
+| **1.0** | Phases 1, 2, 3, 3.5 and 4 with all Must features (F01–F12, F21–F23, F25, I1–I7), plus R1, R3, R4 and R5 |
+| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13–F17, F24 |
 | 2.x | Time tracking, F18–F20, R7 |
 
 Priorities: **Must** = needed for 1.0, **Should** = 1.x, **Could** = 2.x, **Won't** = deliberately not. Effort: S, M, L.
@@ -79,6 +79,15 @@ Must features added from the market analysis:
 | F04 | **Prepare sending** | text templates with placeholders (`{Rechnungsnummer}`, `{Fälligkeit}`, …), an `.eml` file with the attachment, fallback `mailto:`. The sending date goes into the audit log. A `mailto:` link built by the app needs a documented exception to the rule that only `http:` and `https:` become an `href` | S |
 | F05 | **Layouts and language** | 2–3 invoice layouts, accent colour, footer in columns. **Invoices in English** (language per customer) | M |
 | I3 | **Import contacts from CSV** | see Phase 3.5; possible as early as Phase 1, because contacts exist already | M |
+
+From user feedback (22 October 2026), agreed:
+
+| ID | Feature | Content | Effort |
+| --- | --- | --- | --- |
+| F21 | **Quote status and order** | a quote is sent, accepted or declined, each with its date. An accepted quote becomes an order (order confirmation, see F02) and later the invoice; every step keeps the dates, so the time from quote to order to invoice can be shown per customer and on average. The list filter (all, valid, expired) grows with the status | M |
+| F22 | **Quote versions** | once a quote is sent, a change creates a new version instead of overwriting it (number with a suffix, for example `AN-2026-0012-2`). The history shows what changed between versions (lines removed or added, quantities, prices, discounts) and how often quotes are changed, per customer and overall. Fits the immutability of issued documents (ADR 0004) | M |
+| F23 | **Discounts** | per line (percent or amount) and on the whole document, on quotes, orders and invoices, including the final invoice of F02. The VAT is calculated on the discounted amounts per rate, rounded in `money.ts`. In the e-invoice they are allowances (BG-27 per line, BG-20 per document). Until then a line with a negative quantity works as a deduction | M |
+| F25 | **Source of the trade tax multiplier** | a live lookup needs the network, and a table of all municipalities would have to be updated every year. Instead, a link to the official source next to the multiplier field (setup assistant and settings), so the user looks the rate up there. Only an `https:` link (see the link rule in CLAUDE.md) | S |
 
 ### Phase 2: e-invoices
 
@@ -195,6 +204,7 @@ Before the work starts:
 | F15 | **Foreign currencies** | currency per document and receipt, exchange rate entered by hand (no network), conversion for the EÜR |
 | F16 | **Projects and cost centres** | a tag per booking and document, reports per project. The basis for time tracking |
 | F17 | **Time tracking earlier** | time tracking is a reason to switch at Papierkram and sevDesk. **Open decision:** move it from 2.x to 1.x |
+| F24 | **Tax office from the Steuernummer** | while typing the Steuernummer, show the state and the responsible tax office (for example "Finanzamt Hanau") with what is needed to deal with it: address, PO box, phone, email, opening hours and bank accounts for payments; and convert the number to the 13-digit ELSTER format. The data comes from the official directory of the tax offices (BZSt) as a JSON file in the repository with its source and date, checked when it is read in like any other input and updated once a year. Under `file://` with `connect-src 'none'` the app cannot load a file at run time, so the JSON is bundled into the build (it adds to the size of `dist/index.html`) |
 
 ### Could (2.x)
 

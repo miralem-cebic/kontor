@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
+import { APP_URL, openSettings, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
 
 const openAccounts = async (page: Page) => {
-  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await openSettings(page, 'Bankkonten');
   return page.getByRole('region', { name: 'Bankkonten' });
 };
 

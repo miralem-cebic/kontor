@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_URL, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
+import { APP_URL, openSettings, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
 
 test('several companies: add a second one, switch, and the choice survives a reload', async ({ page }) => {
   const errors = watchErrors(page);
@@ -62,10 +62,19 @@ test('settings change the fields of the assistant and keep field timestamps', as
   await setUpCompany(page, { name: 'Alpha Studio' });
   const before = await readCompanyFile(page, 'Ordner-1');
 
-  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await openSettings(page, 'Stammdaten');
   const master = page.getByRole('region', { name: 'Stammdaten' });
+  const sections = page.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
   await expect(master.getByRole('button', { name: 'Speichern' })).toBeDisabled();
   await master.getByLabel('Firmenname').fill('Alpha Studio GmbH');
+
+  // only one section is shown; a draft survives switching and is marked as unsaved
+  await expect(page.getByRole('region', { name: 'Steuer' })).toHaveCount(0);
+  await sections.getByRole('button', { name: 'Steuer', exact: true }).click();
+  await expect(master).toHaveCount(0);
+  await expect(sections.getByRole('button', { name: 'Stammdaten' })).toContainText('Nicht gespeicherte Änderungen');
+  await sections.getByRole('button', { name: 'Stammdaten' }).click();
+  await expect(master.getByLabel('Firmenname')).toHaveValue('Alpha Studio GmbH');
   await master.getByLabel('E-Mail').fill('kein-mail');
   await master.getByRole('button', { name: 'Speichern' }).click();
   await expect(master.getByText('Bitte eine gültige E-Mail-Adresse eingeben.')).toBeVisible();
@@ -74,6 +83,8 @@ test('settings change the fields of the assistant and keep field timestamps', as
   await expect(page.getByRole('status').filter({ hasText: 'Stammdaten gespeichert' })).toBeVisible();
   await expect(switcher(page)).toContainText('Alpha Studio GmbH');
 
+  await expect(sections.getByRole('button', { name: 'Stammdaten' })).not.toContainText('Nicht gespeicherte Änderungen');
+  await sections.getByRole('button', { name: 'Steuer', exact: true }).click();
   const tax = page.getByRole('region', { name: 'Steuer' });
   await tax.getByRole('radio', { name: 'Nein, ich weise Umsatzsteuer aus' }).check();
   await tax.getByRole('radio', { name: 'Ist-Versteuerung' }).check();
@@ -97,7 +108,7 @@ test('settings change the fields of the assistant and keep field timestamps', as
 test('the interface switches to English', async ({ page }) => {
   await page.goto(APP_URL);
   await setUpCompany(page, { name: 'Alpha Studio' });
-  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await openSettings(page, 'App');
   await page.getByLabel('Sprache').selectOption('en');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Dashboard' })).toBeVisible();

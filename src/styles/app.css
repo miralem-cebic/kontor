@@ -1,6 +1,6 @@
 /* kontor: layout and components. Colors come from tokens.css. */
 
-.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
 select{font:inherit;color:inherit}
 code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--hover);padding:1px 5px;border-radius:4px;word-break:break-all}
 
@@ -103,7 +103,7 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 
 /* App frame */
 .app{display:grid;grid-template-columns:248px minmax(0,1fr);height:100%}
-.side{display:flex;flex-direction:column;gap:2px;padding:12px 10px;border-right:1px solid var(--line);background:var(--bg);overflow:auto;min-height:0;height:100%}
+.side{position:relative;display:flex;flex-direction:column;gap:2px;padding:12px 10px;background:var(--bg);overflow:auto;min-height:0;height:100%}
 .nav-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:1px}
 .nav{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border-radius:var(--r);color:var(--text-2);text-align:left;min-height:34px}
 .nav span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -111,10 +111,13 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .nav.on{background:var(--surface);color:var(--text);font-weight:500;box-shadow:0 0 0 1px var(--line)}
 .nav:disabled{cursor:default;color:var(--text-3)}
 .soon{font-size:11px;color:var(--text-3);background:var(--muted-soft);padding:1px 7px;border-radius:9px}
-.save{display:flex;align-items:center;gap:6px;padding:8px;font-size:12px;color:var(--text-3);border-top:1px solid var(--line);flex-wrap:wrap}
+.save{display:flex;align-items:center;gap:6px;padding:8px;font-size:12px;color:var(--text-3);border-top:1px solid var(--line-2);flex-wrap:wrap}
 .save.error{color:var(--danger)}
 .save.error .btn{color:var(--text)}
-.main{min-width:0;min-height:0;overflow:auto;background:var(--surface)}
+/* The content is a rounded panel on the frame. position:relative keeps absolutely positioned content
+   (hidden inputs) inside the scroll area. */
+.app{background:var(--bg)}
+.main{position:relative;min-width:0;min-height:0;overflow:auto;margin:8px 8px 8px 0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-panel)}
 
 /* Company switcher */
 .switcher{position:relative}
@@ -140,9 +143,19 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .lead{font-size:16px;margin:0}
 .muted{color:var(--text-2);margin:0}
 .settings{gap:16px}
-.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.card{border:1px solid var(--line);border-radius:var(--r-panel);padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;background:var(--surface);box-shadow:var(--shadow-card)}
 .card h2{font-size:16px;font-weight:600;margin:0}
 .card-actions{display:flex;gap:8px}
+
+/* Settings: sections in a side panel to the right of the selected one. The panel comes first in the DOM,
+   so the keyboard reaches the sections before the form. */
+.split{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:24px;align-items:start}
+.split>.page-body{grid-column:1;grid-row:1}
+.subnav{grid-column:2;grid-row:1;position:sticky;top:12px;padding:6px;border:1px solid var(--line);border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-card)}
+.subnav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.subnav .nav.on{background:var(--sel);box-shadow:none;color:var(--text)}
+.subnav .nav.on .ic{color:var(--accent)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
 
 /* Toast and crash */
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;background:var(--text);color:var(--surface);border-radius:8px;box-shadow:var(--shadow);max-width:min(560px,calc(100vw - 32px))}
@@ -155,7 +168,14 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 
 @media (max-width:720px){
   .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-  .side{height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .side{height:auto}
+  .main{margin:0 8px 8px}
+  .split{grid-template-columns:minmax(0,1fr);gap:12px}
+  .split>.page-body{grid-row:2}
+  .subnav{grid-column:1;position:static;padding:4px}
+  .subnav ul{flex-direction:row;overflow-x:auto}
+  .subnav li{flex:none}
+  .subnav .nav{width:auto;white-space:nowrap}
   .page{padding:0 16px 48px}
   .onb-card{padding:20px 16px}
   .steps .l{display:none}
@@ -168,12 +188,16 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .list-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .search-in{height:34px;min-width:260px;flex:1;max-width:420px;border:1px solid var(--line-2);border-radius:var(--r);padding:0 10px;background:var(--surface)}
 .search-in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
-.seg{display:inline-flex;padding:2px;border-radius:8px;background:var(--hover)}
+.seg{display:inline-flex;padding:2px;border-radius:8px;background:var(--line)}
 .seg button{height:28px;padding:0 12px;border-radius:6px;color:var(--text-2)}
 .seg button.on{background:var(--surface);color:var(--text);font-weight:500;box-shadow:0 0 0 1px var(--line)}
-.table{width:100%;border-collapse:collapse}
+.seg-n{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.table{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-panel);box-shadow:var(--shadow-card);overflow:hidden}
 .table th{text-align:left;font-size:12px;font-weight:500;color:var(--text-3);padding:8px 10px;border-bottom:1px solid var(--line)}
+.table th:first-child,.table td:first-child{padding-left:14px}
+.table th:last-child,.table td:last-child{padding-right:14px}
 .table td{padding:0 10px;border-bottom:1px solid var(--line);height:44px;vertical-align:middle}
+.table tbody tr:last-child td{border-bottom:0}
 .table tbody tr:hover{background:var(--surface-2)}
 .row-link{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:6px 0;font-weight:500}
 .row-link .ic{color:var(--text-3)}

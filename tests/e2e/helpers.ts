@@ -75,6 +75,12 @@ export async function setUpCompany(page: Page, c: CompanyInput) {
 
 export const switcher = (page: Page) => page.getByRole('button', { name: /^Unternehmen: / });
 
+/** Opens the settings and one of their sections from the side panel, by its German name */
+export async function openSettings(page: Page, section: string) {
+  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await page.getByRole('navigation', { name: 'Bereiche der Einstellungen' }).getByRole('button', { name: section, exact: true }).click();
+}
+
 /** Waits for pending writes, then reads the simulated folders as "folder/path" → content */
 export async function readFolders(page: Page): Promise<Record<string, string>> {
   await page.evaluate(() => window.__e2e?.flush());

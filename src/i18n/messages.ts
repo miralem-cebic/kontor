@@ -483,6 +483,8 @@ const MESSAGES_SRC = {
 
   'settings.title': { de: 'Einstellungen', en: 'Settings' },
   'settings.app': { de: 'App', en: 'App' },
+  'settings.sections': { de: 'Bereiche der Einstellungen', en: 'Settings sections' },
+  'settings.unsaved': { de: 'Nicht gespeicherte Änderungen', en: 'Unsaved changes' },
   'settings.save': { de: 'Speichern', en: 'Save' },
   'settings.discard': { de: 'Verwerfen', en: 'Discard' },
   'settings.applied': { de: '{section} gespeichert', en: '{section} saved' },

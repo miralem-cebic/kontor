@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, readCompanyFile, readFolders, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, openSettings, readCompanyFile, readFolders, setUpCompany, watchErrors } from './helpers';
 
 const openCatalogue = (page: Page) => page.getByRole('button', { name: 'Artikel & Leistungen' }).click();
 const itemFiles = async (page: Page) => {
@@ -101,7 +101,7 @@ test('the catalogue: create with checks, search, edit, delete, reload and Englis
   await expect(rows.nth(1)).toContainText('95,50 €');
 
   // English: prices and units follow the interface language
-  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await openSettings(page, 'App');
   await page.getByLabel('Sprache').selectOption('en');
   await page.getByRole('button', { name: 'Items & services' }).click();
   await expect(rows.nth(1)).toContainText('Hour');

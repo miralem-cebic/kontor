@@ -31,6 +31,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   quantity: 'problem.quantity',
   lineTooLarge: 'problem.lineTooLarge',
   tooManyLines: 'problem.tooManyLines',
+  negativeTotal: 'problem.negativeTotal',
   date: 'problem.date',
   validUntil: 'problem.validUntil',
   'iban.format': 'problem.ibanFormat',

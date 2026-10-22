@@ -54,6 +54,13 @@ export const lineTotal = (l: DocumentLine): Cents => lineNet(l.unitPrice, l.quan
 export const documentTotals = (lines: readonly DocumentLine[], smallBusiness: boolean): TaxTotals =>
   taxTotals(lines.map((l) => ({ net: lineTotal(l), rate: smallBusiness ? ZERO_RATE : l.vatRate })));
 
+/**
+ * Do the lines of one VAT rate add up to less than zero? A deduction (negative quantity) may lower the lines of its
+ * rate, but not below zero: a document with a negative amount or negative VAT per rate is a credit note, not a quote
+ * or an invoice.
+ */
+export const hasNegativeRate = (t: TaxTotals): boolean => t.byRate.some((r) => r.net < 0);
+
 /* ---------- Drafts ---------- */
 
 export interface LineDraft {
@@ -97,10 +104,18 @@ export const draftFromLine = (key: string, l: DocumentLine, locale: MoneyLocale)
   vatRate: l.vatRate,
 });
 
-/** Checks the lines of a document draft; errors name the line and its field ("line.2.unitPrice") */
-export function readLines<F extends string>(c: Checker<F | LineFieldPath | 'lines'>, drafts: readonly LineDraft[], locale: MoneyLocale): DocumentLine[] {
+/**
+ * Checks the lines of a document draft; errors name the line and its field ("line.2.unitPrice"). Once every line
+ * can be read, their sums must not be negative (`hasNegativeRate`); a small business sums all lines together.
+ */
+export function readLines<F extends string>(
+  c: Checker<F | LineFieldPath | 'lines'>,
+  drafts: readonly LineDraft[],
+  locale: MoneyLocale,
+  smallBusiness: boolean,
+): DocumentLine[] {
   if (drafts.length > DOCUMENT_LIMITS.lines) c.add('lines', 'tooManyLines');
-  return drafts.map((d, i) => {
+  const lines = drafts.map((d, i) => {
     const line: DocumentLine = {
       name: c.text(linePath(i, 'name'), d.name, ITEM_LIMITS.name),
       description: c.optionalText(linePath(i, 'description'), d.description, ITEM_LIMITS.description),
@@ -114,6 +129,9 @@ export function readLines<F extends string>(c: Checker<F | LineFieldPath | 'line
     }
     return line;
   });
+  const readable = drafts.every((_, i) => c.passed(linePath(i, 'quantity')) && c.passed(linePath(i, 'unitPrice')));
+  if (readable && hasNegativeRate(documentTotals(lines, smallBusiness))) c.add('lines', 'negativeTotal');
+  return lines;
 }
 
 /** The net amount of a draft line while it is typed, or null as long as quantity or price cannot be read */

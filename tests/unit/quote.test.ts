@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { documentTotals, draftLineNet, draftTotals, emptyLineDraft, lineDraftFromItem, lineNetInRange, type LineDraft } from '../../src/domain/document';
+import { documentTotals, draftLineNet, draftTotals, emptyLineDraft, hasNegativeRate, lineDraftFromItem, lineNetInRange, type LineDraft } from '../../src/domain/document';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, quoteMatches, readQuote, type QuoteDraft } from '../../src/domain/quote';
 import { UNITS } from '../../src/domain/units';
@@ -41,7 +41,7 @@ describe('totals', () => {
 
   it('the editor sums only the lines that can be read so far', () => {
     const lines = [line(), line({ quantity: 'zwei' }), line({ unitPrice: '' }), line({ quantity: '1', unitPrice: '100', vatRate: basisPoints(700) })];
-    expect(lines.map((l) => draftLineNet(l, 'de'))).toEqual([17000, null, null, 10000]);
+    expect(lines.map((l) => draftLineNet(l, 'de', false))).toEqual([17000, null, null, 10000]);
     const t = draftTotals(lines, 'de', false);
     expect([t.net, t.tax, t.gross]).toEqual([27000, 3930, 30930]);
   });
@@ -49,10 +49,10 @@ describe('totals', () => {
 
 describe('readQuote', () => {
   it('needs a customer and valid dates; lines may still be missing', () => {
-    expect(problems(readQuote({ ...emptyQuoteDraft('2026-10-22') }, 'de'))).toEqual(['customerId:required']);
-    expect(problems(readQuote(draft({ date: '2026-02-30', validUntil: '' }), 'de'))).toEqual(['date:date', 'validUntil:date']);
-    expect(problems(readQuote(draft({ validUntil: '2026-10-21' }), 'de'))).toEqual(['validUntil:validUntil']);
-    const r = readQuote(draft({ subject: ' Relaunch ' }), 'de');
+    expect(problems(readQuote({ ...emptyQuoteDraft('2026-10-22') }, 'de', false))).toEqual(['customerId:required']);
+    expect(problems(readQuote(draft({ date: '2026-02-30', validUntil: '' }), 'de', false))).toEqual(['date:date', 'validUntil:date']);
+    expect(problems(readQuote(draft({ validUntil: '2026-10-21' }), 'de', false))).toEqual(['validUntil:validUntil']);
+    const r = readQuote(draft({ subject: ' Relaunch ' }), 'de', false);
     expect(r.ok && r.value).toEqual({
       customerId: 'c1',
       content: { date: '2026-10-22', validUntil: '2026-11-21', subject: 'Relaunch', introText: '', closingText: '', lines: [] },
@@ -64,24 +64,37 @@ describe('readQuote', () => {
   });
 
   it('names the line and the field of an error', () => {
-    const r = readQuote(draft({ lines: [line(), line({ name: '', quantity: '0', unitPrice: '-1' }), line({ quantity: '1,5', unitPrice: '1.250,5' })] }), 'de');
+    const r = readQuote(draft({ lines: [line(), line({ name: '', quantity: '0', unitPrice: '-1' }), line({ quantity: '1,5', unitPrice: '1.250,5' })] }), 'de', false);
     expect(problems(r)).toEqual(['line.1.name:required', 'line.1.quantity:quantity', 'line.1.unitPrice:priceNegative']);
-    const ok = readQuote(draft({ lines: [line({ quantity: '1,5', unitPrice: '1.250,5' })] }), 'de');
+    const ok = readQuote(draft({ lines: [line({ quantity: '1,5', unitPrice: '1.250,5' })] }), 'de', false);
     expect(ok.ok && ok.value.content.lines[0]).toMatchObject({ quantity: 1500, unitPrice: 125050 });
   });
 
   it('refuses a line whose amount is too large', () => {
-    expect(problems(readQuote(draft({ lines: [line({ quantity: '2', unitPrice: '999.999.999,99' })] }), 'de'))).toEqual(['line.0.quantity:lineTooLarge']);
-    expect(problems(readQuote(draft({ lines: [line({ quantity: '1.000.000' })] }), 'de'))).toEqual(['line.0.quantity:quantity']);
+    expect(problems(readQuote(draft({ lines: [line({ quantity: '2', unitPrice: '999.999.999,99' })] }), 'de', false))).toEqual(['line.0.quantity:lineTooLarge']);
+    expect(problems(readQuote(draft({ lines: [line({ quantity: '1.000.000' })] }), 'de', false))).toEqual(['line.0.quantity:quantity']);
+  });
+
+  it('refuses lines that add up to less than zero, per VAT rate', () => {
+    const deduction = (quantity: string, over: Partial<LineDraft> = {}) => line({ name: 'Rabatt', quantity, unitPrice: '100', ...over });
+    // 2 × 85 = 170 at 19 %: a deduction of 170 is fine, 171 is not
+    expect(problems(readQuote(draft({ lines: [line(), deduction('-1,7')] }), 'de', false))).toEqual([]);
+    expect(problems(readQuote(draft({ lines: [line(), deduction('-1,71')] }), 'de', false))).toEqual(['lines:negativeTotal']);
+    // a deduction at 7 % cannot use up the lines at 19 %, unless the small business sums all lines together
+    const mixed = [line(), deduction('-1', { vatRate: basisPoints(700) })];
+    expect(problems(readQuote(draft({ lines: mixed }), 'de', false))).toEqual(['lines:negativeTotal']);
+    expect(problems(readQuote(draft({ lines: mixed }), 'de', true))).toEqual([]);
+    // as long as a line cannot be read, only its own error is shown
+    expect(problems(readQuote(draft({ lines: [deduction('-1'), line({ unitPrice: 'x' })] }), 'de', false))).toEqual(['line.1.unitPrice:price']);
   });
 
   it('refuses more than 200 lines', () => {
     const many = Array.from({ length: 201 }, () => line());
-    expect(problems(readQuote(draft({ lines: many }), 'de'))).toEqual(['lines:tooManyLines']);
+    expect(problems(readQuote(draft({ lines: many }), 'de', false))).toEqual(['lines:tooManyLines']);
   });
 
   it('a line from the catalogue takes over text, unit, price and rate', () => {
-    const l = lineDraftFromItem('k', sampleItem(), 'de');
+    const l = lineDraftFromItem('k', sampleItem(), 'de', false);
     expect(l).toMatchObject({ name: 'Webdesign', description: 'Gestaltung und Umsetzung\nnach Aufwand', quantity: '1', unit: 'HUR', unitPrice: '85,00', vatRate: 1900 });
   });
 });
@@ -100,7 +113,8 @@ describe('draft ↔ quote', () => {
     fc.assert(
       fc.property(fc.array(arbLine, { maxLength: 5 }), fc.constantFrom('de' as const, 'en' as const), (lines, locale) => {
         const quote = sampleQuote({ lines });
-        const r = readQuote(draftFromQuote('c1', quote, locale, key), locale);
+        const r = readQuote(draftFromQuote('c1', quote, locale, key), locale, false);
+        if (hasNegativeRate(documentTotals(lines, false))) return problems(r).join() === 'lines:negativeTotal';
         return r.ok && r.value.customerId === 'c1' && JSON.stringify(r.value.content) === JSON.stringify(quote);
       }),
       fcParams,

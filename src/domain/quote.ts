@@ -66,8 +66,8 @@ export const draftFromQuote = (customerId: string, q: QuoteContent, locale: Mone
 
 /* ---------- Checks ---------- */
 
-/** Checks a quote draft. A draft may have no lines yet; every line it has must be complete. */
-export function readQuote(d: QuoteDraft, locale: MoneyLocale): Result<{ customerId: string; content: QuoteContent }, QuoteFieldError[]> {
+/** Checks a quote draft. A draft may have no lines yet; every line it has must be complete, and their sums must not be negative. */
+export function readQuote(d: QuoteDraft, locale: MoneyLocale, smallBusiness: boolean): Result<{ customerId: string; content: QuoteContent }, QuoteFieldError[]> {
   const c = new Checker<QuoteField>();
   if (!d.customerId) c.add('customerId', 'required');
   if (!isIsoDate(d.date)) c.add('date', 'date');
@@ -76,7 +76,7 @@ export function readQuote(d: QuoteDraft, locale: MoneyLocale): Result<{ customer
   const subject = c.optionalText('subject', d.subject, QUOTE_LIMITS.subject);
   const introText = c.optionalText('introText', d.introText, QUOTE_LIMITS.text);
   const closingText = c.optionalText('closingText', d.closingText, QUOTE_LIMITS.text);
-  const lines = readLines(c, d.lines, locale);
+  const lines = readLines(c, d.lines, locale, smallBusiness);
   return c.done(() => ({ customerId: d.customerId, content: { date: d.date, validUntil: d.validUntil, subject, introText, closingText, lines } }));
 }
 

@@ -73,7 +73,7 @@ Must features added from the market analysis:
 
 | ID | Feature | Content | Effort |
 | --- | --- | --- | --- |
-| F01 | **Catalogue of items and services** | number, name, description, unit, net price, VAT rate. Insert lines by search; the price can be changed per document | M |
+| F01 | **Catalogue of items and services** (catalogue done) | number, name, description, unit, net price, VAT rate. Insert lines by search; the price can be changed per document (comes with the document editor) | M |
 | F02 | **More document types** | correction invoice / credit note, cancellation, order confirmation. **Down-payment and final invoices** that deduct the down payments and their tax (important for trades and crafts); may become a Phase 1b | L |
 | F03 | **Dunning levels** | payment reminder and dunning levels 1–3, dunning fee, default interest under § 288 BGB (consumers: base rate + 5 points; businesses: base rate + 9 points and the 40 € lump sum). The base rate (§ 247 BGB) changes every half year, so it lives in `tax/params` with a validity date | M |
 | F04 | **Prepare sending** | text templates with placeholders (`{Rechnungsnummer}`, `{Fälligkeit}`, …), an `.eml` file with the attachment, fallback `mailto:`. The sending date goes into the audit log. A `mailto:` link built by the app needs a documented exception to the rule that only `http:` and `https:` become an `href` | S |

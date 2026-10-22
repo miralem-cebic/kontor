@@ -1,24 +1,25 @@
-import { mergeCompany, mergeContact, sameJson } from '../merge';
+import { mergeCompany, mergeContact, mergeItem, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile } from '../types';
+import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile, ItemFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
 // Folder structure (see DEVELOPMENT.md for the planned rest):
 //   company.json
 //   contacts/<id>.json         one file per customer or supplier
+//   items/<id>.json            one file per item or service of the catalogue
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', assets: 'assets', backups: 'backups' } as const;
 
 const BACKUP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
-/** A contact file is named after its ID; other names (conflict copies of sync clients) are not read */
-const CONTACT_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
+/** A record file (contact, item) is named after its ID; other names (conflict copies of sync clients) are not read */
+const RECORD_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
 const isNotFound = (e: unknown) => e instanceof DOMException && e.name === 'NotFoundError';
 
 /** Runs a storage operation: an exception from the browser API becomes a failed result, once, here. */
@@ -104,32 +105,51 @@ export class FsRepository implements Repository {
 
   loadContacts() {
     return attempt(async () => {
-      const dir = await this.root.getDirectoryHandle(DIRS.contacts, { create: true });
-      const contacts: ContactFile[] = [];
-      const issues: LoadIssue[] = [];
-      for await (const [name, h] of dir.entries()) {
-        if (h.kind !== 'file' || !CONTACT_FILE.test(name)) continue;
-        const path = `${DIRS.contacts}/${name}`;
-        try {
-          const file = await (h as FileSystemFileHandle).getFile();
-          this.known.set(path, file.lastModified);
-          const contact = migrate('contact', JSON.parse(await file.text()));
-          if (`${contact.id}.json` !== name) throw new InvalidFileError('The file name does not match the contact ID');
-          contacts.push(contact);
-        } catch (e) {
-          issues.push({ file: path, message: e instanceof Error ? e.message : String(e) });
-        }
-      }
-      return { contacts, issues };
+      const { records, issues } = await this.loadRecords(DIRS.contacts, (raw) => migrate('contact', raw));
+      return { contacts: records, issues };
     });
   }
 
   saveContact(contact: ContactFile) {
+    return attempt(() => this.saveRecord(DIRS.contacts, contact, (raw) => migrate('contact', raw), mergeContact));
+  }
+
+  loadItems() {
     return attempt(async () => {
-      const dir = await this.root.getDirectoryHandle(DIRS.contacts, { create: true });
-      const name = `${contact.id}.json`;
-      return this.writeChecked(dir, name, `${DIRS.contacts}/${name}`, contact, (raw) => migrate('contact', raw), mergeContact);
+      const { records, issues } = await this.loadRecords(DIRS.items, (raw) => migrate('item', raw));
+      return { items: records, issues };
     });
+  }
+
+  saveItem(item: ItemFile) {
+    return attempt(() => this.saveRecord(DIRS.items, item, (raw) => migrate('item', raw), mergeItem));
+  }
+
+  /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */
+  private async loadRecords<T extends { id: string }>(dirName: string, read: (raw: unknown) => T): Promise<{ records: T[]; issues: LoadIssue[] }> {
+    const dir = await this.root.getDirectoryHandle(dirName, { create: true });
+    const records: T[] = [];
+    const issues: LoadIssue[] = [];
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind !== 'file' || !RECORD_FILE.test(name)) continue;
+      const path = `${dirName}/${name}`;
+      try {
+        const file = await (h as FileSystemFileHandle).getFile();
+        this.known.set(path, file.lastModified);
+        const record = read(JSON.parse(await file.text()));
+        if (`${record.id}.json` !== name) throw new InvalidFileError('The file name does not match the ID in the file');
+        records.push(record);
+      } catch (e) {
+        issues.push({ file: path, message: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return { records, issues };
+  }
+
+  private async saveRecord<T extends { id: string; schemaVersion: number }>(dirName: string, record: T, read: (raw: unknown) => T, merge: (local: T, remote: T) => T): Promise<T> {
+    const dir = await this.root.getDirectoryHandle(dirName, { create: true });
+    const name = `${record.id}.json`;
+    return this.writeChecked(dir, name, `${dirName}/${name}`, record, read, merge);
   }
 
   /**

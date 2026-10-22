@@ -3,6 +3,7 @@
 
 import { err, ok, type Result } from '../data/result';
 import { ibanProblem, isValidBic, normalizeIban, type IbanProblem } from './iban';
+import { cents, parseCents, type Cents, type MoneyLocale } from './money';
 import type { PatternProblem } from './numbering';
 
 export type FieldProblem =
@@ -23,6 +24,9 @@ export type FieldProblem =
   | 'roleRequired'
   | 'numberTaken'
   | 'accountTaken'
+  | 'itemNumberTaken'
+  | 'price'
+  | 'priceNegative'
   | `iban.${IbanProblem}`
   | `pattern.${PatternProblem}`;
 
@@ -124,6 +128,18 @@ export class Checker<F extends string> {
     const v = value.trim().toUpperCase();
     if (v && !isValidBic(v)) this.add(field, 'bic');
     return v;
+  }
+
+  /** A required price typed in the interface language: not negative, at most `max` cents */
+  price(field: F, value: string, locale: MoneyLocale, max: number): Cents {
+    if (!value.trim()) {
+      this.add(field, 'required');
+      return cents(0);
+    }
+    const amount = parseCents(value, locale);
+    if (amount === null || amount > max) this.add(field, 'price');
+    else if (amount < 0) this.add(field, 'priceNegative');
+    return amount ?? cents(0);
   }
 
   /** A whole number of days from 0 to the limit */

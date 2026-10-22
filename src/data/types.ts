@@ -3,7 +3,8 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import { keysOf, type AccountId, type CompanyId, type ContactId } from './ids';
+import type { ItemProfile } from '../domain/item';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type ItemId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -78,10 +79,34 @@ export interface ContactFile extends ContactProfile {
   fieldUpdatedAt: Partial<Record<ContactMergeableField, string>>;
 }
 
+/** Item fields merged one by one; like contacts, a deletion survives edits made elsewhere */
+const ITEM_MERGEABLE: Record<keyof ItemProfile | 'deletedAt', true> = {
+  number: true,
+  name: true,
+  description: true,
+  unit: true,
+  netPrice: true,
+  vatRate: true,
+  deletedAt: true,
+};
+export const ITEM_MERGEABLE_FIELDS = keysOf(ITEM_MERGEABLE);
+export type ItemMergeableField = keyof ItemProfile | 'deletedAt';
+
+/** items/<id>.json: an item or service of the catalogue */
+export interface ItemFile extends ItemProfile {
+  schemaVersion: number;
+  id: ItemId;
+  createdAt: string;
+  /** Soft delete: a deleted item stays in its file and is hidden in the app */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<ItemMergeableField, string>>;
+}
+
 /** What a backup holds */
 export interface BackupSnapshot {
   company: CompanyFile;
   contacts: readonly ContactFile[];
+  items: readonly ItemFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

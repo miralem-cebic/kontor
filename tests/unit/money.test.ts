@@ -5,6 +5,8 @@ import {
   cents,
   divideRounded,
   formatCents,
+  formatDecimal,
+  formatRate,
   lineNet,
   MoneyRangeError,
   parseCents,
@@ -161,4 +163,25 @@ describe('text', () => {
       fc.property(amount, fc.constantFrom('de' as const, 'en' as const), (a, locale) => parseCents(formatCents(a, locale), locale) === a),
       params,
     ));
+
+  it('formats an amount for an input field, without currency', () => {
+    expect(formatDecimal(cents(123456), 'de')).toBe('1.234,56');
+    expect(formatDecimal(cents(8500), 'de')).toBe('85,00');
+    expect(formatDecimal(cents(-5), 'en')).toBe('-0.05');
+    expect(formatDecimal(cents(99_999_999_999), 'en')).toBe('999,999,999.99');
+  });
+
+  it('reads back what it formats for an input field', () =>
+    fc.assert(
+      fc.property(amount, fc.constantFrom('de' as const, 'en' as const), (a, locale) => parseCents(formatDecimal(a, locale), locale) === a),
+      params,
+    ));
+
+  it('formats rates as percentages without float conversion', () => {
+    expect(formatRate(basisPoints(1900), 'de')).toBe('19\u00a0%');
+    expect(formatRate(basisPoints(750), 'de')).toBe('7,5\u00a0%');
+    expect(formatRate(basisPoints(0), 'de')).toBe('0\u00a0%');
+    expect(formatRate(basisPoints(1900), 'en')).toBe('19%');
+    expect(formatRate(basisPoints(12345), 'en')).toBe('123.45%');
+  });
 });

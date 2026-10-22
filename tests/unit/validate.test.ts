@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeContact } from '../../src/data/schema';
+import { makeContact, makeItem } from '../../src/data/schema';
 import { isValidId } from '../../src/data/validate';
-import { sampleCompany, sampleContact, sampleProfile } from './fixtures';
+import { sampleCompany, sampleContact, sampleItem, sampleProfile } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
 const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(sampleCompany())), ...over }) as Record<string, unknown>;
@@ -115,5 +115,34 @@ describe('contact file validation', () => {
     ['fieldUpdatedAt', { deletedAt: 1 }],
   ])('rejects %s = %j', (field, value) => {
     expect(() => readContactFile(contactFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
+});
+
+describe('item file validation', () => {
+  const itemFile = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(makeItem(sampleItem()))), ...over }) as Record<string, unknown>;
+  const readItemFile = (raw: unknown) => migrate('item', raw);
+
+  it('accepts a file written by the app, also a deleted item without number and description', () => {
+    const raw = itemFile();
+    expect(readItemFile(raw)).toEqual(raw);
+    expect(readItemFile(itemFile({ number: '', description: '', netPrice: 0, vatRate: 0, deletedAt: '2026-10-21T10:00:00.000Z' })).netPrice).toBe(0);
+  });
+
+  it.each([
+    ['id', '__proto__'],
+    ['name', ''.padEnd(201, 'x')],
+    ['description', 7],
+    ['unit', 'Stunde'],
+    ['unit', 'XYZ'],
+    ['netPrice', 85.5],
+    ['netPrice', -100],
+    ['netPrice', 100_000_000_000],
+    ['netPrice', '8500'],
+    ['vatRate', 1600],
+    ['vatRate', '1900'],
+    ['deletedAt', 'gestern'],
+    ['fieldUpdatedAt', { netPrice: 'today' }],
+  ])('rejects %s = %j', (field, value) => {
+    expect(() => readItemFile(itemFile({ [field]: value }))).toThrow(InvalidFileError);
   });
 });

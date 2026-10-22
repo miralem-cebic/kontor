@@ -134,6 +134,19 @@ export function formatCents(amount: Cents, locale: MoneyLocale): string {
   return nf.format(toDecimalString(amount) as `${number}`);
 }
 
+/** The amount without currency, as a person would type it: "1.234,56" (de) or "1,234.56" (en). `parseCents` reads it back. */
+export function formatDecimal(amount: Cents, locale: MoneyLocale): string {
+  const nf = new Intl.NumberFormat(SEPARATORS[locale].intl, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return nf.format(toDecimalString(amount) as `${number}`);
+}
+
+/** A rate as a percentage: 1900 → "19 %" (de) or "19%" (en), 750 → "7,5 %". */
+export function formatRate(rate: BasisPoints, locale: MoneyLocale): string {
+  const digits = String(rate).padStart(5, '0');
+  const nf = new Intl.NumberFormat(SEPARATORS[locale].intl, { style: 'percent', maximumFractionDigits: 2 });
+  return nf.format(`${digits.slice(0, -4)}.${digits.slice(-4)}` as `${number}`);
+}
+
 /**
  * Reads an amount typed by a person: "1.234,56", "1234,5", "-12", "12,00 €" (de) or "1,234.56" (en).
  * Group separators are optional, but when present every group after the first has three digits.

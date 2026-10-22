@@ -7,13 +7,14 @@ import { errorText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 import { ContactsView } from '../contacts/ContactsView';
 import { HomeView } from '../home/HomeView';
+import { ItemsView } from '../items/ItemsView';
 import { SettingsView } from '../settings/SettingsView';
 import { CompanySwitcher } from './CompanySwitcher';
 
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'contacts' | 'settings';
+type View = 'home' | 'contacts' | 'items' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
@@ -21,6 +22,7 @@ const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.invoices', icon: 'invoice' },
   { key: 'nav.expenses', icon: 'expense' },
   { key: 'nav.contacts', icon: 'contacts', view: 'contacts' },
+  { key: 'nav.items', icon: 'item', view: 'items' },
   { key: 'nav.taxes', icon: 'tax' },
   { key: 'nav.tools', icon: 'tools' },
   { key: 'nav.settings', icon: 'settings', view: 'settings' },
@@ -73,6 +75,8 @@ function MainView({ view }: { view: View }) {
       return <HomeView />;
     case 'contacts':
       return <ContactsView />;
+    case 'items':
+      return <ItemsView />;
     case 'settings':
       return <SettingsView />;
   }

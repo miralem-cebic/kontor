@@ -28,6 +28,7 @@ Der aktuelle Stand enthält:
 - **Mehrere Unternehmen:** Jedes Unternehmen hat einen eigenen Ordner. Ein Umschalter wechselt zwischen ihnen.
 - **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
 - **Bankkonten:** Mehrere Konten pro Unternehmen, zum Beispiel zwei Girokonten und PayPal. Eines davon ist das Standardkonto für Rechnungen.
+- **Artikel & Leistungen:** Ein Katalog mit Nummer, Bezeichnung, Beschreibung, Einheit, Nettopreis und Umsatzsteuersatz, mit Suche. Angebote und Rechnungen übernehmen ihre Positionen später daraus.
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 

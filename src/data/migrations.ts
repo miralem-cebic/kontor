@@ -1,6 +1,6 @@
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany, validateContact, type Check } from './validate';
-import type { CompanyFile, ContactFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, validateItem, type Check } from './validate';
+import type { CompanyFile, ContactFile, ItemFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
@@ -10,10 +10,11 @@ import type { CompanyFile, ContactFile } from './types';
 interface FileTypes {
   company: CompanyFile;
   contact: ContactFile;
+  item: ItemFile;
 }
 export type FileKind = keyof FileTypes;
 
-const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = { company: validateCompany, contact: validateContact };
+const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = { company: validateCompany, contact: validateContact, item: validateItem };
 
 export interface Migration {
   from: number;
@@ -40,10 +41,14 @@ const severalAccounts: Migration = {
   },
 };
 
-/** Version 1 is the first format; contacts were added in it as a new kind of file. */
+/**
+ * Version 1 is the first format; contacts were added in it as a new kind of file. Items were added in version 2 as a
+ * new kind of file: an item file without a version counts as version 1 like any other, and its format is the same.
+ */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
   company: [severalAccounts],
   contact: [unchanged(1)],
+  item: [unchanged(1)],
 };
 
 export class NewerSchemaError extends Error {

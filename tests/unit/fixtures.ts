@@ -2,6 +2,8 @@ import type { BankDetails } from '../../src/domain/bankAccount';
 import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
+import type { ItemProfile } from '../../src/domain/item';
+import { basisPoints, cents } from '../../src/domain/money';
 import { makeCompany } from '../../src/data/schema';
 import type { CompanyFile } from '../../src/data/types';
 
@@ -77,6 +79,17 @@ export const sampleContact = (over: Partial<ContactProfile> = {}): ContactProfil
 });
 
 export const sampleContactDraft = (over: Partial<ContactDraft> = {}): ContactDraft => ({ ...emptyContactDraft(), name: 'Kunde GmbH', ...over });
+
+/** An hourly service of the catalogue */
+export const sampleItem = (over: Partial<ItemProfile> = {}): ItemProfile => ({
+  number: 'L-100',
+  name: 'Webdesign',
+  description: 'Gestaltung und Umsetzung\nnach Aufwand',
+  unit: 'HUR',
+  netPrice: cents(8500),
+  vatRate: basisPoints(1900),
+  ...over,
+});
 
 /** localStorage stand-in for unit tests (Node has none) */
 export class MemoryStorage implements Storage {

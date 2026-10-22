@@ -1,4 +1,4 @@
-import { CONTACT_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type CompanyFile, type ContactFile } from './types';
+import { CONTACT_MERGEABLE_FIELDS, ITEM_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type CompanyFile, type ContactFile, type ItemFile } from './types';
 
 // Field-level merge of a file that two devices changed: each field keeps the value with the newer
 // `fieldUpdatedAt`. On a tie the local value wins. Fields that only the remote file has (from the same format
@@ -25,5 +25,7 @@ export const mergeCompany = (local: CompanyFile, remote: CompanyFile): CompanyFi
 
 /** A deletion is a field like any other: it wins over an older edit, and an edit made after it does not undo it. */
 export const mergeContact = (local: ContactFile, remote: ContactFile): ContactFile => mergeFields(local, remote, CONTACT_MERGEABLE_FIELDS);
+
+export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeFields(local, remote, ITEM_MERGEABLE_FIELDS);
 
 export const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

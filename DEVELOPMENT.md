@@ -45,17 +45,19 @@ src/
                                Setup assistant actions (choose folder, finish), switching companies, logo
   app/crashReporting.ts        Global handlers for uncaught errors (emergency copy, then a toast)
   domain/                      Pure logic, no I/O:
-    check.ts                   Checker for form drafts, shared field checks (address, email, phone, payment term)
+    check.ts                   Checker for form drafts, shared field checks (address, email, phone, IBAN, price, payment term)
     money.ts                   Cents, basis points, quantities, rounding, tax totals, parsing and formatting
+    vat.ts, units.ts           VAT rates (§ 12 UStG); units as UN/ECE Rec. 20 codes (e-invoice BT-130)
     iban.ts, taxIds.ts         IBAN/BIC, Steuernummer, USt-IdNr. (check digit)
     numbering.ts               Invoice number patterns ("RE-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
     contact.ts                 Customers and suppliers: profile, form draft, checks, search
     bankAccount.ts             Bank and PayPal accounts: details, form draft, checks
+    item.ts                    Catalogue of items and services: profile, form draft, checks, search
   data/
     types.ts                   File formats (company.json, backups)
     schema.ts                  SCHEMA_VERSION, factories
-    ids.ts                     Branded IDs (CompanyId)
+    ids.ts                     Branded IDs (CompanyId, ContactId, AccountId, ItemId)
     clock.ts                   Hybrid clock for change timestamps
     validate.ts                Hand-written checks for everything read from the folder or browser storage
     migrations.ts              Upgrade per file kind, then validate
@@ -73,7 +75,7 @@ src/
   store/prefs.ts               Per-browser settings: language, last company
   i18n/                        Texts in de and en
   features/                    setup (assistant), company (shared form fields, summary), shell (frame, switcher),
-                               contacts (list and form), settings (with the bank accounts card), home, start
+                               contacts (list and form), items (catalogue), settings (with the bank accounts card), home, start
   components/                  Form fields, icon, toast, error boundary, language select
   lib/                         labels.ts (texts for error codes), sha256.ts
   styles/                      tokens.css, base.css, fonts.css, app.css
@@ -84,7 +86,7 @@ src/
 1. `boot()` checks the browser (`checkSupport`), then reads the list of known company folders (`handleStore`).
 2. No entry: the setup assistant. Otherwise the last opened company (`prefs.lastCompany`) or the first one.
 3. If the browser still has write permission, the company is loaded; otherwise "Continue with …" asks for permission (needs a click).
-4. Loading: `readCompany` (validated), the contacts (`loadContacts`; a broken file is left out and reported in a toast), then the store, the persister, an emergency copy from an earlier session if it is newer, the logo and the daily backup.
+4. Loading: `readCompany` (validated), the contacts and the items (`loadContacts`, `loadItems`; a broken file is left out and reported in a toast), then the store, the persister, an emergency copy from an earlier session if it is newer, the logo and the daily backup.
 5. The switcher opens another company: it asks for permission first (while the click counts as a user gesture), then writes what is pending and closes the current company.
 
 "Add company" runs the assistant while the current company stays open. A folder that already holds a company is opened directly. A folder that is empty becomes the company folder; in a folder that is not empty, a subfolder named after the company is created on "Finish". Nothing is written before "Finish": the logo first, `company.json` last, so a folder counts as set up only when it is complete.
@@ -94,9 +96,9 @@ src/
 1. The UI calls actions in `store/appStore.ts`. They change the state immediately and immutably.
 2. `Persister` compares object references and queues what changed; objects that are saved are kept in a `WeakSet`.
 3. After 400 ms it writes through the `Repository`. Repository operations return a `Result`; exceptions from the browser API are turned into results once, in `FsRepository`.
-4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy of the unsaved company and contacts is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
-5. `saveCompany` and `saveContact` check the file's `lastModified`. If someone else changed it since the last read, they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
-6. Deleting a contact sets `deletedAt` (a mergeable field with its own timestamp): the file stays, the contact is hidden, and an edit made elsewhere later does not bring it back.
+4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy of the unsaved company, contacts and items is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
+5. `saveCompany`, `saveContact` and `saveItem` check the file's `lastModified`. If someone else changed it since the last read, they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
+6. Deleting a contact or an item sets `deletedAt` (a mergeable field with its own timestamp): the file stays, the record is hidden, and an edit made elsewhere later does not bring it back.
 7. Bank accounts are a list in `company.json` (`bank`), merged as one field: when two devices change accounts at the same time, the later change wins for the whole list. Removing an account sets its `deletedAt`; it stays in the list, because payments will refer to it by ID. The default account cannot be removed.
 
 ### Boundary rules
@@ -107,14 +109,15 @@ src/
 
 ## Data format (schema version 2)
 
-kontor writes `company.json`, `contacts/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
+kontor writes `company.json`, `contacts/`, `items/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
 ```text
 <company folder>/
   company.json            { schemaVersion, id, name, owner, address, contact, logo, tax, invoiceDefaults, bank, createdAt, fieldUpdatedAt }
   assets/logo-<hash>.<ext> logo files, named after the start of their SHA-256, never overwritten
-  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts }
+  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items }
   contacts/<id>.json      customers and suppliers, file name = contact ID; other names (conflict copies) are not read
+  items/<id>.json         catalogue of items and services, named like contacts
   documents/<id>.json     quote | invoice | cancellation, with a snapshot of the master data (planned)
   documents/issued/<nr>.pdf|.xml  finalized output, never overwritten              (planned)
   numbering/<range>.json  assigned numbers and reservations                        (planned)
@@ -143,6 +146,8 @@ kontor writes `company.json`, `contacts/`, `assets/` and `backups/`. The rest of
 
 A contact file (`contacts/<id>.json`, types in `src/domain/contact.ts`) has `kind` (`company` or `person`), `roles` (`customer`, `supplier`), `name`, `nameLine2`, `contactPerson`, `customerNumber` (unique among active contacts), `address` (`null` or complete), `contact` (`email`, `phone`), `vatId` (EU), `leitwegId`, `orderReference` (default PO number), `paymentTermDays` (`null` = company default), `notes`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. Contacts were added in schema version 1 as a new kind of file; no existing file changed, so the version stayed.
 
+An item file (`items/<id>.json`, types in `src/domain/item.ts`) has `number` (unique among active items, may be empty), `name`, `description`, `unit` (a code of UN/ECE Recommendation 20 from `src/domain/units.ts`, for example `HUR` for hour), `netPrice` (integer cents, not negative), `vatRate` (basis points: `1900`, `700` or `0`), `createdAt`, `deletedAt` and `fieldUpdatedAt`. Items were added in schema version 2 as a new kind of file; an app that does not know them leaves the folder alone. A new unit code or rate is a format change: older apps would refuse the file.
+
 App-wide data is not in a company folder: the list of folder handles (IndexedDB `kontor`, store `companies`), the last company and the language (`localStorage` `kontor.prefs.v1`).
 
 ### Migrations
@@ -152,12 +157,12 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | Version | Change |
 | --- | --- |
 | 1 | First format; contacts were added in it as a new kind of file |
-| 2 | `company.json`: the one bank account `{ holder, iban, bic }` becomes `bank.accounts[0]` with the fixed ID `account-1` and is the default (two devices that upgrade the same file get the same ID). Contact files are unchanged. |
+| 2 | `company.json`: the one bank account `{ holder, iban, bic }` becomes `bank.accounts[0]` with the fixed ID `account-1` and is the default (two devices that upgrade the same file get the same ID). Contact files are unchanged. Item files are new. |
 
 ## Tests
 
-- **Unit** (`tests/unit`): domain checks (company, contacts, accounts), validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness.
+- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items), validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness.
 - **Property-based** (fast-check): money sums and rounding, gross/net splits, parsing and formatting, IBAN check digits, profile normalization. CI uses a fixed seed (`CI` is set); locally the seed is random. `FC_SEED=<seed>` repeats a failing run, `FC_RUNS=<n>` runs more cases.
-- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload) and a company folder of version 1 that is upgraded.
+- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload), a company folder of version 1 that is upgraded, the catalogue (checks, search, edit, delete, reload, English prices, small business) and unsaved items restored from the emergency copy.
 
 Test mode `?e2e`: the native folder picker is replaced by folders in `localStorage` (`data/fs/storageFs.ts`), and the list of companies is kept in `localStorage` too. `window.__e2e` provides `flush()` (wait for pending writes) and `nextFolder(name)` (the next folder picker returns this folder). Only active with this URL parameter.

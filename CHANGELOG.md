@@ -23,3 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - `company.json` has schema version 2: the one bank account becomes a list of accounts with a default. A company folder is upgraded when it is read and saved in the new format with the next change; older versions of kontor then report that the folder was saved by a newer version.
+
+### Fixed
+
+- The window showed a second vertical and a horizontal scroll bar: the hidden file field of the logo stuck out of the content area. Now only the content area scrolls.

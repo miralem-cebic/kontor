@@ -3,11 +3,11 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { dailyBackup, KEEP_BACKUPS } from '../../src/data/maintenance';
 import { must } from '../../src/data/result';
-import { makeCompany, makeContact } from '../../src/data/schema';
-import { sampleContact, sampleProfile } from './fixtures';
+import { makeContact } from '../../src/data/schema';
+import { sampleCompany, sampleContact } from './fixtures';
 
 let repo: FsRepository;
-const snapshot = { company: makeCompany(sampleProfile()), contacts: [] };
+const snapshot = { company: sampleCompany(), contacts: [] };
 
 beforeEach(() => {
   repo = new FsRepository(new MemDir('c').asHandle());

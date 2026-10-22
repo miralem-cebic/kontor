@@ -7,7 +7,8 @@ import { formatNumber, patternProblem } from '../../domain/numbering';
 import { t } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
 
-// The form fields of the company profile, shared by the setup assistant and the settings page.
+// The form fields of the company profile, shared by the setup assistant and the settings page. The bank fields are
+// the first account of the setup assistant; the settings edit the accounts in their own card (BankAccountsCard).
 
 export interface FieldsProps {
   draft: CompanyDraft;
@@ -117,6 +118,7 @@ export function BankFields({ draft, set, errors }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
   return (
     <>
+      <p className="f-intro">{t('bank.setupNote')}</p>
       <TextField label={t('bank.holder')} value={draft.bankHolder} onChange={(bankHolder) => set({ bankHolder })} error={e('bankHolder')} required maxLength={LIMITS.bankHolder} />
       <TextField label={t('bank.iban')} value={draft.iban} onChange={(iban) => set({ iban })} error={e('iban')} required maxLength={42} />
       <TextField className="w-bic" label={t('bank.bic')} hint={t('bank.bicHint')} value={draft.bic} onChange={(bic) => set({ bic })} error={e('bic')} maxLength={11} />

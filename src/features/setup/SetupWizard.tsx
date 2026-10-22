@@ -255,7 +255,7 @@ function SummaryStep({ draft, folder, hasLogo, onEdit }: { draft: CompanyDraft; 
           {folder.kind === 'empty' ? t('setup.summary.folder', { name: folder.name }) : t('setup.summary.subfolder', { name: folder.name, sub: draft.name.trim() })}
         </p>
       )}
-      {profile.ok && <ProfileSummary profile={{ ...profile.value, logo: null }} hasLogo={hasLogo} onEdit={(s) => onEdit(s)} />}
+      {profile.ok && <ProfileSummary profile={profile.value} hasLogo={hasLogo} onEdit={(s) => onEdit(s)} />}
       <p className="disclaimer">{t('disclaimer.text')}</p>
     </>
   );

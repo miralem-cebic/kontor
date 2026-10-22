@@ -1,9 +1,31 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { checkLogo, detectLogoType, draftFromProfile, emptyDraft, logoFileName, LOGO_FILE, MAX_LOGO_BYTES, readProfile, readSection, SECTION_FIELDS, SECTIONS } from '../../src/domain/company';
-import { fcParams, sampleDraft, sampleProfile } from './fixtures';
+import {
+  checkLogo,
+  detectLogoType,
+  draftFromProfile,
+  emptyDraft,
+  logoFileName,
+  LOGO_FILE,
+  MAX_LOGO_BYTES,
+  readProfile,
+  readSection,
+  SECTION_FIELDS,
+  SECTIONS,
+  type CompanyDraft,
+  type NewCompany,
+} from '../../src/domain/company';
+import { fcParams, sampleAccount, sampleDraft, sampleProfile } from './fixtures';
 
 const problems = (r: ReturnType<typeof readSection>) => (r.ok ? [] : r.error.map((e) => `${e.field}:${e.problem}`));
+
+/** The draft of the setup assistant for a profile and its first account */
+const draftOf = ({ account, ...profile }: NewCompany): CompanyDraft => ({
+  ...draftFromProfile({ ...profile, logo: null }),
+  bankHolder: account.holder,
+  iban: account.iban,
+  bic: account.bic,
+});
 
 describe('readSection', () => {
   it('an empty draft fails every section with "required"', () => {
@@ -58,7 +80,7 @@ describe('readSection', () => {
   it('reports the IBAN problem and normalizes valid values', () => {
     expect(problems(readSection('bank', sampleDraft({ iban: 'DE89 3704 0044 0532 0130 01' })))).toEqual(['iban:iban.checksum']);
     const r = readSection('bank', sampleDraft({ bic: 'cobadeffxxx' }));
-    expect(r.ok && r.value.bank).toEqual({ holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' });
+    expect(r.ok && r.value.account).toEqual({ kind: 'bank', name: '', holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' });
   });
 
   it('checks the number pattern and the payment term', () => {
@@ -68,9 +90,15 @@ describe('readSection', () => {
 });
 
 describe('draft ↔ profile', () => {
-  it('a profile survives the round trip through the draft', () => {
+  it('a profile and its first account survive the round trip through the draft', () => {
     const { logo: _logo, ...profile } = sampleProfile();
-    expect(readProfile(draftFromProfile({ ...profile, logo: null }))).toEqual({ ok: true, value: profile });
+    const company: NewCompany = { ...profile, account: sampleAccount({ name: '' }) };
+    expect(readProfile(draftOf(company))).toEqual({ ok: true, value: company });
+  });
+
+  it('the draft of a profile leaves the bank fields empty: the settings edit accounts on their own', () => {
+    const d = draftFromProfile(sampleProfile());
+    expect([d.bankHolder, d.iban, d.bic]).toEqual(['', '', '']);
   });
 
   it('reading a draft twice gives the same profile (idempotent normalization)', () =>
@@ -85,7 +113,7 @@ describe('draft ↔ profile', () => {
         (over) => {
           const first = readProfile(sampleDraft({ ...over, vatMethod: 'accrual', vatPeriod: 'monthly' }));
           if (!first.ok) return false;
-          const second = readProfile(draftFromProfile({ ...first.value, logo: null }));
+          const second = readProfile(draftOf(first.value));
           return second.ok && JSON.stringify(second.value) === JSON.stringify(first.value);
         },
       ),

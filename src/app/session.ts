@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { logoFileName, type CompanyProfile, type LogoRef, type LogoType } from '../domain/company';
+import { logoFileName, type LogoRef, type LogoType, type NewCompany } from '../domain/company';
 import { indexedDbHandleStore, type CompanyEntry, type HandleStore } from '../data/fs/handleStore';
 import { FsRepository } from '../data/fs/FsRepository';
 import { toSafeFileName } from '../data/fs/fileNames';
@@ -314,12 +314,12 @@ async function logoAsset(logo: LogoUpload): Promise<{ asset: Asset; ref: LogoRef
 }
 
 /** "Finish" in the setup assistant: writes the company (logo first, company.json last), remembers and opens it. */
-export async function finishSetup(profile: Omit<CompanyProfile, 'logo'>, logo: LogoUpload | null): Promise<SessionError | null> {
+export async function finishSetup({ account, ...profile }: NewCompany, logo: LogoUpload | null): Promise<SessionError | null> {
   if (!setupFolder) return 'noFolder';
   try {
     const dir = setupFolder.notEmpty ? await createSubfolder(setupFolder.handle, profile.name) : setupFolder.handle;
     const uploaded = logo ? await logoAsset(logo) : null;
-    const company = makeCompany({ ...profile, logo: uploaded?.ref ?? null });
+    const company = makeCompany({ ...profile, logo: uploaded?.ref ?? null }, account);
     const r = new FsRepository(dir);
     const res = await r.createCompany(company, uploaded ? [uploaded.asset] : []);
     if (!res.ok) return res.error.kind;

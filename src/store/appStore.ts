@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
-import { keysOf, type ContactId } from '../data/ids';
+import { keysOf, type AccountId, type ContactId } from '../data/ids';
 import { mergeCompany, mergeContact, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeContact, nowIso } from '../data/schema';
-import type { CompanyFile, ContactFile, ContactMergeableField, MergeableField } from '../data/types';
+import { makeAccount, makeContact, nowIso } from '../data/schema';
+import type { BankAccount, Banking, CompanyFile, ContactFile, ContactMergeableField, MergeableField } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
 // and the persister (data/persister.ts) writes in the background. Components never write files.
@@ -90,6 +91,50 @@ export function integrateWrittenCompany(sent: CompanyFile, written: CompanyFile)
   const current = get().company;
   if (!current || current.id !== written.id) return;
   set({ company: current === sent ? written : mergeCompany(current, written) });
+}
+
+/* ---------- Bank accounts ---------- */
+
+// The accounts are one field of company.json (`bank`): every change goes through updateCompany, which stamps it.
+
+function changeBank(change: (bank: Banking) => Banking) {
+  const company = get().company;
+  if (company) updateCompany({ bank: change(company.bank) });
+}
+
+const activeAccount = (bank: Banking, id: AccountId): BankAccount | undefined => bank.accounts.find((a) => a.id === id && !a.deletedAt);
+
+/** A new account from checked details (the form's draft is never stored). Returns its ID, or null at the limit. */
+export function addAccount(details: AccountDetails): AccountId | null {
+  const company = get().company;
+  if (!company || company.bank.accounts.length >= MAX_ACCOUNTS) return null;
+  const account = makeAccount(details);
+  changeBank((bank) => ({ ...bank, accounts: [...bank.accounts, account] }));
+  return account.id;
+}
+
+/** New details for an active account. The kind of an account does not change. */
+export function updateAccount(id: AccountId, details: AccountDetails) {
+  changeBank((bank) => {
+    const current = activeAccount(bank, id);
+    if (!current || current.kind !== details.kind) return bank;
+    return { ...bank, accounts: bank.accounts.map((a) => (a === current ? { ...a, ...details } : a)) };
+  });
+}
+
+/** The account proposed for new invoices */
+export function setDefaultAccount(id: AccountId) {
+  changeBank((bank) => (activeAccount(bank, id) ? { ...bank, defaultAccountId: id } : bank));
+}
+
+/** Soft delete: the account stays in company.json and is hidden. The default account cannot be removed. */
+export function deleteAccount(id: AccountId) {
+  changeBank((bank) => {
+    const current = activeAccount(bank, id);
+    if (!current || bank.defaultAccountId === id) return bank;
+    const at = nowIso();
+    return { ...bank, accounts: bank.accounts.map((a) => (a === current ? { ...a, deletedAt: at } : a)) };
+  });
 }
 
 /* ---------- Contacts ---------- */

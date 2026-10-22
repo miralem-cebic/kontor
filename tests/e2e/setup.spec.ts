@@ -53,7 +53,8 @@ test('the setup assistant checks each step and writes the company folder', async
   await page.getByLabel('Hebesatz in %').fill('475');
   await page.getByRole('button', { name: 'Weiter' }).click();
 
-  // bank: the holder is suggested from the owner, the IBAN check digits are checked
+  // bank: the first account becomes the default; the holder is suggested from the owner, the IBAN check digits are checked
+  await expect(page.getByText('Dieses Konto wird das Standardkonto für deine Rechnungen.')).toBeVisible();
   await expect(page.getByLabel('Kontoinhaber/in')).toHaveValue('Erika Mustermann');
   await page.getByLabel('IBAN').fill('DE89 3704 0044 0532 0130 01');
   await page.getByRole('button', { name: 'Weiter' }).click();
@@ -89,7 +90,7 @@ test('the setup assistant checks each step and writes the company folder', async
   const files = await readFolders(page);
   const company = await readCompanyFile(page, 'Ordner-1');
   expect(company).toMatchObject({
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: 'Muster Design',
     address: { street: 'Hauptstraße 1', postalCode: '50667', city: 'Köln', country: 'DE' },
     tax: {
@@ -98,10 +99,12 @@ test('the setup assistant checks each step and writes the company folder', async
       vat: { kind: 'regular', method: 'accrual', period: 'monthly', permanentExtension: true },
       business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
     },
-    bank: { holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
+    bank: { accounts: [{ kind: 'bank', name: '', holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX', deletedAt: null }] },
     invoiceDefaults: { numberPattern: '{YY}-{NNN}', paymentTermDays: 30, footer: '' },
     logo: { type: 'image/png' },
   });
+  const bank = company['bank'] as { defaultAccountId: string; accounts: { id: string }[] };
+  expect(bank.defaultAccountId).toBe(bank.accounts[0]?.id);
   const logo = company['logo'] as { file: string; sha256: string };
   expect(logo.file).toBe(`logo-${logo.sha256.slice(0, 16)}.png`);
   expect(Object.keys(files)).toContain(`Ordner-1/assets/${logo.file}`);

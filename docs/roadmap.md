@@ -59,7 +59,7 @@ Tooling, `file://` build with CSP, data layer (repository, validation, migration
 ### Phase 1: customers, bank accounts, quotes, invoices
 
 - **Customer management (done):** customers and suppliers in `contacts/<id>.json`: company or private person, name and additional name line, address, contact person, email for invoices, phone, customer number, VAT ID (EU business customers), Leitweg-ID for public authorities (buyer reference, BT-10), a default order or PO number (purchase order reference, BT-13; can be changed on every document), payment term and notes per customer.
-- **Bank accounts:** several accounts per company (for example two current accounts and PayPal), one of them the default for invoices; the invoice shows the account chosen for it. The single bank account of `company.json` becomes a list in a schema migration.
+- **Bank accounts (done):** several accounts per company (for example two current accounts and PayPal), one of them the default for invoices; the invoice shows the account chosen for it. The single bank account of `company.json` became a list in schema version 2.
 - Quotes with "valid until"; a quote becomes an invoice with one click.
 - Invoices with the mandatory content of § 14 Abs. 4 UStG; small amount invoices (§ 33 UStDV, up to 250 € gross).
 - Small business: no VAT column, note on § 19 UStG. Regular: 19 %, 7 %, 0 %; reverse charge § 13b UStG ("Steuerschuldnerschaft des Leistungsempfängers"); intra-community supplies with the VAT IDs of both parties.

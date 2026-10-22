@@ -1,10 +1,11 @@
-// The company profile: master data, tax settings, bank account and invoice defaults.
+// The company profile: master data, tax settings and invoice defaults, plus the first bank account, which the
+// setup assistant asks for (further accounts are added in the settings, see bankAccount.ts).
 // The setup assistant and the settings page edit it as a draft of plain strings; `readSection` checks one part
 // of the draft and turns it into profile values. Nothing here touches files or the UI.
 
 import { err, ok, type Result } from '../data/result';
+import { ACCOUNT_LIMITS, type BankDetails } from './bankAccount';
 import { Checker, DEFAULT_COUNTRY, TEXT_LIMITS, type Address, type ContactDetails, type FieldError } from './check';
-import { ibanProblem, isValidBic, normalizeIban } from './iban';
 import { patternProblem, DEFAULT_INVOICE_PATTERN } from './numbering';
 import { isValidGermanVatId, isValidTaxNumber, normalizeVatId } from './taxIds';
 
@@ -34,14 +35,6 @@ export interface TaxSettings {
   business: BusinessType;
 }
 
-export interface BankAccount {
-  holder: string;
-  /** Normalized: capitals, no spaces */
-  iban: string;
-  /** Empty when not given (optional within SEPA) */
-  bic: string;
-}
-
 export interface InvoiceDefaults {
   numberPattern: string;
   paymentTermDays: number;
@@ -58,6 +51,7 @@ export interface LogoRef {
   sha256: string;
 }
 
+/** The profile of company.json; its bank accounts are part of the file format (data/types.ts) */
 export interface CompanyProfile {
   name: string;
   owner: string;
@@ -65,7 +59,6 @@ export interface CompanyProfile {
   contact: ContactDetails;
   logo: LogoRef | null;
   tax: TaxSettings;
-  bank: BankAccount;
   invoiceDefaults: InvoiceDefaults;
 }
 
@@ -76,7 +69,7 @@ export const LIMITS = {
   name: 120,
   owner: 120,
   municipality: 80,
-  bankHolder: 120,
+  bankHolder: ACCOUNT_LIMITS.holder,
   footer: 1000,
 } as const;
 
@@ -89,7 +82,10 @@ export const DEFAULT_PAYMENT_TERM_DAYS = 14;
 
 /* ---------- Draft ---------- */
 
-/** What the forms edit. Choices that have tax consequences start unset, so that they are made on purpose. */
+/**
+ * What the forms edit. Choices that have tax consequences start unset, so that they are made on purpose.
+ * The bank fields are the first account of the setup assistant; the settings edit accounts on their own.
+ */
 export interface CompanyDraft {
   name: string;
   owner: string;
@@ -165,9 +161,9 @@ export function draftFromProfile(p: CompanyProfile): CompanyDraft {
     businessKind: business.kind,
     municipality: business.kind === 'trade' ? business.municipality : '',
     multiplier: business.kind === 'trade' ? String(business.multiplierPercent) : '',
-    bankHolder: p.bank.holder,
-    iban: p.bank.iban,
-    bic: p.bank.bic,
+    bankHolder: '',
+    iban: '',
+    bic: '',
     numberPattern: p.invoiceDefaults.numberPattern,
     paymentTermDays: String(p.invoiceDefaults.paymentTermDays),
     footer: p.invoiceDefaults.footer,
@@ -184,9 +180,13 @@ export type Section = (typeof SECTIONS)[number];
 export interface SectionValues {
   master: Pick<CompanyProfile, 'name' | 'owner' | 'address' | 'contact'>;
   tax: Pick<CompanyProfile, 'tax'>;
-  bank: Pick<CompanyProfile, 'bank'>;
+  /** The first account, which becomes the default for invoices */
+  bank: { account: BankDetails };
   invoice: Pick<CompanyProfile, 'invoiceDefaults'>;
 }
+
+/** What the setup assistant collects: the profile without the logo, and the first bank account */
+export type NewCompany = Omit<CompanyProfile, 'logo'> & SectionValues['bank'];
 
 /** The draft fields that belong to each section (to show the errors of one step) */
 export const SECTION_FIELDS: Record<Section, readonly DraftField[]> = {
@@ -246,15 +246,9 @@ function readTax(d: CompanyDraft): Read<SectionValues['tax']> {
 function readBank(d: CompanyDraft): Read<SectionValues['bank']> {
   const c = new Checker<DraftField>();
   const holder = c.text('bankHolder', d.bankHolder, LIMITS.bankHolder);
-  const iban = normalizeIban(d.iban);
-  if (!iban) c.add('iban', 'required');
-  else {
-    const problem = ibanProblem(iban);
-    if (problem) c.add('iban', `iban.${problem}`);
-  }
-  const bic = d.bic.trim().toUpperCase();
-  if (bic && !isValidBic(bic)) c.add('bic', 'bic');
-  return c.done(() => ({ bank: { holder, iban, bic } }));
+  const iban = c.iban('iban', d.iban);
+  const bic = c.bic('bic', d.bic);
+  return c.done(() => ({ account: { kind: 'bank', name: '', holder, iban, bic } }));
 }
 
 function readInvoice(d: CompanyDraft): Read<SectionValues['invoice']> {
@@ -277,8 +271,8 @@ const READERS: { [S in Section]: (d: CompanyDraft) => Read<SectionValues[S]> } =
 /** Checks one section of the draft; the values are returned only when every field of the section is valid. */
 export const readSection = <S extends Section>(section: S, draft: CompanyDraft): Read<SectionValues[S]> => READERS[section](draft);
 
-/** Checks all sections; the profile (without logo) is returned only when every section is valid. */
-export function readProfile(draft: CompanyDraft): Read<Omit<CompanyProfile, 'logo'>> {
+/** Checks all sections; the profile (without logo) and the first account are returned only when every section is valid. */
+export function readProfile(draft: CompanyDraft): Read<NewCompany> {
   const master = readMaster(draft);
   const tax = readTax(draft);
   const bank = readBank(draft);

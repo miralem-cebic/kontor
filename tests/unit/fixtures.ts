@@ -1,6 +1,9 @@
+import type { BankDetails } from '../../src/domain/bankAccount';
 import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
+import { makeCompany } from '../../src/data/schema';
+import type { CompanyFile } from '../../src/data/types';
 
 /** Property tests: a fixed seed in CI (repeatable), random locally. FC_SEED repeats a failing run, FC_RUNS runs more cases. */
 export const fcParams = {
@@ -21,10 +24,22 @@ export const sampleProfile = (over: Partial<CompanyProfile> = {}): CompanyProfil
     vat: { kind: 'regular', method: 'accrual', period: 'quarterly', permanentExtension: true },
     business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
   },
-  bank: { holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' },
   invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', paymentTermDays: 14, footer: '' },
   ...over,
 });
+
+/** A valid bank account */
+export const sampleAccount = (over: Partial<BankDetails> = {}): BankDetails => ({
+  kind: 'bank',
+  name: 'Geschäftskonto',
+  holder: 'Erika Mustermann',
+  iban: 'DE89370400440532013000',
+  bic: 'COBADEFFXXX',
+  ...over,
+});
+
+/** A new company file with the sample profile and the sample account as its default */
+export const sampleCompany = (over: Partial<CompanyProfile> = {}): CompanyFile => makeCompany(sampleProfile(over), sampleAccount());
 
 /** A draft that passes every section */
 export const sampleDraft = (over: Partial<CompanyDraft> = {}): CompanyDraft => ({

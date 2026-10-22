@@ -27,10 +27,11 @@ Der aktuelle Stand enthält:
 - **Einrichtungsassistent:** Ordner, Stammdaten mit Logo, Steuer (Kleinunternehmer nach § 19 UStG, Soll-/Ist-Versteuerung, Voranmeldungszeitraum, Freiberuf oder Gewerbe mit Hebesatz), Bankverbindung mit IBAN-Prüfung, Rechnungsnummern-Format, Zahlungsziel und Fußzeile.
 - **Mehrere Unternehmen:** Jedes Unternehmen hat einen eigenen Ordner. Ein Umschalter wechselt zwischen ihnen.
 - **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
+- **Bankkonten:** Mehrere Konten pro Unternehmen, zum Beispiel zwei Girokonten und PayPal. Eines davon ist das Standardkonto für Rechnungen.
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Bankkonten, Angebote, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Angebote, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

@@ -181,7 +181,7 @@ function ItemEditor({ item, onDone }: { item: ItemFile | null; onDone: () => voi
   const rateOptions = VAT_RATES.map((r) => ({ value: String(r), label: formatRate(r, lang) }));
 
   return (
-    <div className="page">
+    <div className="page with-panel">
       <header className="top">
         <button type="button" className="icon-btn" onClick={onDone} aria-label={t('items.backToList')}>
           <Icon n="chevL" />
@@ -190,70 +190,73 @@ function ItemEditor({ item, onDone }: { item: ItemFile | null; onDone: () => voi
           {item ? item.name : t('items.new')}
         </h1>
       </header>
-      <form
-        className="form item-form"
-        noValidate
-        onSubmit={(ev) => {
-          ev.preventDefault();
-          save();
-        }}
-      >
-        <section className="card" aria-label={item ? item.name : t('items.new')}>
-          <TextField className="w-num" label={t('items.number')} hint={t('items.numberHint')} value={draft.number} onChange={(number) => set({ number })} error={e('number')} maxLength={ITEM_LIMITS.number} />
-          <TextField label={t('items.name')} hint={t('items.nameHint')} value={draft.name} onChange={(name) => set({ name })} error={e('name')} required maxLength={ITEM_LIMITS.name} />
-          <TextArea label={t('items.description')} hint={t('items.descriptionHint')} value={draft.description} onChange={(description) => set({ description })} error={e('description')} maxLength={ITEM_LIMITS.description} />
-          <Row>
-            <SelectField<UnitCode> className="w-unit" label={t('items.unit')} value={draft.unit} options={unitOptions} onChange={(unit) => set({ unit })} />
-            <TextField
-              label={smallBusiness ? t('items.price') : t('items.netPrice')}
-              hint={smallBusiness ? t('items.priceHint') : t('items.netPriceHint')}
-              value={draft.netPrice}
-              onChange={(netPrice) => set({ netPrice })}
-              error={e('netPrice')}
-              required
-              inputMode="decimal"
-              maxLength={20}
-            />
-            <SelectField
-              className="w-rate"
-              label={t('items.vatRate')}
-              hint={smallBusiness ? t('items.vatRateHint') : undefined}
-              value={String(draft.vatRate)}
-              options={rateOptions}
-              onChange={(v) => {
-                const vatRate = VAT_RATES.find((r) => String(r) === v);
-                if (vatRate !== undefined) set({ vatRate });
-              }}
-            />
-          </Row>
-        </section>
+      {/* the same columns as the other forms, so the fields are as wide; one section needs no jump marks */}
+      <div className="split">
+        <form
+          className="form item-form"
+          noValidate
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            save();
+          }}
+        >
+          <section className="card" aria-label={item ? item.name : t('items.new')}>
+            <TextField className="w-num" label={t('items.number')} hint={t('items.numberHint')} value={draft.number} onChange={(number) => set({ number })} error={e('number')} maxLength={ITEM_LIMITS.number} />
+            <TextField label={t('items.name')} hint={t('items.nameHint')} value={draft.name} onChange={(name) => set({ name })} error={e('name')} required maxLength={ITEM_LIMITS.name} />
+            <TextArea label={t('items.description')} hint={t('items.descriptionHint')} value={draft.description} onChange={(description) => set({ description })} error={e('description')} maxLength={ITEM_LIMITS.description} />
+            <Row>
+              <SelectField<UnitCode> className="w-unit" label={t('items.unit')} value={draft.unit} options={unitOptions} onChange={(unit) => set({ unit })} />
+              <TextField
+                label={smallBusiness ? t('items.price') : t('items.netPrice')}
+                hint={smallBusiness ? t('items.priceHint') : t('items.netPriceHint')}
+                value={draft.netPrice}
+                onChange={(netPrice) => set({ netPrice })}
+                error={e('netPrice')}
+                required
+                inputMode="decimal"
+                maxLength={20}
+              />
+              <SelectField
+                className="w-rate"
+                label={t('items.vatRate')}
+                hint={smallBusiness ? t('items.vatRateHint') : undefined}
+                value={String(draft.vatRate)}
+                options={rateOptions}
+                onChange={(v) => {
+                  const vatRate = VAT_RATES.find((r) => String(r) === v);
+                  if (vatRate !== undefined) set({ vatRate });
+                }}
+              />
+            </Row>
+          </section>
 
-        <div className="card-actions">
-          <button type="submit" className="btn primary">
-            {t('items.save')}
-          </button>
-          <button type="button" className="btn" onClick={onDone}>
-            {t('common.cancel')}
-          </button>
-          <span className="sp" />
-          {item &&
-            (confirmDelete ? (
-              <div className="confirm" role="group" aria-label={t('items.deleteConfirm')}>
-                <span>{t('items.deleteConfirm')}</span>
-                <button type="button" className="btn danger" onClick={remove} autoFocus>
+          <div className="card-actions">
+            <button type="submit" className="btn primary">
+              {t('items.save')}
+            </button>
+            <button type="button" className="btn" onClick={onDone}>
+              {t('common.cancel')}
+            </button>
+            <span className="sp" />
+            {item &&
+              (confirmDelete ? (
+                <div className="confirm" role="group" aria-label={t('items.deleteConfirm')}>
+                  <span>{t('items.deleteConfirm')}</span>
+                  <button type="button" className="btn danger" onClick={remove} autoFocus>
+                    {t('items.delete')}
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
                   {t('items.delete')}
                 </button>
-                <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
-                  {t('common.cancel')}
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
-                {t('items.delete')}
-              </button>
-            ))}
-        </div>
-      </form>
+              ))}
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

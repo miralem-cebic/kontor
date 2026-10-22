@@ -147,14 +147,18 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .card h2{font-size:16px;font-weight:600;margin:0}
 .card-actions{display:flex;gap:8px}
 
-/* Settings: sections in a side panel to the right of the selected one. The panel comes first in the DOM,
-   so the keyboard reaches the sections before the form. */
-.split{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:24px;align-items:start}
-.split>.page-body{grid-column:1;grid-row:1}
+/* A side panel on the right: the sections of the settings, or jump marks to the sections of a form. It comes first
+   in the DOM, so the keyboard reaches it before the form. Every form page uses these columns, so its fields are as
+   wide as on the others; the content column is at most as wide as a .page (860 - 2 × 32). */
+.page.with-panel{max-width:1060px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:20px;align-items:start}
+.split>:not(.subnav){grid-column:1;grid-row:1}
+.split .card{scroll-margin-top:16px}
 .subnav{grid-column:2;grid-row:1;position:sticky;top:12px;padding:6px;border:1px solid var(--line);border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-card)}
 .subnav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
 .subnav .nav.on{background:var(--sel);box-shadow:none;color:var(--text)}
 .subnav .nav.on .ic{color:var(--accent)}
+.subnav .nav span{white-space:normal;overflow-wrap:anywhere}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
 
 /* Toast and crash */
@@ -171,11 +175,12 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
   .side{height:auto}
   .main{margin:0 8px 8px}
   .split{grid-template-columns:minmax(0,1fr);gap:12px}
-  .split>.page-body{grid-row:2}
+  .split>:not(.subnav){grid-row:2}
   .subnav{grid-column:1;position:static;padding:4px}
   .subnav ul{flex-direction:row;overflow-x:auto}
   .subnav li{flex:none}
   .subnav .nav{width:auto;white-space:nowrap}
+  .subnav .nav span{white-space:nowrap}
   .page{padding:0 16px 48px}
   .onb-card{padding:20px 16px}
   .steps .l{display:none}
@@ -234,17 +239,26 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .page-note{margin:0 0 12px}
 .f-row>.w-date{flex:0 1 180px}
 .muted-badge{color:var(--text-2);background:var(--muted-soft)}
-.lines{display:flex;flex-direction:column;gap:10px}
+.lines{display:flex;flex-direction:column;gap:10px;container-type:inline-size}
 .line{margin:0;padding:12px 0 0;border:0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;min-width:0}
 .line:first-child{border-top:0;padding-top:0}
-.line-main{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 10px}
+/* One row when the card is wide enough (from about 1280 px with a side panel), two rows below, four on a phone */
+.line-main{display:grid;gap:8px;align-items:start;grid-template-columns:22px minmax(0,1fr) 72px 112px 128px 76px minmax(100px,max-content);grid-template-areas:"no name qty unit price rate total"}
 .line-no{flex:0 0 22px;height:34px;margin-top:22px;display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--text-3)}
-.line-main>.l-name{flex:1 1 200px}
-.line-main>.l-quantity{flex:0 1 90px}
-.line-main>.l-unit{flex:0 1 130px}
-.line-main>.l-price{flex:0 1 160px}
-.line-main>.l-rate{flex:0 1 90px}
-.line-main>.l-total{flex:0 0 110px;align-items:flex-end}
+.line-main>.line-no{grid-area:no}
+.line-main>.l-name{grid-area:name}
+.line-main>.l-quantity{grid-area:qty}
+.line-main>.l-unit{grid-area:unit}
+.line-main>.l-price{grid-area:price}
+.line-main>.l-rate{grid-area:rate}
+.line-main>.l-total{grid-area:total;align-items:flex-end}
+@container (max-width:680px){
+  .line-main{grid-template-columns:22px minmax(0,1fr) 76px minmax(110px,max-content);grid-template-areas:"no name qty unit" ". price rate total"}
+}
+@container (max-width:440px){
+  .line-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"name name" "qty unit" "price rate" "total total"}
+  .line-main>.line-no{display:none}
+}
 .l-total output{height:34px;display:flex;align-items:center;font-variant-numeric:tabular-nums;font-weight:500}
 .line-sub{display:flex;align-items:flex-end;gap:10px;padding-left:32px}
 .l-actions{display:flex;gap:2px;padding-bottom:4px}

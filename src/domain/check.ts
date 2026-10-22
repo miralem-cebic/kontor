@@ -30,6 +30,7 @@ export type FieldProblem =
   | 'quantity'
   | 'lineTooLarge'
   | 'tooManyLines'
+  | 'negativeTotal'
   | 'date'
   | 'validUntil'
   | `iban.${IbanProblem}`

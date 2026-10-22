@@ -2,7 +2,7 @@
 // the UI turns codes into text (lib/labels.ts). The values are returned only when every field passed.
 
 import { err, ok, type Result } from '../data/result';
-import type { IbanProblem } from './iban';
+import { ibanProblem, isValidBic, normalizeIban, type IbanProblem } from './iban';
 import type { PatternProblem } from './numbering';
 
 export type FieldProblem =
@@ -22,6 +22,7 @@ export type FieldProblem =
   | 'paymentTerm'
   | 'roleRequired'
   | 'numberTaken'
+  | 'accountTaken'
   | `iban.${IbanProblem}`
   | `pattern.${PatternProblem}`;
 
@@ -67,6 +68,11 @@ export class Checker<F extends string> {
     this.errors.push({ field, problem });
   }
 
+  /** Has the field passed every check so far? */
+  passed(field: F): boolean {
+    return !this.errors.some((e) => e.field === field);
+  }
+
   /** A required text: trimmed, not empty, not longer than `max` */
   text(field: F, value: string, max: number): string {
     const v = value.trim();
@@ -99,6 +105,24 @@ export class Checker<F extends string> {
   phone(field: F, value: string): string {
     const v = this.optionalText(field, value, TEXT_LIMITS.phone);
     if (v && v.length <= TEXT_LIMITS.phone && !PHONE.test(v)) this.add(field, 'phone');
+    return v;
+  }
+
+  /** A required IBAN, normalized: capitals, no spaces */
+  iban(field: F, value: string): string {
+    const v = normalizeIban(value);
+    if (!v) this.add(field, 'required');
+    else {
+      const problem = ibanProblem(v);
+      if (problem) this.add(field, `iban.${problem}`);
+    }
+    return v;
+  }
+
+  /** A BIC in capitals; empty is allowed (optional within SEPA) */
+  bic(field: F, value: string): string {
+    const v = value.trim().toUpperCase();
+    if (v && !isValidBic(v)) this.add(field, 'bic');
     return v;
   }
 

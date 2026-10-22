@@ -22,6 +22,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   paymentTerm: 'problem.paymentTerm',
   roleRequired: 'problem.roleRequired',
   numberTaken: 'problem.numberTaken',
+  accountTaken: 'problem.accountTaken',
   'iban.format': 'problem.ibanFormat',
   'iban.country': 'problem.ibanCountry',
   'iban.length': 'problem.ibanLength',

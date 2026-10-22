@@ -7,12 +7,15 @@ export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type CompanyId = Brand<string, 'CompanyId'>;
 export type ContactId = Brand<string, 'ContactId'>;
+/** A bank account of a company; unique within the company */
+export type AccountId = Brand<string, 'AccountId'>;
 
 /** Adds a brand to a string that has been checked by the caller. The one place where the brand is added. */
 export const brandId = <B extends string>(value: string): Brand<string, B> => value as Brand<string, B>;
 
 export const newCompanyId = (): CompanyId => brandId<'CompanyId'>(crypto.randomUUID());
 export const newContactId = (): ContactId => brandId<'ContactId'>(crypto.randomUUID());
+export const newAccountId = (): AccountId => brandId<'AccountId'>(crypto.randomUUID());
 
 /** The keys of a record, typed as the record's key type. Object.keys only knows `string`; the record was built with these keys. */
 export const keysOf = <K extends string>(record: Partial<Record<K, unknown>>): K[] => Object.keys(record) as K[];

@@ -23,10 +23,27 @@ export interface Migration {
 /** A step for a file kind whose format did not change in this version */
 export const unchanged = (from: number): Migration => ({ from, up: (raw) => raw });
 
-/** Version 1 is the first format: no steps yet. Contacts were added in version 1 as a new kind of file. */
+/**
+ * Version 2: a company has several accounts. The one bank account of version 1 becomes the first account and the
+ * default for invoices. Its ID is fixed, so that two devices that upgrade the same file get the same account.
+ */
+export const MIGRATED_ACCOUNT_ID = 'account-1';
+
+const severalAccounts: Migration = {
+  from: 1,
+  up: (raw) => {
+    const bank = raw['bank'];
+    // anything else than an object stays as it is and fails the validation that follows
+    if (!isRecord(bank)) return raw;
+    const account = { id: MIGRATED_ACCOUNT_ID, kind: 'bank', name: '', holder: bank['holder'], iban: bank['iban'], bic: bank['bic'], deletedAt: null };
+    return { ...raw, bank: { defaultAccountId: MIGRATED_ACCOUNT_ID, accounts: [account] } };
+  },
+};
+
+/** Version 1 is the first format; contacts were added in it as a new kind of file. */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [],
-  contact: [],
+  company: [severalAccounts],
+  contact: [unchanged(1)],
 };
 
 export class NewerSchemaError extends Error {

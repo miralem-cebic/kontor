@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeCompany, makeContact } from '../../src/data/schema';
+import { makeContact } from '../../src/data/schema';
 import { isValidId } from '../../src/data/validate';
-import { sampleContact, sampleProfile } from './fixtures';
+import { sampleCompany, sampleContact, sampleProfile } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
-const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(makeCompany(sampleProfile()))), ...over }) as Record<string, unknown>;
+const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(sampleCompany())), ...over }) as Record<string, unknown>;
 const read = (raw: unknown) => migrate('company', raw);
+
+const bankAccount = (over: Record<string, unknown> = {}) => ({ id: 'a1', kind: 'bank', name: '', holder: 'A', iban: 'DE89370400440532013000', bic: '', deletedAt: null, ...over });
+const paypal = (over: Record<string, unknown> = {}) => ({ id: 'p1', kind: 'paypal', name: 'PayPal', email: 'erika@example.com', deletedAt: null, ...over });
+const banking = (accounts: unknown[], defaultAccountId: unknown = 'a1') => ({ defaultAccountId, accounts });
 
 describe('company.json validation', () => {
   it('accepts a file written by the app', () => {
@@ -29,7 +33,22 @@ describe('company.json validation', () => {
     ['tax', { ...sampleProfile().tax, vat: { kind: 'regular', method: 'cash', period: 'weekly', permanentExtension: false } }],
     ['tax', { ...sampleProfile().tax, business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 150 } }],
     ['tax', { ...sampleProfile().tax, business: { kind: '__proto__' } }],
-    ['bank', { holder: 'A', iban: 'de89 3704', bic: '' }],
+    // the single account of version 1 in a file of version 2
+    ['bank', { holder: 'A', iban: 'DE89370400440532013000', bic: '' }],
+    ['bank', banking([])],
+    ['bank', banking({ a1: bankAccount() } as unknown as unknown[])],
+    ['bank', banking([bankAccount({ iban: 'de89 3704' })])],
+    ['bank', banking([bankAccount({ bic: 'cobadeff' })])],
+    ['bank', banking([bankAccount({ kind: 'cash' })])],
+    ['bank', banking([bankAccount({ id: '__proto__' })], '__proto__')],
+    ['bank', banking([bankAccount({ name: 'x'.repeat(61) })])],
+    ['bank', banking([bankAccount({ deletedAt: 'soon' })])],
+    ['bank', banking([paypal({ email: 42 })], 'p1')],
+    // the default must be an active account of the list, and IDs are unique
+    ['bank', banking([bankAccount()], 'other')],
+    ['bank', banking([bankAccount({ deletedAt: '2026-10-21T10:00:00.000Z' })])],
+    ['bank', banking([bankAccount(), paypal({ id: 'a1' })])],
+    ['bank', banking(Array.from({ length: 51 }, (_, i) => bankAccount({ id: `a${i + 1}` })))],
     ['invoiceDefaults', { numberPattern: '../{NNNN}', paymentTermDays: 14, footer: '' }],
     ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', paymentTermDays: 14.5, footer: '' }],
     ['fieldUpdatedAt', { name: 'not a date' }],
@@ -43,8 +62,14 @@ describe('company.json validation', () => {
     expect(read(file({ logo })).logo).toEqual(logo);
   });
 
+  it('accepts bank and PayPal accounts, removed ones included', () => {
+    const bank = banking([bankAccount({ deletedAt: '2026-10-21T10:00:00.000Z' }), paypal(), bankAccount({ id: 'a2', iban: 'AT611904300234573201' })], 'p1');
+    expect(read(file({ bank })).bank).toEqual(bank);
+  });
+
   it('accepts a semantically wrong but safe value (reported by the forms, not here)', () => {
-    expect(read(file({ bank: { holder: 'A', iban: 'DE00123', bic: '' } })).bank.iban).toBe('DE00123');
+    const [account] = read(file({ bank: banking([bankAccount({ iban: 'DE00123' })]) })).bank.accounts;
+    expect(account?.kind === 'bank' && account.iban).toBe('DE00123');
   });
 
   it('keeps only known keys in fieldUpdatedAt', () => {

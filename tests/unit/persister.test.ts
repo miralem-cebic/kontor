@@ -3,9 +3,10 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { emergencyKey, Persister } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
-import { makeCompany, nowIso } from '../../src/data/schema';
+import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
-import { MemoryStorage, sampleContact, sampleProfile } from './fixtures';
+import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -18,7 +19,7 @@ let persister: Persister;
 beforeEach(async () => {
   root = new MemDir('c');
   repo = new FsRepository(root.asHandle());
-  const company = makeCompany(sampleProfile());
+  const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
   A.loadCompany(must(await repo.readCompany()), []);
@@ -89,6 +90,58 @@ describe('updateCompany', () => {
     const before = A.useApp.getState().company;
     A.updateCompany({ name: before!.name, bank: { ...before!.bank } });
     expect(A.useApp.getState().company).toBe(before);
+  });
+});
+
+describe('bank accounts', () => {
+  const bank = () => A.useApp.getState().company!.bank;
+  const paypal = { kind: 'paypal', name: 'PayPal', email: 'erika@example.com' } as const;
+
+  it('adds an account, stamps the field and writes it', async () => {
+    const before = A.useApp.getState().company!;
+    const id = A.addAccount(paypal);
+    expect(bank().accounts.map((a) => a.id)).toEqual([before.bank.defaultAccountId, id]);
+    expect(bank().defaultAccountId).toBe(before.bank.defaultAccountId);
+    expect(A.useApp.getState().company!.fieldUpdatedAt.bank! > before.fieldUpdatedAt.bank!).toBe(true);
+    await persister.flush();
+    expect((await onDisk()).bank).toEqual(bank());
+  });
+
+  it('changes the details of an account, but not its kind', () => {
+    const id = bank().defaultAccountId;
+    A.updateAccount(id, sampleAccount({ bic: 'DEUTDEFF' }));
+    expect(bank().accounts[0]).toMatchObject({ id, kind: 'bank', bic: 'DEUTDEFF', deletedAt: null });
+    const before = bank();
+    A.updateAccount(id, paypal);
+    expect(bank()).toBe(before);
+  });
+
+  it('the default can move to another account; the default itself cannot be removed', () => {
+    const first = bank().defaultAccountId;
+    const id = A.addAccount(paypal)!;
+    A.deleteAccount(first);
+    expect(bank().accounts.every((a) => a.deletedAt === null)).toBe(true);
+    A.setDefaultAccount(id);
+    A.deleteAccount(first);
+    expect(bank().defaultAccountId).toBe(id);
+    expect(bank().accounts.find((a) => a.id === first)?.deletedAt).toBeTruthy();
+  });
+
+  it('a removed account stays in the list; it cannot become the default or be changed again', () => {
+    const id = A.addAccount(paypal)!;
+    A.deleteAccount(id);
+    const before = bank();
+    A.setDefaultAccount(id);
+    A.updateAccount(id, { ...paypal, name: 'Neu' });
+    A.deleteAccount(id);
+    expect(bank()).toBe(before);
+    expect(before.accounts).toHaveLength(2);
+  });
+
+  it('stops at the limit, removed accounts included', () => {
+    for (let i = bank().accounts.length; i < MAX_ACCOUNTS; i++) expect(A.addAccount({ ...paypal, email: `p${i}@example.com` })).not.toBeNull();
+    expect(A.addAccount(paypal)).toBeNull();
+    expect(bank().accounts).toHaveLength(MAX_ACCOUNTS);
   });
 });
 

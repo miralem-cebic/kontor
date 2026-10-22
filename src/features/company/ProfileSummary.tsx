@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import type { CompanyProfile, Section } from '../../domain/company';
+import type { NewCompany, Section } from '../../domain/company';
 import { formatIban } from '../../domain/iban';
 import { formatNumber } from '../../domain/numbering';
 import { t, type MessageKey } from '../../i18n';
 
-// Read-only view of a profile, grouped like the sections of the forms.
+// Read-only view of what the setup assistant collected, grouped like the sections of the forms.
 
 const METHOD: Record<'cash' | 'accrual', MessageKey> = { cash: 'tax.methodCash', accrual: 'tax.methodAccrual' };
 const PERIOD: Record<'monthly' | 'quarterly' | 'yearly', MessageKey> = { monthly: 'tax.periodMonthly', quarterly: 'tax.periodQuarterly', yearly: 'tax.periodYearly' };
@@ -30,7 +30,7 @@ const Item = ({ label, children }: { label: string; children: ReactNode }) => (
   </>
 );
 
-export function ProfileSummary({ profile: p, hasLogo, onEdit }: { profile: CompanyProfile; hasLogo: boolean; onEdit: (s: Section) => void }) {
+export function ProfileSummary({ profile: p, hasLogo, onEdit }: { profile: NewCompany; hasLogo: boolean; onEdit: (s: Section) => void }) {
   const vat = p.tax.vat;
   const business = p.tax.business;
   const now = new Date();
@@ -60,9 +60,9 @@ export function ProfileSummary({ profile: p, hasLogo, onEdit }: { profile: Compa
         </Item>
       </Group>
       <Group title={t('setup.step.bank')} section="bank" onEdit={onEdit}>
-        <Item label={t('bank.holder')}>{p.bank.holder}</Item>
-        <Item label={t('bank.iban')}>{formatIban(p.bank.iban)}</Item>
-        <Item label={t('bank.bic')}>{p.bank.bic || none}</Item>
+        <Item label={t('bank.holder')}>{p.account.holder}</Item>
+        <Item label={t('bank.iban')}>{formatIban(p.account.iban)}</Item>
+        <Item label={t('bank.bic')}>{p.account.bic || none}</Item>
       </Group>
       <Group title={t('setup.step.invoice')} section="invoice" onEdit={onEdit}>
         <Item label={t('invoice.pattern')}>

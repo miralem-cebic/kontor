@@ -12,7 +12,6 @@ import {
   LOGO_FILE,
   MAX_TRADE_TAX_MULTIPLIER_PERCENT,
   MIN_TRADE_TAX_MULTIPLIER_PERCENT,
-  type BankAccount,
   type BusinessType,
   type InvoiceDefaults,
   type LogoRef,
@@ -22,12 +21,13 @@ import {
   type VatPeriod,
   type VatScheme,
 } from '../domain/company';
+import { ACCOUNT_LIMITS, MAX_ACCOUNTS } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
 import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
-import { CONTACT_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type CompanyFile, type ContactFile } from './types';
+import { CONTACT_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type BankAccount, type Banking, type CompanyFile, type ContactFile } from './types';
 
 export class InvalidRecordError extends Error {
   override name = 'InvalidRecordError';
@@ -74,6 +74,7 @@ const idOf =
     isValidId(v) ? brandId<B>(v) : fail(path, `expected an ID, got ${describe(v)}`);
 const companyId = idOf<'CompanyId'>();
 const contactId = idOf<'ContactId'>();
+const accountId = idOf<'AccountId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -103,6 +104,15 @@ const nullable =
   <T>(check: Check<T>): Check<T | null> =>
   (v, path) =>
     v === null ? null : check(v, path);
+
+/** A list of at most `max` entries, each of them checked */
+const listOf =
+  <T>(check: Check<T>, max: number): Check<T[]> =>
+  (v, path) => {
+    if (!Array.isArray(v)) return fail(path, `expected a list, got ${describe(v)}`);
+    if (v.length > max) return fail(path, `more than ${max} entries`);
+    return v.map((item: unknown, i) => check(item, `${path}[${i}]`));
+  };
 
 /**
  * An object with the given fields. Fields the app does not know are kept, so that they are written back unchanged;
@@ -178,11 +188,36 @@ const business = variant<BusinessType>({
 
 const tax = objectOf<TaxSettings>({ taxNumber: text(40), vatId: text(20), vat: vatScheme, business });
 
-const bank = objectOf<BankAccount>({
-  holder: text(LIMITS.bankHolder),
-  iban: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,34}$/.test(v) ? v : fail(path, `expected an IBAN, got ${describe(v)}`)),
-  bic: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,11}$/.test(v) ? v : fail(path, `expected a BIC, got ${describe(v)}`)),
+const bankAccount = variant<BankAccount>({
+  bank: objectOf({
+    id: accountId,
+    kind: exactly('bank'),
+    name: text(ACCOUNT_LIMITS.name),
+    holder: text(ACCOUNT_LIMITS.holder),
+    iban: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,34}$/.test(v) ? v : fail(path, `expected an IBAN, got ${describe(v)}`)),
+    bic: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,11}$/.test(v) ? v : fail(path, `expected a BIC, got ${describe(v)}`)),
+    deletedAt: nullable(dateTime),
+  }),
+  paypal: objectOf({
+    id: accountId,
+    kind: exactly('paypal'),
+    name: text(ACCOUNT_LIMITS.name),
+    email: text(LIMITS.email),
+    deletedAt: nullable(dateTime),
+  }),
 });
+
+/** Account IDs are unique, so that a reference finds one account; the default is one of the active accounts */
+const bank: Check<Banking> = (v, path) => {
+  const b = objectOf<Banking>({ defaultAccountId: accountId, accounts: listOf(bankAccount, MAX_ACCOUNTS) })(v, path);
+  const ids = new Set<string>();
+  b.accounts.forEach((a, i) => {
+    if (ids.has(a.id)) fail(`${path}.accounts[${i}].id`, 'used by another account');
+    ids.add(a.id);
+  });
+  if (!b.accounts.some((a) => a.id === b.defaultAccountId && a.deletedAt === null)) fail(`${path}.defaultAccountId`, 'expected an active account of the list');
+  return b;
+};
 
 /** The pattern produces file names (documents/issued/<number>.pdf): only valid patterns pass */
 const numberPattern: Check<string> = (v, path) =>

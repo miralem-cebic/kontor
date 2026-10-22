@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeCompany, makeContact, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import type { CompanyFile } from '../../src/data/types';
-import { sampleContact, sampleProfile } from './fixtures';
+import { sampleCompany, sampleContact } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -19,7 +19,7 @@ const edit = (c: CompanyFile, patch: Partial<CompanyFile>, fields: (keyof Compan
 beforeEach(async () => {
   root = new MemDir('Muster Design');
   repo = new FsRepository(root.asHandle());
-  company = makeCompany(sampleProfile());
+  company = sampleCompany();
   must(await repo.createCompany(company, []));
 });
 
@@ -40,7 +40,7 @@ describe('FsRepository', () => {
   });
 
   it('does not create a second company in the same folder', async () => {
-    const r = await repo.createCompany(makeCompany(sampleProfile()), []);
+    const r = await repo.createCompany(sampleCompany(), []);
     expect(r.ok || r.error.kind).toBe('invalid');
   });
 
@@ -60,10 +60,11 @@ describe('FsRepository', () => {
     const theirs = must(await other.readCompany());
     must(await other.saveCompany(edit(theirs, { name: 'Changed elsewhere' }, ['name'])));
     // this device still has the old state and changes another field
-    const mine = edit(company, { bank: { ...company.bank, bic: 'DEUTDEFF' } }, ['bank']);
+    const accounts = company.bank.accounts.map((a) => (a.kind === 'bank' ? { ...a, bic: 'DEUTDEFF' } : a));
+    const mine = edit(company, { bank: { ...company.bank, accounts } }, ['bank']);
     const written = must(await repo.saveCompany(mine));
     expect(written.name).toBe('Changed elsewhere');
-    expect(written.bank.bic).toBe('DEUTDEFF');
+    expect(written.bank).toEqual(mine.bank);
     expect(must(await other.readCompany())).toEqual(written);
   });
 
@@ -83,7 +84,7 @@ describe('FsRepository', () => {
   });
 
   it('never overwrites company.json of another company or a newer version', async () => {
-    const other = makeCompany(sampleProfile({ name: 'Another' }));
+    const other = sampleCompany({ name: 'Another' });
     const file = (await root.getFileHandle('company.json')) as MemFile;
     file.content = new Blob([JSON.stringify(other)]);
     file.lastModified += 10;

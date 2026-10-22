@@ -6,15 +6,18 @@ import type { CompanyFile } from '../../data/types';
 import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
 import { showToast, updateCompany, useApp } from '../../store/appStore';
-import { BankFields, InvoiceFields, LogoField, MasterFields, TaxFields, type FieldsProps } from '../company/CompanyFields';
+import { InvoiceFields, LogoField, MasterFields, TaxFields, type FieldsProps } from '../company/CompanyFields';
+import { BankAccountsCard } from './BankAccountsCard';
 
 // Settings: the fields of the setup assistant, one section at a time. A section is edited as a draft and
 // applied with "Save" after its check; issued documents keep their own copy of the values (from Phase 1 on).
+// The bank accounts have their own card: the assistant asks for the first one, here they become a list.
 
-const SECTIONS: { section: Section; title: MessageKey; Fields: ComponentType<FieldsProps> }[] = [
+type ProfileSection = Exclude<Section, 'bank'>;
+
+const SECTIONS: { section: ProfileSection; title: MessageKey; Fields: ComponentType<FieldsProps> }[] = [
   { section: 'master', title: 'setup.step.master', Fields: MasterFields },
   { section: 'tax', title: 'setup.step.tax', Fields: TaxFields },
-  { section: 'bank', title: 'setup.step.bank', Fields: BankFields },
   { section: 'invoice', title: 'setup.step.invoice', Fields: InvoiceFields },
 ];
 
@@ -30,6 +33,7 @@ export function SettingsView() {
         {SECTIONS.map((s) => (
           <SectionCard key={s.section} company={company} {...s} />
         ))}
+        <BankAccountsCard />
         <LogoCard />
         <section className="card" aria-labelledby="settings-app">
           <h2 id="settings-app">{t('settings.app')}</h2>
@@ -41,7 +45,7 @@ export function SettingsView() {
   );
 }
 
-function SectionCard({ company, section, title, Fields }: { company: CompanyFile; section: Section; title: MessageKey; Fields: ComponentType<FieldsProps> }) {
+function SectionCard({ company, section, title, Fields }: { company: CompanyFile; section: ProfileSection; title: MessageKey; Fields: ComponentType<FieldsProps> }) {
   const [draft, setDraft] = useState<CompanyDraft>(() => draftFromProfile(company));
   const [dirty, setDirty] = useState(false);
   const [errors, setErrors] = useState<readonly CompanyFieldError[]>([]);

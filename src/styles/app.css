@@ -185,3 +185,18 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
 .btn.danger-text{color:var(--danger)}
 .confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--text-2);font-size:13px;max-width:560px}
+
+/* Bank accounts (settings) */
+.card h2:focus{outline:none}
+.accounts{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px}
+.acct{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.acct:first-child{border-top:0}
+.acct-main{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.acct-name{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:500}
+.acct-main small{color:var(--text-3);font-size:12px;overflow-wrap:anywhere}
+.badge{font-size:11px;font-weight:500;color:var(--accent);background:var(--accent-soft);padding:1px 8px;border-radius:9px;white-space:nowrap}
+.acct.editing{display:block;background:var(--surface-2)}
+.acct-new{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.account-form h3{font-size:14px;font-weight:600;margin:0}
+.account-form h3:focus{outline:none}
+.account-form .card-actions{flex-wrap:wrap}

@@ -32,19 +32,55 @@ jobs:
         with:
           node-version: 22
 
+      # --no-audit: the install does not wait for npm's audit service; the next step audits.
       - name: Install, test and build
         if: ${{ hashFiles('package.json') != '' }}
         run: |
           if [ -f package-lock.json ]; then
-            npm ci
+            npm ci --no-audit
           else
-            npm install
+            npm install --no-audit
           fi
-          npm audit --omit=dev --audit-level=high
           npm run typecheck
           npm run lint --if-present
           npm test --if-present
           npm run build
+
+      # Fails on high or critical advisories in the production dependencies. An outage of
+      # npm's audit service does not: after three attempts the step passes with a warning.
+      # timeout-minutes is only a backstop above the worst case of the loop (just over 4 minutes).
+      - name: Audit production dependencies
+        if: ${{ hashFiles('package.json') != '' }}
+        timeout-minutes: 6
+        run: |
+          report="$RUNNER_TEMP/npm-audit.json"
+          for attempt in 1 2 3; do
+            status=0
+            timeout --kill-after=10 60 npm audit --omit=dev --audit-level=high --json > "$report" || status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "No high or critical advisories in the production dependencies."
+              exit 0
+            fi
+            # A report means the service answered and found advisories at or above --audit-level.
+            if jq -e 'has("vulnerabilities")' "$report" > /dev/null 2>&1; then
+              jq -r '.vulnerabilities[] | "\(.severity): \(.name) (\([.via[] | if type == "object" then .url else "via \(.)" end] | join(", ")))"' "$report"
+              echo "::error::npm audit found high or critical advisories in the production dependencies. Run 'npm audit --omit=dev' for details and fixes."
+              exit 1
+            fi
+            # An error with a code is npm itself failing (for example ENOLOCK); retrying does not help.
+            if jq -e '.error.code' "$report" > /dev/null 2>&1; then
+              cat "$report"
+              echo "::error::npm audit failed: $(jq -r '.error.summary' "$report")"
+              exit 1
+            fi
+            # Otherwise the audit service returned an error or did not answer in time (status 124).
+            echo "Attempt $attempt of 3: npm's audit service returned no report (exit code $status)."
+            cat "$report"
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 15))
+            fi
+          done
+          echo "::warning::npm's audit service returned no report in 3 attempts, so the production dependencies were not audited in this run. Re-run the job to audit them."
 
       - name: Create package and checksum
         env:

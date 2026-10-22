@@ -24,14 +24,28 @@ import {
 import { ACCOUNT_LIMITS, MAX_ACCOUNTS } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
 import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
+import { isIsoDate } from '../domain/dates';
+import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
 import { ITEM_LIMITS } from '../domain/item';
-import { cents, type BasisPoints, type Cents } from '../domain/money';
+import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
+import { QUOTE_LIMITS } from '../domain/quote';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { UNITS, type UnitCode } from '../domain/units';
 import { isVatRate } from '../domain/vat';
 import { observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
-import { CONTACT_MERGEABLE_FIELDS, ITEM_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type BankAccount, type Banking, type CompanyFile, type ContactFile, type ItemFile } from './types';
+import {
+  CONTACT_MERGEABLE_FIELDS,
+  DOCUMENT_MERGEABLE_FIELDS,
+  ITEM_MERGEABLE_FIELDS,
+  MERGEABLE_FIELDS,
+  type BankAccount,
+  type Banking,
+  type CompanyFile,
+  type ContactFile,
+  type DocumentFile,
+  type ItemFile,
+} from './types';
 
 export class InvalidRecordError extends Error {
   override name = 'InvalidRecordError';
@@ -80,6 +94,7 @@ const companyId = idOf<'CompanyId'>();
 const contactId = idOf<'ContactId'>();
 const accountId = idOf<'AccountId'>();
 const itemId = idOf<'ItemId'>();
+const documentId = idOf<'DocumentId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -300,4 +315,39 @@ export const validateItem: Check<ItemFile> = objectOf<ItemFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(ITEM_MERGEABLE_FIELDS),
+});
+
+const isoDate: Check<string> = (v, path) => (typeof v === 'string' && isIsoDate(v) ? v : fail(path, `expected a date (YYYY-MM-DD), got ${describe(v)}`));
+const lineQuantity: Check<Quantity> = (v, path) => {
+  const q = int(-DOCUMENT_LIMITS.maxQuantity, DOCUMENT_LIMITS.maxQuantity)(v, path);
+  return q !== 0 ? quantity(q) : fail(path, 'expected a quantity other than 0');
+};
+
+/** The line amount must stay in range: every total of the document is then an exact integer */
+const documentLine: Check<DocumentLine> = (v, path) => {
+  const line = objectOf<DocumentLine>({
+    name: text(ITEM_LIMITS.name),
+    description: text(ITEM_LIMITS.description),
+    quantity: lineQuantity,
+    unit: oneOf<UnitCode>(UNITS),
+    unitPrice: netPrice,
+    vatRate,
+  })(v, path);
+  return lineNetInRange(line.unitPrice, line.quantity) ? line : fail(path, 'the line amount is too large');
+};
+
+export const validateDocument: Check<DocumentFile> = objectOf<DocumentFile>({
+  schemaVersion: num,
+  id: documentId,
+  kind: exactly('quote'),
+  customerId: contactId,
+  date: isoDate,
+  validUntil: isoDate,
+  subject: text(QUOTE_LIMITS.subject),
+  introText: text(QUOTE_LIMITS.text),
+  closingText: text(QUOTE_LIMITS.text),
+  lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(DOCUMENT_MERGEABLE_FIELDS),
 });

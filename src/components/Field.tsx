@@ -44,7 +44,7 @@ export function TextField({
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
-  type?: 'text' | 'email' | 'tel';
+  type?: 'text' | 'email' | 'tel' | 'date';
   autoComplete?: string;
   inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'tel';
   maxLength?: number;
@@ -75,15 +75,24 @@ export function TextField({
   );
 }
 
-export function TextArea({ label, hint, error, value, onChange, maxLength }: Common & { value: string; onChange: (value: string) => void; maxLength?: number }) {
+export function TextArea({
+  label,
+  hint,
+  error,
+  value,
+  onChange,
+  maxLength,
+  rows = 3,
+  className,
+}: Common & { value: string; onChange: (value: string) => void; maxLength?: number; rows?: number; className?: string }) {
   const id = useId();
   return (
-    <div className="field">
+    <div className={'field' + (className ? ` ${className}` : '')}>
       <label htmlFor={id}>{label}</label>
       <textarea
         id={id}
         value={value}
-        rows={3}
+        rows={rows}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)}
@@ -102,12 +111,16 @@ export function SelectField<T extends string>({
   value,
   options,
   onChange,
+  required,
   className,
-}: Common & { value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; className?: string }) {
+}: Common & { value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; required?: boolean; className?: string }) {
   const id = useId();
   return (
     <div className={'field' + (className ? ` ${className}` : '')}>
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required && <span className="f-req" aria-hidden="true"> *</span>}
+      </label>
       <select
         id={id}
         value={value}
@@ -117,6 +130,7 @@ export function SelectField<T extends string>({
         }}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)}
+        aria-required={required || undefined}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

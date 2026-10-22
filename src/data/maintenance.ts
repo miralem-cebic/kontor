@@ -3,7 +3,7 @@ import type { Repository, StorageError } from './repository';
 import { ok, type Result } from './result';
 import type { BackupSnapshot } from './types';
 
-// Upkeep of the company folder: one backup per day (company, contacts and items), the newest 14 are kept.
+// Upkeep of the company folder: one backup per day (company, contacts, items and documents), the newest 14 are kept.
 // This is the only module that removes files physically (backups beyond the retention).
 
 export const KEEP_BACKUPS = 14;

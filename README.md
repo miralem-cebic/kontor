@@ -28,11 +28,12 @@ Der aktuelle Stand enthält:
 - **Mehrere Unternehmen:** Jedes Unternehmen hat einen eigenen Ordner. Ein Umschalter wechselt zwischen ihnen.
 - **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
 - **Bankkonten:** Mehrere Konten pro Unternehmen, zum Beispiel zwei Girokonten und PayPal. Eines davon ist das Standardkonto für Rechnungen.
-- **Artikel & Leistungen:** Ein Katalog mit Nummer, Bezeichnung, Beschreibung, Einheit, Nettopreis und Umsatzsteuersatz, mit Suche. Angebote und Rechnungen übernehmen ihre Positionen später daraus.
+- **Artikel & Leistungen:** Ein Katalog mit Nummer, Bezeichnung, Beschreibung, Einheit, Nettopreis und Umsatzsteuersatz, mit Suche. Angebote übernehmen ihre Positionen daraus.
+- **Angebote (Entwürfe):** Kunde, Datum, Gültigkeit, Betreff, Einleitung und Schlusstext; Positionen aus dem Katalog oder frei, mit Menge, Einheit, Preis und Steuersatz. Die Summen werden je Steuersatz berechnet; als Kleinunternehmer mit dem Hinweis nach § 19 UStG. Angebotsnummer und PDF folgen.
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Angebote, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Angebotsnummer und PDF, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

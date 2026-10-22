@@ -6,7 +6,7 @@ import { err, must } from '../../src/data/result';
 import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleItem } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -22,7 +22,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [] });
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [] });
   persister = new Persister(repo);
   persister.start();
 });
@@ -216,5 +216,44 @@ describe('Persister with items', () => {
     repo.saveItem = orig;
     await persister.retry();
     expect((await itemsOnDisk()).map((i) => i.name)).toEqual(['Unsaved']);
+  });
+});
+
+describe('Persister with quotes', () => {
+  const documentsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadDocuments()).documents;
+
+  it('writes a new quote, its changes and its deletion', async () => {
+    const customer = A.addContact(sampleContact());
+    const id = A.addQuote(customer, sampleQuote());
+    await persister.flush();
+    expect((await documentsOnDisk()).map((d) => d.subject)).toEqual(['Website-Relaunch']);
+
+    A.updateQuote(id, customer, sampleQuote({ subject: 'Relaunch 2027' }));
+    const stamped = A.useApp.getState().documents.get(id)!;
+    expect(stamped.fieldUpdatedAt.subject! > stamped.createdAt).toBe(true);
+    expect(stamped.fieldUpdatedAt.lines).toBe(stamped.createdAt);
+    await persister.flush();
+    expect((await documentsOnDisk())[0]?.subject).toBe('Relaunch 2027');
+
+    A.deleteDocument(id);
+    A.updateQuote(id, customer, sampleQuote({ subject: 'after delete' }));
+    await persister.flush();
+    const [deleted] = await documentsOnDisk();
+    expect(deleted?.deletedAt).toBeTruthy();
+    expect(deleted?.subject).toBe('Relaunch 2027');
+  });
+
+  it('keeps unsaved quotes in the emergency copy', async () => {
+    const orig = repo.saveDocument.bind(repo);
+    repo.saveDocument = async () => err({ kind: 'permission', cause: new Error('denied') });
+    const customer = A.addContact(sampleContact());
+    const id = A.addQuote(customer, sampleQuote());
+    await persister.flush();
+    const company = A.useApp.getState().company!;
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    expect(copy.documents.map((d: { id: string }) => d.id)).toEqual([id]);
+    repo.saveDocument = orig;
+    await persister.retry();
+    expect((await documentsOnDisk()).map((d) => d.id)).toEqual([id]);
   });
 });

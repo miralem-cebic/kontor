@@ -147,14 +147,19 @@ export function formatRate(rate: BasisPoints, locale: MoneyLocale): string {
   return nf.format(`${digits.slice(0, -4)}.${digits.slice(-4)}` as `${number}`);
 }
 
+/** A quantity as a person would type it: 1500 → "1,5" (de) or "1.5" (en), 1000 → "1". `parseQuantity` reads it back. */
+export function formatQuantity(qty: Quantity, locale: MoneyLocale): string {
+  const abs = Math.abs(qty);
+  const decimal = `${qty < 0 ? '-' : ''}${Math.trunc(abs / QUANTITY_SCALE)}.${String(abs % QUANTITY_SCALE).padStart(3, '0')}`;
+  return new Intl.NumberFormat(SEPARATORS[locale].intl, { maximumFractionDigits: 3 }).format(decimal as `${number}`);
+}
+
 /**
- * Reads an amount typed by a person: "1.234,56", "1234,5", "-12", "12,00 €" (de) or "1,234.56" (en).
- * Group separators are optional, but when present every group after the first has three digits.
- * At most two decimal places. Returns null for anything else.
+ * Reads a decimal number with at most `decimals` places as an integer scaled by 10^decimals: "1.234,5" → 123450
+ * for two places (de). Group separators are optional, but when present every group after the first has three digits.
  */
-export function parseCents(input: string, locale: MoneyLocale): Cents | null {
+function parseScaled(text: string, locale: MoneyLocale, decimals: number): number | null {
   const { decimal, group } = SEPARATORS[locale];
-  const text = input.replace(/\s|€/g, '').replace(/^EUR|EUR$/i, '');
   const match = /^([+-]?)(\d+(?:[.,]\d+)*)$/.exec(text);
   if (!match) return null;
   const [, sign = '', body = ''] = match;
@@ -162,13 +167,27 @@ export function parseCents(input: string, locale: MoneyLocale): Cents | null {
   const intPart = decimalAt >= 0 ? body.slice(0, decimalAt) : body;
   const fraction = decimalAt >= 0 ? body.slice(decimalAt + 1) : '';
   if (fraction.length === 0 && decimalAt >= 0) return null;
-  if (fraction.length > 2 || /\D/.test(fraction)) return null;
+  if (fraction.length > decimals || /\D/.test(fraction)) return null;
   const groups = intPart.split(group);
   if (groups.some((g) => /\D/.test(g) || g === '')) return null;
   if (groups.length > 1 && groups.slice(1).some((g) => g.length !== 3)) return null;
   if (groups.length > 1 && (groups[0]?.length ?? 0) > 3) return null;
-  const digits = groups.join('') + fraction.padEnd(2, '0');
-  const value = Number(digits);
+  const value = Number(groups.join('') + fraction.padEnd(decimals, '0'));
   if (!Number.isSafeInteger(value)) return null;
-  return cents(sign === '-' ? -value : value);
+  return sign === '-' ? -value : value;
+}
+
+/**
+ * Reads an amount typed by a person: "1.234,56", "1234,5", "-12", "12,00 €" (de) or "1,234.56" (en).
+ * At most two decimal places. Returns null for anything else.
+ */
+export function parseCents(input: string, locale: MoneyLocale): Cents | null {
+  const value = parseScaled(input.replace(/\s|€/g, '').replace(/^EUR|EUR$/i, ''), locale, 2);
+  return value === null ? null : cents(value);
+}
+
+/** Reads a quantity typed by a person: "2", "1,5", "0,25", "1.000" (de) or "1.5" (en). At most three decimal places. */
+export function parseQuantity(input: string, locale: MoneyLocale): Quantity | null {
+  const value = parseScaled(input.replace(/\s/g, ''), locale, 3);
+  return value === null ? null : quantity(value);
 }

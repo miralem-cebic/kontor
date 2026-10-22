@@ -2,11 +2,23 @@ import { create } from 'zustand';
 import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
 import type { ItemProfile } from '../domain/item';
-import { keysOf, type AccountId, type ContactId, type ItemId } from '../data/ids';
-import { mergeCompany, mergeContact, mergeItem, sameJson } from '../data/merge';
+import type { QuoteContent } from '../domain/quote';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type ItemId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeAccount, makeContact, makeItem, nowIso } from '../data/schema';
-import type { BankAccount, Banking, CompanyFile, ContactFile, ContactMergeableField, ItemFile, ItemMergeableField, MergeableField } from '../data/types';
+import { makeAccount, makeContact, makeItem, makeQuote, nowIso } from '../data/schema';
+import type {
+  BankAccount,
+  Banking,
+  CompanyFile,
+  ContactFile,
+  ContactMergeableField,
+  DocumentFile,
+  DocumentMergeableField,
+  ItemFile,
+  ItemMergeableField,
+  MergeableField,
+} from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
 // and the persister (data/persister.ts) writes in the background. Components never write files.
@@ -25,13 +37,15 @@ export interface AppState {
   contacts: ReadonlyMap<ContactId, ContactFile>;
   /** Items of the catalogue by ID, deleted ones included (they are hidden in the UI) */
   items: ReadonlyMap<ItemId, ItemFile>;
+  /** Quotes by ID, deleted ones included (they are hidden in the UI) */
+  documents: ReadonlyMap<DocumentId, DocumentFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -49,20 +63,22 @@ const byId = <T extends { id: string }>(records: readonly T[]) => new Map<T['id'
 export interface CompanyRecords {
   contacts: readonly ContactFile[];
   items: readonly ItemFile[];
+  documents: readonly DocumentFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
     contacts: contacts.length ? new Map([...s.contacts, ...byId(contacts)]) : s.contacts,
     items: items.length ? new Map([...s.items, ...byId(items)]) : s.items,
+    documents: documents.length ? new Map([...s.documents, ...byId(documents)]) : s.documents,
   }));
 }
 
@@ -218,6 +234,41 @@ export function integrateWrittenItem(sent: ItemFile, written: ItemFile) {
   const current = get().items.get(written.id);
   if (!current) return;
   putItem(current === sent ? written : mergeItem(current, written));
+}
+
+/* ---------- Quotes ---------- */
+
+function putDocument(document: DocumentFile) {
+  set((s) => ({ documents: new Map(s.documents).set(document.id, document) }));
+}
+
+/** A new quote from checked content (the form's draft is never stored). Returns its ID. */
+export function addQuote(customerId: ContactId, content: QuoteContent): DocumentId {
+  const quote = makeQuote(customerId, content);
+  putDocument(quote);
+  return quote.id;
+}
+
+export function updateQuote(id: DocumentId, customerId: ContactId, content: QuoteContent) {
+  const current = get().documents.get(id);
+  if (!current || current.deletedAt) return;
+  const next = withChanges<DocumentMergeableField, DocumentFile>(current, { customerId, ...content });
+  if (next !== current) putDocument(next);
+}
+
+/** Soft delete: the file stays, the quote is hidden */
+export function deleteDocument(id: DocumentId) {
+  const current = get().documents.get(id);
+  if (!current || current.deletedAt) return;
+  const at = nowIso();
+  putDocument(withChanges<DocumentMergeableField, DocumentFile>(current, { deletedAt: at }, at));
+}
+
+/** Like `integrateWrittenCompany`, for one document */
+export function integrateWrittenDocument(sent: DocumentFile, written: DocumentFile) {
+  const current = get().documents.get(written.id);
+  if (!current) return;
+  putDocument(current === sent ? written : mergeDocument(current, written));
 }
 
 /* ---------- UI ---------- */

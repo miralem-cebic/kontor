@@ -8,17 +8,18 @@ import { useApp } from '../../store/appStore';
 import { ContactsView } from '../contacts/ContactsView';
 import { HomeView } from '../home/HomeView';
 import { ItemsView } from '../items/ItemsView';
+import { QuotesView } from '../quotes/QuotesView';
 import { SettingsView } from '../settings/SettingsView';
 import { CompanySwitcher } from './CompanySwitcher';
 
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'contacts' | 'items' | 'settings';
+type View = 'home' | 'quotes' | 'contacts' | 'items' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
-  { key: 'nav.quotes', icon: 'quote' },
+  { key: 'nav.quotes', icon: 'quote', view: 'quotes' },
   { key: 'nav.invoices', icon: 'invoice' },
   { key: 'nav.expenses', icon: 'expense' },
   { key: 'nav.contacts', icon: 'contacts', view: 'contacts' },
@@ -73,6 +74,8 @@ function MainView({ view }: { view: View }) {
   switch (view) {
     case 'home':
       return <HomeView />;
+    case 'quotes':
+      return <QuotesView />;
     case 'contacts':
       return <ContactsView />;
     case 'items':

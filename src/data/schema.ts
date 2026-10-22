@@ -2,19 +2,23 @@ import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { ItemProfile } from '../domain/item';
+import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newItemId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newItemId, type ContactId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
+  DOCUMENT_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
   type BankAccount,
   type CompanyFile,
   type ContactFile,
   type ContactMergeableField,
+  type DocumentMergeableField,
   type ItemFile,
   type ItemMergeableField,
   type MergeableField,
+  type QuoteFile,
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
@@ -48,4 +52,12 @@ export function makeItem(profile: ItemProfile): ItemFile {
   const fieldUpdatedAt: Partial<Record<ItemMergeableField, string>> = {};
   for (const f of ITEM_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
   return { schemaVersion: SCHEMA_VERSION, id: newItemId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
+}
+
+/** A new quote. Every field counts as changed at creation time. */
+export function makeQuote(customerId: ContactId, content: QuoteContent): QuoteFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<DocumentMergeableField, string>> = {};
+  for (const f of DOCUMENT_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'quote', customerId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

@@ -1,5 +1,5 @@
 import type { Result } from './result';
-import type { BackupSnapshot, CompanyFile, ContactFile, ItemFile } from './types';
+import type { BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile } from './types';
 
 export interface BackupInfo {
   name: string;
@@ -51,6 +51,10 @@ export interface Repository {
   loadItems(): Promise<Result<{ items: ItemFile[]; issues: LoadIssue[] }, StorageError>>;
   /** Writes items/<id>.json, with the same conflict check and merge as `saveCompany` */
   saveItem(item: ItemFile): Promise<Result<ItemFile, StorageError>>;
+  /** All quotes, deleted ones included; a broken file is reported like a contact */
+  loadDocuments(): Promise<Result<{ documents: DocumentFile[]; issues: LoadIssue[] }, StorageError>>;
+  /** Writes documents/<id>.json, with the same conflict check and merge as `saveCompany` */
+  saveDocument(document: DocumentFile): Promise<Result<DocumentFile, StorageError>>;
   writeBackup(name: string, snapshot: BackupSnapshot): Promise<Result<void, StorageError>>;
   listBackups(): Promise<Result<BackupInfo[], StorageError>>;
   /** Physical removal: only maintenance.ts calls it, for backups beyond the retention */

@@ -1,4 +1,13 @@
-import { CONTACT_MERGEABLE_FIELDS, ITEM_MERGEABLE_FIELDS, MERGEABLE_FIELDS, type CompanyFile, type ContactFile, type ItemFile } from './types';
+import {
+  CONTACT_MERGEABLE_FIELDS,
+  DOCUMENT_MERGEABLE_FIELDS,
+  ITEM_MERGEABLE_FIELDS,
+  MERGEABLE_FIELDS,
+  type CompanyFile,
+  type ContactFile,
+  type DocumentFile,
+  type ItemFile,
+} from './types';
 
 // Field-level merge of a file that two devices changed: each field keeps the value with the newer
 // `fieldUpdatedAt`. On a tie the local value wins. Fields that only the remote file has (from the same format
@@ -27,5 +36,7 @@ export const mergeCompany = (local: CompanyFile, remote: CompanyFile): CompanyFi
 export const mergeContact = (local: ContactFile, remote: ContactFile): ContactFile => mergeFields(local, remote, CONTACT_MERGEABLE_FIELDS);
 
 export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeFields(local, remote, ITEM_MERGEABLE_FIELDS);
+
+export const mergeDocument = (local: DocumentFile, remote: DocumentFile): DocumentFile => mergeFields(local, remote, DOCUMENT_MERGEABLE_FIELDS);
 
 export const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

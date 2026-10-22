@@ -38,6 +38,8 @@ test('the setup assistant checks each step and writes the company folder', async
   await expect(page.getByRole('note')).toContainText('Kleinunternehmerregelung und Voranmeldung gelten für alle Betriebe zusammen');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Bitte die Steuernummer oder die USt-IdNr. angeben.')).toBeVisible();
+  // the assistant moves the focus to the first invalid field in the next frame; typing before that could land there
+  await expect(page.getByLabel('Steuernummer')).toBeFocused();
   await page.getByLabel('USt-IdNr.').fill('DE136695977');
   await page.getByRole('radio', { name: 'Nein, ich weise Umsatzsteuer aus' }).check();
   await page.getByRole('radio', { name: 'Soll-Versteuerung' }).check();
@@ -49,6 +51,7 @@ test('the setup assistant checks each step and writes the company folder', async
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Keine gültige deutsche USt-IdNr.')).toBeVisible();
   await expect(page.getByText('Bitte eine ganze Zahl ab 200 eingeben.')).toBeVisible();
+  await expect(page.getByLabel('USt-IdNr.')).toBeFocused();
   await page.getByLabel('USt-IdNr.').fill('DE 136 695 976');
   await page.getByLabel('Hebesatz in %').fill('475');
   await page.getByRole('button', { name: 'Weiter' }).click();

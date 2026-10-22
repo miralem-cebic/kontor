@@ -80,6 +80,16 @@ Must features added from the market analysis:
 | F05 | **Layouts and language** | 2–3 invoice layouts, accent colour, footer in columns. **Invoices in English** (language per customer) | M |
 | I3 | **Import contacts from CSV** | see Phase 3.5; possible as early as Phase 1, because contacts exist already | M |
 
+From user feedback (22 October 2026). Priority still open:
+
+| ID | Feature | Content | Effort |
+| --- | --- | --- | --- |
+| F21 | **Quote status and order** | a quote is sent, accepted or declined, each with its date. An accepted quote becomes an order (order confirmation, see F02) and later the invoice; every step keeps the dates, so the time from quote to order to invoice can be shown per customer and on average. The list filter (all, valid, expired) grows with the status | M |
+| F22 | **Quote versions** | once a quote is sent, a change creates a new version instead of overwriting it (number with a suffix, for example `AN-2026-0012-2`). The history shows what changed between versions (lines removed or added, quantities, prices, discounts) and how often quotes are changed, per customer and overall. Fits the immutability of issued documents (ADR 0004) | M |
+| F23 | **Discounts** | per line (percent or amount) and on the whole document, on quotes, orders and invoices, including the final invoice of F02. The VAT is calculated on the discounted amounts per rate, rounded in `money.ts`. In the e-invoice they are allowances (BG-27 per line, BG-20 per document). Until then a line with a negative quantity works as a deduction | M |
+| F24 | **Tax office from the Steuernummer** | show the state and the tax office while typing the Steuernummer (for example "Finanzamt Hanau"), and convert it to the 13-digit ELSTER format. The names come from the official directory of the tax offices (BZSt), stored per year with its date like the tax parameters; no network | S |
+| F25 | **Find the trade tax multiplier** | a live lookup needs the network. Option: the yearly Destatis table of the multipliers (all municipalities, a few hundred KB) inside the build, as a suggestion with its year that the user confirms, because municipalities change the rate every year. Alternative: a link to the official source next to the field | S |
+
 ### Phase 2: e-invoices
 
 - **Outgoing:** ZUGFeRD / Factur-X (profile EN 16931 or XRECHNUNG, PDF/A-3 with embedded XML) and plain XRechnung XML (CII; UBL optional). Optional for small businesses; mandatory for regular businesses after the transition periods (2027 with a previous-year turnover above 800,000 €, otherwise 2028).

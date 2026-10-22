@@ -10,8 +10,8 @@ import { showToast, updateCompany, useApp } from '../../store/appStore';
 import { InvoiceFields, LogoField, MasterFields, TaxFields, type FieldsProps } from '../company/CompanyFields';
 import { BankAccountsCard } from './BankAccountsCard';
 
-// Settings: the fields of the setup assistant, one section at a time. A side panel lists the sections and shows
-// one of them. A section is edited as a draft and applied with "Save" after its check; issued documents keep their
+// Settings: the fields of the setup assistant, one section at a time. A side panel on the right lists the sections
+// and shows one of them. A section is edited as a draft and applied with "Save" after its check; issued documents keep their
 // own copy of the values (from Phase 1 on). The other sections stay mounted while hidden, so a draft that is not
 // saved yet survives switching; the side panel marks it. The bank accounts have their own card: the assistant asks
 // for the first one, here they become a list.

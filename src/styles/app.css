@@ -147,14 +147,15 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .card h2{font-size:16px;font-weight:600;margin:0}
 .card-actions{display:flex;gap:8px}
 
-/* Settings: sections in a side panel next to the selected one */
-.split{display:grid;grid-template-columns:200px minmax(0,1fr);gap:24px;align-items:start}
-.subnav{position:sticky;top:12px;padding:6px;border:1px solid var(--line);border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-card)}
+/* Settings: sections in a side panel to the right of the selected one. The panel comes first in the DOM,
+   so the keyboard reaches the sections before the form. */
+.split{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:24px;align-items:start}
+.split>.page-body{grid-column:1;grid-row:1}
+.subnav{grid-column:2;grid-row:1;position:sticky;top:12px;padding:6px;border:1px solid var(--line);border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-card)}
 .subnav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
 .subnav .nav.on{background:var(--sel);box-shadow:none;color:var(--text)}
 .subnav .nav.on .ic{color:var(--accent)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
-.split>.page-body{max-width:760px}
 
 /* Toast and crash */
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;background:var(--text);color:var(--surface);border-radius:8px;box-shadow:var(--shadow);max-width:min(560px,calc(100vw - 32px))}
@@ -170,7 +171,8 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
   .side{height:auto}
   .main{margin:0 8px 8px}
   .split{grid-template-columns:minmax(0,1fr);gap:12px}
-  .subnav{position:static;padding:4px}
+  .split>.page-body{grid-row:2}
+  .subnav{grid-column:1;position:static;padding:4px}
   .subnav ul{flex-direction:row;overflow-x:auto}
   .subnav li{flex:none}
   .subnav .nav{width:auto;white-space:nowrap}

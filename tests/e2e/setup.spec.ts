@@ -48,6 +48,11 @@ test('the setup assistant checks each step and writes the company folder', async
   await page.getByRole('radio', { name: 'Gewerbe' }).check();
   await page.getByRole('textbox', { name: 'Gemeinde', exact: true }).fill('Köln');
   await page.getByLabel('Hebesatz in %').fill('150');
+  // the multipliers of all municipalities are linked, opened in a new window
+  const source = page.getByRole('link', { name: 'Hebesätze der Gemeinden (öffnet in einem neuen Fenster)' });
+  await expect(source).toHaveAttribute('href', 'https://www.statistikportal.de/de/karte-hebesaetze');
+  await expect(source).toHaveAttribute('target', '_blank');
+  await expect(source).toHaveAttribute('rel', 'noopener noreferrer');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Keine gültige deutsche USt-IdNr.')).toBeVisible();
   await expect(page.getByText('Bitte eine ganze Zahl ab 200 eingeben.')).toBeVisible();

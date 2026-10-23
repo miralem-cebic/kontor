@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import type { LogoUpload } from '../../app/session';
+import { ExternalLink } from '../../components/ExternalLink';
 import { CheckField, Choice, Row, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
-import { checkLogo, LIMITS, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
+import { checkLogo, LIMITS, TRADE_TAX_MULTIPLIER_SOURCE, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
 import { formatNumber, patternProblem } from '../../domain/numbering';
 import { t } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
@@ -105,10 +106,15 @@ export function TaxFields({ draft, set, errors }: FieldsProps) {
         required
       />
       {draft.businessKind === 'trade' && (
-        <Row>
-          <TextField label={t('tax.municipality')} value={draft.municipality} onChange={(municipality) => set({ municipality })} error={e('municipality')} required maxLength={LIMITS.municipality} />
-          <TextField className="w-num" label={t('tax.multiplier')} hint={t('tax.multiplierHint')} value={draft.multiplier} onChange={(multiplier) => set({ multiplier })} error={e('multiplier')} required inputMode="numeric" maxLength={4} />
-        </Row>
+        <>
+          <Row>
+            <TextField label={t('tax.municipality')} value={draft.municipality} onChange={(municipality) => set({ municipality })} error={e('municipality')} required maxLength={LIMITS.municipality} />
+            <TextField className="w-num" label={t('tax.multiplier')} hint={t('tax.multiplierHint')} value={draft.multiplier} onChange={(multiplier) => set({ multiplier })} error={e('multiplier')} required inputMode="numeric" maxLength={4} />
+          </Row>
+          <p className="f-hint">
+            {t('tax.multiplierSource')} <ExternalLink href={TRADE_TAX_MULTIPLIER_SOURCE}>{t('tax.multiplierSourceLink')}</ExternalLink>
+          </p>
+        </>
       )}
     </>
   );

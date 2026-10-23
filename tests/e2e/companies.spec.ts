@@ -90,6 +90,12 @@ test('settings change the fields of the assistant and keep field timestamps', as
   await tax.getByRole('radio', { name: 'Ist-Versteuerung' }).check();
   await tax.getByRole('radio', { name: 'Nur Jahreserklärung' }).check();
   await expect(tax.getByLabel('Dauerfristverlängerung')).toHaveCount(0);
+  // the source of the multipliers shows only for a trade
+  const source = tax.getByRole('link', { name: /^Hebesätze der Gemeinden/ });
+  await expect(source).toHaveCount(0);
+  await tax.getByRole('radio', { name: 'Gewerbe' }).check();
+  await expect(source).toHaveAttribute('href', 'https://www.statistikportal.de/de/karte-hebesaetze');
+  await tax.getByRole('radio', { name: 'Freiberuflich' }).check();
   await tax.getByRole('button', { name: 'Speichern' }).click();
 
   const after = await readCompanyFile(page, 'Ordner-1');

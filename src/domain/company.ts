@@ -78,6 +78,14 @@ export const MIN_TRADE_TAX_MULTIPLIER_PERCENT = 200;
 /** Upper bound of the input field (four digits); not a legal limit */
 export const MAX_TRADE_TAX_MULTIPLIER_PERCENT = 9999;
 
+/**
+ * Where to look up the multiplier of a municipality: the map "Hebesätze der Gemeinden" of the statistical offices of
+ * the Federation and the Länder, with the multipliers of every municipality (also in the Regionaldatenbank, table
+ * 71231). It may lag behind a change; the municipality's own Hebesatzsatzung is binding. The app cannot load the data
+ * itself (no network, ADR 0001), so it links to the source.
+ */
+export const TRADE_TAX_MULTIPLIER_SOURCE = 'https://www.statistikportal.de/de/karte-hebesaetze';
+
 export const DEFAULT_PAYMENT_TERM_DAYS = 14;
 
 /* ---------- Draft ---------- */

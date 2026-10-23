@@ -11,6 +11,7 @@ const MESSAGES_SRC = {
   'common.next': { de: 'Weiter', en: 'Continue' },
   'common.dismiss': { de: 'Schließen', en: 'Dismiss' },
   'common.language': { de: 'Sprache', en: 'Language' },
+  'common.newWindow': { de: '(öffnet in einem neuen Fenster)', en: '(opens in a new window)' },
 
   'disclaimer.text': {
     de: 'kontor ist eine Ausfüllhilfe. Berechnungen und Exporte sind Schätzungen und ersetzen keine Steuerberatung.',
@@ -118,6 +119,11 @@ const MESSAGES_SRC = {
   'tax.municipality': { de: 'Gemeinde', en: 'Municipality' },
   'tax.multiplier': { de: 'Hebesatz in %', en: 'Multiplier in %' },
   'tax.multiplierHint': { de: 'z. B. 400', en: 'e.g. 400' },
+  'tax.multiplierSource': {
+    de: 'Den Hebesatz deiner Gemeinde zeigt die Karte der Statistischen Ämter; verbindlich ist die Hebesatzsatzung der Gemeinde.',
+    en: 'The map of the statistical offices shows the multiplier of your municipality; the municipality’s own statute is binding.',
+  },
+  'tax.multiplierSourceLink': { de: 'Hebesätze der Gemeinden', en: 'Multipliers of the municipalities' },
 
   'bank.holder': { de: 'Kontoinhaber/in', en: 'Account holder' },
   'bank.iban': { de: 'IBAN', en: 'IBAN' },

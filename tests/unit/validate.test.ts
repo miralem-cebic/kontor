@@ -213,6 +213,7 @@ describe('invoice file validation', () => {
     expect(readDocument(raw)).toEqual(raw);
     const fromQuote = invoiceFile({ service: { kind: 'date', date: '2026-10-31' }, quoteId: '7c9e6679-7425-40de-944b-e07fc1f90ae7', taxTreatment: 'reverseCharge' });
     expect(readDocument(fromQuote)).toEqual(fromQuote);
+    expect(readDocument(invoiceFile({ taxTreatment: 'notTaxable' })).taxTreatment).toBe('notTaxable');
   });
 
   it('accepts a period that ends before it starts (reported by the form, not here)', () => {

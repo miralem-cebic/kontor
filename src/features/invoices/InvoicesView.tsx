@@ -18,6 +18,7 @@ import {
   issueProblems,
   readInvoice,
   TAX_TREATMENTS,
+  taxTreatmentHint,
   vatNote,
   type InvoiceDraft,
   type InvoiceField,
@@ -29,7 +30,7 @@ import { formatCents } from '../../domain/money';
 import type { DocumentId } from '../../data/ids';
 import { isInvoice, isQuote, type CompanyFile, type InvoiceFile, type QuoteFile } from '../../data/types';
 import { currentLang, t } from '../../i18n';
-import { accountDetail, accountName, fieldError, issueProblemText, problemText, taxTreatmentText } from '../../lib/labels';
+import { accountDetail, accountName, fieldError, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
 import { addInvoice, deleteDocument, showToast, updateInvoice, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
@@ -224,7 +225,7 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
     accountActive: !!account && !account.deletedAt,
   });
   const due = draftDueDate(draft);
-  const abroad = !!customer?.address && customer.address.country !== 'DE';
+  const treatmentHint = taxTreatmentHint(draft.taxTreatment, customer?.address?.country ?? null);
   const options = customerOptions(contacts, draft.customerId);
   const accountOptions = company.bank.accounts
     .filter((a) => !a.deletedAt || a.id === draft.accountId)
@@ -358,7 +359,7 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
               </h2>
               <Choice<TaxTreatment>
                 label={t('invoices.taxTreatment')}
-                hint={abroad && draft.taxTreatment === 'standard' ? t('invoices.taxAbroadHint') : undefined}
+                hint={treatmentHint ? taxTreatmentHintText(treatmentHint) : undefined}
                 value={draft.taxTreatment}
                 options={TAX_TREATMENTS.map((v) => ({ value: v, ...taxTreatmentText(v) }))}
                 onChange={(taxTreatment) => set({ taxTreatment })}

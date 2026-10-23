@@ -4,7 +4,7 @@ import type { FieldError, FieldProblem } from '../domain/check';
 import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
-import type { IssueProblem, TaxTreatment } from '../domain/invoice';
+import type { IssueProblem, TaxTreatment, TaxTreatmentHint } from '../domain/invoice';
 import type { UnitCode } from '../domain/units';
 import { t, type MessageKey } from '../i18n';
 
@@ -109,9 +109,18 @@ const TAX_TREATMENT_KEY: Record<TaxTreatment, { label: MessageKey; hint: Message
   standard: { label: 'invoices.taxStandard', hint: 'invoices.taxStandardHint' },
   reverseCharge: { label: 'invoices.taxReverseCharge', hint: 'invoices.taxReverseChargeHint' },
   intraCommunitySupply: { label: 'invoices.taxIntraCommunity', hint: 'invoices.taxIntraCommunityHint' },
+  notTaxable: { label: 'invoices.taxNotTaxable', hint: 'invoices.taxNotTaxableHint' },
 };
 
 export const taxTreatmentText = (v: TaxTreatment): { label: string; hint: string } => ({ label: t(TAX_TREATMENT_KEY[v].label), hint: t(TAX_TREATMENT_KEY[v].hint) });
+
+const TAX_TREATMENT_HINT_KEY: Record<TaxTreatmentHint, MessageKey> = {
+  customerAbroad: 'invoices.taxHintAbroad',
+  customerInGermany: 'invoices.taxHintInGermany',
+  customerInEu: 'invoices.taxHintInEu',
+};
+
+export const taxTreatmentHintText = (h: TaxTreatmentHint): string => t(TAX_TREATMENT_HINT_KEY[h]);
 
 const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
   noCustomer: 'issue.noCustomer',

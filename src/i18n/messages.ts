@@ -484,9 +484,22 @@ const MESSAGES_SRC = {
     de: 'Waren an ein Unternehmen in einem anderen EU-Staat (§ 4 Nr. 1 Buchst. b, § 6a UStG). Beide USt-IdNrn. stehen auf der Rechnung.',
     en: 'Goods to a business in another EU state (§ 4 Nr. 1 Buchst. b, § 6a UStG). Both VAT IDs are shown on the invoice.',
   },
-  'invoices.taxAbroadHint': {
-    de: 'Der Kunde sitzt nicht in Deutschland. Prüfe, ob er die Umsatzsteuer schuldet oder die Lieferung steuerfrei ist.',
-    en: 'The customer is not in Germany. Check whether the customer owes the VAT or the supply is tax-free.',
+  'invoices.taxNotTaxable': { de: 'Nicht im Inland steuerbar', en: 'Not taxable in Germany' },
+  'invoices.taxNotTaxableHint': {
+    de: 'Leistungen, deren Leistungsort im Ausland liegt (§ 3a UStG), z. B. Beratung für ein Unternehmen außerhalb der EU. Die Rechnung weist keine Umsatzsteuer aus.',
+    en: 'Services whose place of supply is abroad (§ 3a UStG), e.g. consulting for a business outside the EU. The invoice shows no VAT.',
+  },
+  'invoices.taxHintAbroad': {
+    de: 'Der Kunde sitzt nicht in Deutschland. Prüfe, ob er die Umsatzsteuer schuldet, die Lieferung steuerfrei oder die Leistung nicht im Inland steuerbar ist.',
+    en: 'The customer is not in Germany. Check whether the customer owes the VAT, the supply is tax-free or the service is not taxable in Germany.',
+  },
+  'invoices.taxHintInGermany': {
+    de: 'Der Kunde sitzt in Deutschland. Leistungen an ihn sind in der Regel im Inland steuerbar.',
+    en: 'The customer is in Germany. Services to the customer are usually taxable in Germany.',
+  },
+  'invoices.taxHintInEu': {
+    de: 'Der Kunde sitzt in einem anderen EU-Staat. Für Leistungen an Unternehmen dort gilt in der Regel die Steuerschuldnerschaft des Leistungsempfängers.',
+    en: 'The customer is in another EU state. For services to businesses there, reverse charge usually applies.',
   },
   'invoices.sectionPayment': { de: 'Zahlung', en: 'Payment' },
   'invoices.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },
@@ -556,6 +569,10 @@ const MESSAGES_SRC = {
     en: 'Reverse charge: the customer owes the VAT (Steuerschuldnerschaft des Leistungsempfängers).',
   },
   'totals.intraCommunitySupply': { de: 'Steuerfreie innergemeinschaftliche Lieferung', en: 'Tax-free intra-community supply' },
+  'totals.notTaxable': {
+    de: 'Nicht im Inland steuerbare Leistung (Leistungsort im Ausland, § 3a UStG)',
+    en: 'Not taxable in Germany (place of supply abroad, § 3a UStG)',
+  },
 
   'unit.H87': { de: 'Stück', en: 'Piece' },
   'unit.HUR': { de: 'Stunde', en: 'Hour' },

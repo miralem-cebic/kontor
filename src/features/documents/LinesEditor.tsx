@@ -228,6 +228,7 @@ const NOTE_KEY: Record<VatNote, MessageKey> = {
   smallBusiness: 'totals.smallBusiness',
   reverseCharge: 'totals.reverseCharge',
   intraCommunitySupply: 'totals.intraCommunitySupply',
+  notTaxable: 'totals.notTaxable',
 };
 
 /** Net, VAT per rate and gross. A document without VAT shows only the total and the note that says why. */

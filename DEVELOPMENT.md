@@ -51,6 +51,9 @@ src/
     dates.ts                   Calendar days as ISO strings (YYYY-MM-DD), without time zones
     iban.ts, taxIds.ts         IBAN/BIC, Steuernummer, USt-IdNr. (check digit)
     links.ts                   Which URLs may become a link (http: and https: only)
+    tax/params/<year>.ts       Values that depend on the tax year, each with its legal source; tax/params/index.ts
+                               picks the year (an unknown later year gets the last known one)
+    tax/tradeTax.ts            Trade tax: the minimum multiplier of a year
     numbering.ts               Invoice number patterns ("RE-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
     contact.ts                 Customers and suppliers: profile, form draft, checks, search

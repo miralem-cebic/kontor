@@ -5,6 +5,7 @@ import { CheckField, Choice, Row, TextArea, TextField } from '../../components/F
 import { Icon } from '../../components/Icon';
 import { checkLogo, LIMITS, TRADE_TAX_MULTIPLIER_SOURCE, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
 import { formatNumber, patternProblem } from '../../domain/numbering';
+import { upcomingMinimum } from '../../domain/tax/tradeTax';
 import { t } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
 
@@ -38,6 +39,9 @@ export function MasterFields({ draft, set, errors }: FieldsProps) {
 }
 
 const yesNo = (v: boolean | null) => (v === null ? null : v ? 'yes' : 'no');
+
+/** The year the forms check against: the legal minimum of the trade tax multiplier depends on it */
+export const thisYear = (): number => new Date().getFullYear();
 
 export function TaxFields({ draft, set, errors }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
@@ -111,6 +115,7 @@ export function TaxFields({ draft, set, errors }: FieldsProps) {
             <TextField label={t('tax.municipality')} value={draft.municipality} onChange={(municipality) => set({ municipality })} error={e('municipality')} required maxLength={LIMITS.municipality} />
             <TextField className="w-num" label={t('tax.multiplier')} hint={t('tax.multiplierHint')} value={draft.multiplier} onChange={(multiplier) => set({ multiplier })} error={e('multiplier')} required inputMode="numeric" maxLength={4} />
           </Row>
+          <RaisedMinimum multiplier={draft.multiplier} />
           <p className="f-hint">
             {t('tax.multiplierSource')} <ExternalLink href={TRADE_TAX_MULTIPLIER_SOURCE}>{t('tax.multiplierSourceLink')}</ExternalLink>
           </p>
@@ -118,6 +123,13 @@ export function TaxFields({ draft, set, errors }: FieldsProps) {
       )}
     </>
   );
+}
+
+/** A multiplier that is allowed this year but below the legal minimum of a later year: from then on the minimum applies */
+function RaisedMinimum({ multiplier }: { multiplier: string }) {
+  const value = multiplier.trim();
+  const raised = /^\d+$/.test(value) ? upcomingMinimum(Number(value), thisYear()) : null;
+  return raised ? <p className="f-hint">{t('tax.multiplierRaised', { year: raised.year, min: raised.percent })}</p> : null;
 }
 
 export function BankFields({ draft, set, errors }: FieldsProps) {

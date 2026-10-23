@@ -7,6 +7,7 @@ import { err, ok, type Result } from '../data/result';
 import { ACCOUNT_LIMITS, type BankDetails } from './bankAccount';
 import { Checker, DEFAULT_COUNTRY, TEXT_LIMITS, type Address, type ContactDetails, type FieldError } from './check';
 import { patternProblem, DEFAULT_INVOICE_PATTERN } from './numbering';
+import { minMultiplierPercent } from './tax/tradeTax';
 import { isValidGermanVatId, isValidTaxNumber, normalizeVatId } from './taxIds';
 
 /** Ist-Versteuerung (cash, § 20 UStG) or Soll-Versteuerung (accrual, § 16 UStG) */
@@ -73,8 +74,6 @@ export const LIMITS = {
   footer: 1000,
 } as const;
 
-/** Lowest multiplier a municipality may set (§ 16 Abs. 4 Satz 2 GewStG) */
-export const MIN_TRADE_TAX_MULTIPLIER_PERCENT = 200;
 /** Upper bound of the input field (four digits); not a legal limit */
 export const MAX_TRADE_TAX_MULTIPLIER_PERCENT = 9999;
 
@@ -218,7 +217,8 @@ function readMaster(d: CompanyDraft): Read<SectionValues['master']> {
   return c.done(() => ({ name, owner, address, contact: { email, phone } }));
 }
 
-function readTax(d: CompanyDraft): Read<SectionValues['tax']> {
+/** The multiplier must reach the legal minimum of `year`, the current year */
+function readTax(d: CompanyDraft, year: number): Read<SectionValues['tax']> {
   const c = new Checker<DraftField>();
   const taxNumber = d.taxNumber.trim();
   const vatId = normalizeVatId(d.vatId);
@@ -236,7 +236,7 @@ function readTax(d: CompanyDraft): Read<SectionValues['tax']> {
   if (kind === 'trade') {
     municipality = c.text('municipality', d.municipality, LIMITS.municipality);
     multiplier = Number(d.multiplier.trim());
-    if (!/^\d+$/.test(d.multiplier.trim()) || multiplier < MIN_TRADE_TAX_MULTIPLIER_PERCENT || multiplier > MAX_TRADE_TAX_MULTIPLIER_PERCENT) {
+    if (!/^\d+$/.test(d.multiplier.trim()) || multiplier < minMultiplierPercent(year) || multiplier > MAX_TRADE_TAX_MULTIPLIER_PERCENT) {
       c.add('multiplier', 'multiplier');
     }
   }
@@ -269,20 +269,23 @@ function readInvoice(d: CompanyDraft): Read<SectionValues['invoice']> {
   return c.done(() => ({ invoiceDefaults: { numberPattern, paymentTermDays, footer } }));
 }
 
-const READERS: { [S in Section]: (d: CompanyDraft) => Read<SectionValues[S]> } = {
+const READERS: { [S in Section]: (d: CompanyDraft, year: number) => Read<SectionValues[S]> } = {
   master: readMaster,
   tax: readTax,
   bank: readBank,
   invoice: readInvoice,
 };
 
-/** Checks one section of the draft; the values are returned only when every field of the section is valid. */
-export const readSection = <S extends Section>(section: S, draft: CompanyDraft): Read<SectionValues[S]> => READERS[section](draft);
+/**
+ * Checks one section of the draft; the values are returned only when every field of the section is valid. `year` is
+ * the current year: the legal minimum of the trade tax multiplier depends on it.
+ */
+export const readSection = <S extends Section>(section: S, draft: CompanyDraft, year: number): Read<SectionValues[S]> => READERS[section](draft, year);
 
 /** Checks all sections; the profile (without logo) and the first account are returned only when every section is valid. */
-export function readProfile(draft: CompanyDraft): Read<NewCompany> {
+export function readProfile(draft: CompanyDraft, year: number): Read<NewCompany> {
   const master = readMaster(draft);
-  const tax = readTax(draft);
+  const tax = readTax(draft, year);
   const bank = readBank(draft);
   const invoice = readInvoice(draft);
   if (master.ok && tax.ok && bank.ok && invoice.ok) return ok({ ...master.value, ...tax.value, ...bank.value, ...invoice.value });

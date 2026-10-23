@@ -123,6 +123,10 @@ const MESSAGES_SRC = {
     de: 'Den Hebesatz deiner Gemeinde zeigt die Karte der Statistischen Ämter; verbindlich ist die Hebesatzsatzung der Gemeinde.',
     en: 'The map of the statistical offices shows the multiplier of your municipality; the municipality’s own statute is binding.',
   },
+  'tax.multiplierRaised': {
+    de: 'Ab {year} gilt ein Hebesatz von mindestens {min} % (§ 16 Abs. 4 GewStG); ein niedrigerer Hebesatz der Gemeinde wird dann durch {min} % ersetzt.',
+    en: 'From {year} the multiplier is at least {min} % (§ 16 Abs. 4 GewStG); a lower multiplier of the municipality is then replaced by {min} %.',
+  },
   'tax.multiplierSourceLink': { de: 'Hebesätze der Gemeinden', en: 'Multipliers of the municipalities' },
 
   'bank.holder': { de: 'Kontoinhaber/in', en: 'Account holder' },

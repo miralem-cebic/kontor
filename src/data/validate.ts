@@ -11,7 +11,6 @@ import {
   LOGO_EXTENSION,
   LOGO_FILE,
   MAX_TRADE_TAX_MULTIPLIER_PERCENT,
-  MIN_TRADE_TAX_MULTIPLIER_PERCENT,
   type BusinessType,
   type InvoiceDefaults,
   type LogoRef,
@@ -31,6 +30,7 @@ import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
+import { LOWEST_MIN_MULTIPLIER_PERCENT } from '../domain/tax/tradeTax';
 import { UNITS, type UnitCode } from '../domain/units';
 import { isVatRate } from '../domain/vat';
 import { observeStamp } from './clock';
@@ -206,7 +206,8 @@ const business = variant<BusinessType>({
   trade: objectOf({
     kind: exactly('trade'),
     municipality: text(LIMITS.municipality),
-    multiplierPercent: int(MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_TRADE_TAX_MULTIPLIER_PERCENT),
+    // the lowest minimum of all years: a multiplier entered when it was allowed is still read in a later year
+    multiplierPercent: int(LOWEST_MIN_MULTIPLIER_PERCENT, MAX_TRADE_TAX_MULTIPLIER_PERCENT),
   }),
 });
 

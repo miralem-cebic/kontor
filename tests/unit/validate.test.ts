@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeContact, makeItem, makeQuote } from '../../src/data/schema';
+import { makeContact, makeInvoice, makeItem, makeQuote } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
-import { sampleCompany, sampleContact, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
 const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(sampleCompany())), ...over }) as Record<string, unknown>;
@@ -165,7 +165,8 @@ describe('document file validation', () => {
   });
 
   it.each([
-    ['kind', 'invoice'],
+    ['kind', 'order'],
+    ['kind', '__proto__'],
     ['customerId', '__proto__'],
     ['customerId', null],
     ['date', '22.10.2026'],
@@ -196,5 +197,50 @@ describe('document file validation', () => {
   it('rejects a line whose amount is too large, so that every total stays exact', () => {
     expect(() => readDocument(quoteFile(withLine({ quantity: 2000, unitPrice: 99_999_999_999 })))).toThrow(InvalidFileError);
     expect(readDocument(quoteFile(withLine({ quantity: -1000, unitPrice: 99_999_999_999 }))).lines[0]?.quantity).toBe(-1000);
+  });
+});
+
+describe('invoice file validation', () => {
+  const invoiceFile = (over: Record<string, unknown> = {}) =>
+    ({
+      ...JSON.parse(JSON.stringify(makeInvoice(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), brandId<'AccountId'>('account-1'), sampleInvoice(), null))),
+      ...over,
+    }) as Record<string, unknown>;
+  const readDocument = (raw: unknown) => migrate('document', raw);
+
+  it('accepts a file written by the app: a date or a period of service, made from a quote or not', () => {
+    const raw = invoiceFile();
+    expect(readDocument(raw)).toEqual(raw);
+    const fromQuote = invoiceFile({ service: { kind: 'date', date: '2026-10-31' }, quoteId: '7c9e6679-7425-40de-944b-e07fc1f90ae7', taxTreatment: 'reverseCharge' });
+    expect(readDocument(fromQuote)).toEqual(fromQuote);
+  });
+
+  it('accepts a period that ends before it starts (reported by the form, not here)', () => {
+    expect(readDocument(invoiceFile({ service: { kind: 'period', start: '2026-10-31', end: '2026-10-01' } })).service).toEqual({ kind: 'period', start: '2026-10-31', end: '2026-10-01' });
+  });
+
+  it.each([
+    ['accountId', '__proto__'],
+    ['accountId', undefined],
+    ['quoteId', '../x'],
+    ['quoteId', undefined],
+    ['service', { kind: 'date' }],
+    ['service', { kind: 'period', start: '2026-10-01' }],
+    ['service', { kind: 'month', date: '2026-10-01' }],
+    ['service', '2026-10-31'],
+    ['paymentTermDays', -1],
+    ['paymentTermDays', 366],
+    ['paymentTermDays', '14'],
+    ['taxTreatment', 'exempt'],
+    ['orderReference', 'x'.repeat(101)],
+    ['leitwegId', 'x'.repeat(47)],
+    ['fieldUpdatedAt', { service: 'now' }],
+  ])('rejects %s = %j', (field, value) => {
+    expect(() => readDocument(invoiceFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
+
+  it('keeps the merge stamps of invoice fields only', () => {
+    const at = '2026-10-31T10:00:00.000Z';
+    expect(readDocument(invoiceFile({ fieldUpdatedAt: { service: at, validUntil: at, quoteId: at } })).fieldUpdatedAt).toEqual({ service: at });
   });
 });

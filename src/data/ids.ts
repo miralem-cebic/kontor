@@ -10,7 +10,7 @@ export type ContactId = Brand<string, 'ContactId'>;
 /** A bank account of a company; unique within the company */
 export type AccountId = Brand<string, 'AccountId'>;
 export type ItemId = Brand<string, 'ItemId'>;
-/** A quote (later also an invoice) */
+/** A quote or an invoice */
 export type DocumentId = Brand<string, 'DocumentId'>;
 
 /** Adds a brand to a string that has been checked by the caller. The one place where the brand is added. */

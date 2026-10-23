@@ -2,20 +2,21 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
-import { byContactName } from '../../domain/contact';
-import { isoDateOf, toLocalDate } from '../../domain/dates';
+import { isoDateOf } from '../../domain/dates';
 import { documentTotals, draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
 import { formatCents } from '../../domain/money';
 import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, QUOTE_LIMITS, quoteMatches, readQuote, type QuoteDraft, type QuoteField, type QuoteFieldError } from '../../domain/quote';
 import type { DocumentId } from '../../data/ids';
-import type { ContactFile, QuoteFile } from '../../data/types';
-import { currentLang, fmt, t, type MessageKey } from '../../i18n';
+import { isQuote, type QuoteFile } from '../../data/types';
+import { currentLang, t, type MessageKey } from '../../i18n';
 import { fieldError, problemText } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
+import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 
 // Quotes: a searchable list and a form for a new or an existing quote. The form edits a draft; only "Save" puts
-// the checked quote into the store (and the persister writes it). Quotes are drafts until numbering and the PDF come.
+// the checked quote into the store (and the persister writes it). Quotes are drafts until numbering and the PDF come;
+// a saved quote can become a new invoice.
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: DocumentId };
 type ValidityFilter = 'all' | 'valid' | 'expired';
@@ -26,29 +27,28 @@ const VALIDITY_FILTERS: { value: ValidityFilter; label: MessageKey }[] = [
   { value: 'expired', label: 'quotes.filterExpired' },
 ];
 
-const useSmallBusiness = () => useApp((s) => s.company?.tax.vat.kind === 'smallBusiness');
-const formatDate = (iso: string) => fmt(toLocalDate(iso), 'P');
-
-export function QuotesView() {
+/** `onCreateInvoice` opens a new invoice for a saved quote */
+export function QuotesView({ onCreateInvoice }: { onCreateInvoice: (quoteId: DocumentId) => void }) {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const back = () => setMode({ kind: 'list' });
   switch (mode.kind) {
     case 'list':
       return <QuoteList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} />;
     case 'new':
-      return <QuoteEditor quote={null} onDone={back} />;
+      return <QuoteEditor quote={null} onDone={back} onCreateInvoice={onCreateInvoice} />;
     case 'edit':
-      return <EditExisting id={mode.id} onDone={back} />;
+      return <EditExisting id={mode.id} onDone={back} onCreateInvoice={onCreateInvoice} />;
   }
 }
 
-function EditExisting({ id, onDone }: { id: DocumentId; onDone: () => void }) {
-  const quote = useApp((s) => s.documents.get(id));
+function EditExisting({ id, onDone, onCreateInvoice }: { id: DocumentId; onDone: () => void; onCreateInvoice: (quoteId: DocumentId) => void }) {
+  const found = useApp((s) => s.documents.get(id));
+  const quote = found && isQuote(found) && !found.deletedAt ? found : null;
   // deleted or gone (for example merged away from another device): back to the list
   useEffect(() => {
-    if (!quote || quote.deletedAt) onDone();
+    if (!quote) onDone();
   }, [quote, onDone]);
-  return quote && !quote.deletedAt ? <QuoteEditor key={id} quote={quote} onDone={onDone} /> : null;
+  return quote ? <QuoteEditor key={id} quote={quote} onDone={onDone} onCreateInvoice={onCreateInvoice} /> : null;
 }
 
 /* ---------- List ---------- */
@@ -60,7 +60,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
   const [query, setQuery] = useState('');
   const [validity, setValidity] = useState<ValidityFilter>('all');
   const searchId = useId();
-  const active = useMemo(() => [...documents.values()].filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
+  const active = useMemo(() => [...documents.values()].filter(isQuote).filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
   const customerName = (q: QuoteFile) => contacts.get(q.customerId)?.name ?? '';
   const today = isoDateOf(new Date());
   const inFilter = (q: QuoteFile, f: ValidityFilter) => f === 'all' || isExpired(q, today) === (f === 'expired');
@@ -107,12 +107,12 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               <caption className="visually-hidden">{t('quotes.count', { n: shown.length })}</caption>
               <thead>
                 <tr>
-                  <th scope="col">{t('quotes.colDate')}</th>
-                  <th scope="col">{t('quotes.colCustomer')}</th>
-                  <th scope="col">{t('quotes.colSubject')}</th>
+                  <th scope="col">{t('documents.colDate')}</th>
+                  <th scope="col">{t('documents.colCustomer')}</th>
+                  <th scope="col">{t('documents.colSubject')}</th>
                   <th scope="col">{t('quotes.colValidUntil')}</th>
                   <th scope="col" className="num">
-                    {t('quotes.colTotal')}
+                    {t('documents.colTotal')}
                   </th>
                 </tr>
               </thead>
@@ -125,7 +125,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
                         <span>{customerName(q)}</span>
                       </button>
                     </td>
-                    <td>{q.subject || <span className="muted">{t('quotes.noSubject')}</span>}</td>
+                    <td>{q.subject || <span className="muted">{t('documents.noSubject')}</span>}</td>
                     <td>
                       {formatDate(q.validUntil)} {isExpired(q, today) && <span className="badge muted-badge">{t('quotes.expired')}</span>}
                     </td>
@@ -143,13 +143,13 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
 
 /* ---------- Form ---------- */
 
-/** The active customers, and the quote's customer even when it was deleted or is no customer any more */
-function customerOptions(contacts: ReadonlyMap<string, ContactFile>, current: string): { value: string; label: string }[] {
-  const list = [...contacts.values()].filter((c) => (c.roles.customer && !c.deletedAt) || c.id === current).sort(byContactName);
-  return list.map((c) => ({ value: c.id, label: c.deletedAt ? t('quotes.customerDeleted', { name: c.name }) : c.name }));
+interface EditorProps {
+  quote: QuoteFile | null;
+  onDone: () => void;
+  onCreateInvoice: (quoteId: DocumentId) => void;
 }
 
-function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () => void }) {
+function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
   const contacts = useApp((s) => s.contacts);
   const smallBusiness = useSmallBusiness();
   const lang = currentLang();
@@ -176,27 +176,36 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
   const sections: JumpSection[] = [
     { id: 'quote-sec-head', title: t('quotes.sectionQuote'), icon: 'quote' },
     { id: 'quote-sec-lines', title: t('lines.title'), icon: 'invoice' },
-    { id: 'quote-sec-closing', title: t('quotes.closingText'), icon: 'text' },
+    { id: 'quote-sec-closing', title: t('documents.closingText'), icon: 'text' },
   ];
   const options = customerOptions(contacts, draft.customerId);
   const customerName = (id: string) => [...contacts.values()].find((c) => c.id === id)?.name ?? '';
 
-  const save = () => {
+  /** Checks the draft and puts it into the store; returns the quote's ID and its customer's name, or null on errors */
+  const store = (): { id: DocumentId; customerName: string } | null => {
     const r = readQuote(draft, lang, smallBusiness);
     const customer = r.ok ? [...contacts.values()].find((c) => c.id === r.value.customerId) : undefined;
     if (!r.ok || !customer) {
       setChecked(true);
       setErrors(r.ok ? [{ field: 'customerId', problem: 'required' }] : r.error);
-      requestAnimationFrame(() => {
-        const el = document.querySelector('.quote-form [aria-invalid="true"]');
-        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) el.focus();
-      });
-      return;
+      focusFirstError('quote-form');
+      return null;
     }
     if (quote) updateQuote(quote.id, customer.id, r.value.content);
-    else addQuote(customer.id, r.value.content);
-    showToast(t('quotes.saved', { name: customer.name }));
+    return { id: quote ? quote.id : addQuote(customer.id, r.value.content), customerName: customer.name };
+  };
+
+  const save = () => {
+    const saved = store();
+    if (!saved) return;
+    showToast(t('quotes.saved', { name: saved.customerName }));
     onDone();
+  };
+
+  // the invoice is made from the quote as saved, so changes not saved yet are saved first
+  const createInvoice = () => {
+    const saved = store();
+    if (saved) onCreateInvoice(saved.id);
   };
 
   const remove = () => {
@@ -211,7 +220,7 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
   return (
     <div className="page with-panel">
       <header className="top">
-        <button type="button" className="icon-btn" onClick={onDone} aria-label={t('quotes.backToList')}>
+        <button type="button" className="icon-btn" onClick={onDone} aria-label={t('documents.backToList')}>
           <Icon n="chevL" />
         </button>
         <h1 ref={heading} tabIndex={-1}>
@@ -231,10 +240,10 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
           <section className="card" id="quote-sec-head" aria-labelledby="quote-head">
             <h2 id="quote-head" tabIndex={-1}>{t('quotes.sectionQuote')}</h2>
             <SelectField
-              label={t('quotes.customer')}
-              hint={options.length === 0 ? t('quotes.noCustomers') : undefined}
+              label={t('documents.customer')}
+              hint={options.length === 0 ? t('documents.noCustomers') : undefined}
               value={draft.customerId}
-              options={[{ value: '', label: t('quotes.customerChoose') }, ...options]}
+              options={[{ value: '', label: t('documents.customerChoose') }, ...options]}
               onChange={(customerId) => set({ customerId })}
               error={e('customerId')}
               required
@@ -243,37 +252,43 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
               <TextField className="w-date" type="date" label={t('quotes.date')} value={draft.date} onChange={(date) => set({ date })} error={e('date')} required />
               <TextField className="w-date" type="date" label={t('quotes.validUntil')} value={draft.validUntil} onChange={(validUntil) => set({ validUntil })} error={e('validUntil')} required />
             </Row>
-            <TextField label={t('quotes.subject')} hint={t('quotes.subjectHint')} value={draft.subject} onChange={(subject) => set({ subject })} error={e('subject')} maxLength={QUOTE_LIMITS.subject} />
-            <TextArea label={t('quotes.introText')} hint={t('quotes.introTextHint')} value={draft.introText} onChange={(introText) => set({ introText })} error={e('introText')} maxLength={QUOTE_LIMITS.text} />
+            <TextField label={t('documents.subject')} hint={t('documents.subjectHint')} value={draft.subject} onChange={(subject) => set({ subject })} error={e('subject')} maxLength={QUOTE_LIMITS.subject} />
+            <TextArea label={t('documents.introText')} hint={t('documents.introTextHint')} value={draft.introText} onChange={(introText) => set({ introText })} error={e('introText')} maxLength={QUOTE_LIMITS.text} />
           </section>
 
           <section className="card" id="quote-sec-lines" aria-labelledby="quote-lines">
             <h2 id="quote-lines" tabIndex={-1}>
               {t('lines.title')}
             </h2>
-            <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={lineError} smallBusiness={smallBusiness} />
-            <Totals totals={totals} smallBusiness={smallBusiness} />
+            <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={lineError} withoutVat={smallBusiness} />
+            <Totals totals={totals} note={smallBusiness ? 'smallBusiness' : null} />
           </section>
 
           <section className="card" id="quote-sec-closing" aria-labelledby="quote-closing">
-            <h2 id="quote-closing" tabIndex={-1}>{t('quotes.closingText')}</h2>
-            <TextArea label={t('quotes.closingText')} hint={t('quotes.closingTextHint')} value={draft.closingText} onChange={(closingText) => set({ closingText })} error={e('closingText')} maxLength={QUOTE_LIMITS.text} />
+            <h2 id="quote-closing" tabIndex={-1}>{t('documents.closingText')}</h2>
+            <TextArea label={t('documents.closingText')} hint={t('documents.closingTextHint')} value={draft.closingText} onChange={(closingText) => set({ closingText })} error={e('closingText')} maxLength={QUOTE_LIMITS.text} />
           </section>
 
           <div className="card-actions">
             <button type="submit" className="btn primary">
-              {t('quotes.save')}
+              {t('documents.save')}
             </button>
             <button type="button" className="btn" onClick={onDone}>
               {t('common.cancel')}
             </button>
+            {quote && (
+              <button type="button" className="btn" onClick={createInvoice}>
+                <Icon n="invoice" s={14} />
+                {t('quotes.createInvoice')}
+              </button>
+            )}
             <span className="sp" />
             {quote &&
               (confirmDelete ? (
                 <div className="confirm" role="group" aria-label={t('quotes.deleteConfirm')}>
                   <span>{t('quotes.deleteConfirm')}</span>
                   <button type="button" className="btn danger" onClick={remove} autoFocus>
-                    {t('quotes.delete')}
+                    {t('documents.delete')}
                   </button>
                   <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
                     {t('common.cancel')}
@@ -281,7 +296,7 @@ function QuoteEditor({ quote, onDone }: { quote: QuoteFile | null; onDone: () =>
                 </div>
               ) : (
                 <button type="button" className="btn ghost danger-text" onClick={() => setConfirmDelete(true)}>
-                  {t('quotes.delete')}
+                  {t('documents.delete')}
                 </button>
               ))}
           </div>

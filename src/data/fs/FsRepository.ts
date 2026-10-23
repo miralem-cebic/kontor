@@ -11,7 +11,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   company.json
 //   contacts/<id>.json         one file per customer or supplier
 //   items/<id>.json            one file per item or service of the catalogue
-//   documents/<id>.json        one file per quote
+//   documents/<id>.json        one file per quote or invoice
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
@@ -133,8 +133,14 @@ export class FsRepository implements Repository {
     });
   }
 
+  /** A file of the same ID but another kind (a quote where an invoice is saved) is not merged: the save stops. */
   saveDocument(document: DocumentFile) {
-    return attempt(() => this.saveRecord(DIRS.documents, document, (raw) => migrate('document', raw), mergeDocument));
+    const read = (raw: unknown) => {
+      const remote = migrate('document', raw);
+      if (remote.kind !== document.kind) throw new InvalidFileError(`documents/${document.id}.json holds a ${remote.kind}, not a ${document.kind}`);
+      return remote;
+    };
+    return attempt(() => this.saveRecord(DIRS.documents, document, read, mergeDocument));
   }
 
   /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */

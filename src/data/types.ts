@@ -3,6 +3,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
+import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
 import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId } from './ids';
@@ -104,7 +105,7 @@ export interface ItemFile extends ItemProfile {
 }
 
 /** Quote fields merged one by one. The lines are one field: the later change of the lines wins as a whole. */
-const DOCUMENT_MERGEABLE: Record<keyof QuoteContent | 'customerId' | 'deletedAt', true> = {
+const QUOTE_MERGEABLE: Record<QuoteMergeableField, true> = {
   customerId: true,
   date: true,
   validUntil: true,
@@ -114,8 +115,8 @@ const DOCUMENT_MERGEABLE: Record<keyof QuoteContent | 'customerId' | 'deletedAt'
   lines: true,
   deletedAt: true,
 };
-export const DOCUMENT_MERGEABLE_FIELDS = keysOf(DOCUMENT_MERGEABLE);
-export type DocumentMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
+export const QUOTE_MERGEABLE_FIELDS = keysOf(QUOTE_MERGEABLE);
+export type QuoteMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
 
 /** documents/<id>.json with `kind: 'quote'`: a quote, a draft for now */
 export interface QuoteFile extends QuoteContent {
@@ -127,11 +128,50 @@ export interface QuoteFile extends QuoteContent {
   createdAt: string;
   /** Soft delete: a deleted quote stays in its file and is hidden in the app */
   deletedAt: string | null;
-  fieldUpdatedAt: Partial<Record<DocumentMergeableField, string>>;
+  fieldUpdatedAt: Partial<Record<QuoteMergeableField, string>>;
 }
 
-/** documents/<id>.json; invoices will join the quotes here */
-export type DocumentFile = QuoteFile;
+/** Invoice fields merged one by one; like a quote, the lines are one field. The quote it came from does not change. */
+const INVOICE_MERGEABLE: Record<InvoiceMergeableField, true> = {
+  customerId: true,
+  accountId: true,
+  date: true,
+  service: true,
+  paymentTermDays: true,
+  taxTreatment: true,
+  orderReference: true,
+  leitwegId: true,
+  subject: true,
+  introText: true,
+  closingText: true,
+  lines: true,
+  deletedAt: true,
+};
+export const INVOICE_MERGEABLE_FIELDS = keysOf(INVOICE_MERGEABLE);
+export type InvoiceMergeableField = keyof InvoiceContent | 'customerId' | 'accountId' | 'deletedAt';
+
+/** documents/<id>.json with `kind: 'invoice'`: an invoice, a draft until it is issued (ADR 0004) */
+export interface InvoiceFile extends InvoiceContent {
+  schemaVersion: number;
+  id: DocumentId;
+  kind: 'invoice';
+  /** The customer; like a quote, the draft shows the contact's current data */
+  customerId: ContactId;
+  /** The account of the company the invoice is paid to; it may have been removed since */
+  accountId: AccountId;
+  /** The quote the invoice was made from; null when it was written without one */
+  quoteId: DocumentId | null;
+  createdAt: string;
+  /** Soft delete: a deleted draft stays in its file and is hidden in the app */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<InvoiceMergeableField, string>>;
+}
+
+/** documents/<id>.json: quotes and invoices, told apart by `kind` */
+export type DocumentFile = QuoteFile | InvoiceFile;
+
+export const isQuote = (d: DocumentFile): d is QuoteFile => d.kind === 'quote';
+export const isInvoice = (d: DocumentFile): d is InvoiceFile => d.kind === 'invoice';
 
 /** What a backup holds */
 export interface BackupSnapshot {

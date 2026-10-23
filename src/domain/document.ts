@@ -1,4 +1,4 @@
-// Lines and totals of quotes, and later of invoices. A line is copied from the catalogue or typed freely; it keeps
+// Lines and totals of quotes and invoices. A line is copied from the catalogue or typed freely; it keeps
 // its own values, so a later change of the catalogue does not change it. The line editor works on drafts of plain
 // strings; `readLines` checks them.
 
@@ -50,9 +50,12 @@ export function lineNetInRange(unitPrice: Cents, qty: Quantity): boolean {
 
 export const lineTotal = (l: DocumentLine): Cents => lineNet(l.unitPrice, l.quantity);
 
-/** Net, VAT per rate and gross of the lines, rounded per document (ADR 0003). A small business charges no VAT. */
-export const documentTotals = (lines: readonly DocumentLine[], smallBusiness: boolean): TaxTotals =>
-  taxTotals(lines.map((l) => ({ net: lineTotal(l), rate: smallBusiness ? ZERO_RATE : l.vatRate })));
+/**
+ * Net, VAT per rate and gross of the lines, rounded per document (ADR 0003). `withoutVat`: the document charges no
+ * VAT (a small business, reverse charge, a tax-free supply), so every line counts at 0 %.
+ */
+export const documentTotals = (lines: readonly DocumentLine[], withoutVat: boolean): TaxTotals =>
+  taxTotals(lines.map((l) => ({ net: lineTotal(l), rate: withoutVat ? ZERO_RATE : l.vatRate })));
 
 /**
  * Do the lines of one VAT rate add up to less than zero? A deduction (negative quantity) may lower the lines of its
@@ -106,13 +109,13 @@ export const draftFromLine = (key: string, l: DocumentLine, locale: MoneyLocale)
 
 /**
  * Checks the lines of a document draft; errors name the line and its field ("line.2.unitPrice"). Once every line
- * can be read, their sums must not be negative (`hasNegativeRate`); a small business sums all lines together.
+ * can be read, their sums must not be negative (`hasNegativeRate`); without VAT all lines are summed together.
  */
 export function readLines<F extends string>(
   c: Checker<F | LineFieldPath | 'lines'>,
   drafts: readonly LineDraft[],
   locale: MoneyLocale,
-  smallBusiness: boolean,
+  withoutVat: boolean,
 ): DocumentLine[] {
   if (drafts.length > DOCUMENT_LIMITS.lines) c.add('lines', 'tooManyLines');
   const lines = drafts.map((d, i) => {
@@ -130,7 +133,7 @@ export function readLines<F extends string>(
     return line;
   });
   const readable = drafts.every((_, i) => c.passed(linePath(i, 'quantity')) && c.passed(linePath(i, 'unitPrice')));
-  if (readable && hasNegativeRate(documentTotals(lines, smallBusiness))) c.add('lines', 'negativeTotal');
+  if (readable && hasNegativeRate(documentTotals(lines, withoutVat))) c.add('lines', 'negativeTotal');
   return lines;
 }
 
@@ -143,10 +146,10 @@ export function draftLineNet(d: LineDraft, locale: MoneyLocale): Cents | null {
 }
 
 /** Totals of the draft lines that can be read already, for the editor */
-export function draftTotals(drafts: readonly LineDraft[], locale: MoneyLocale, smallBusiness: boolean): TaxTotals {
+export function draftTotals(drafts: readonly LineDraft[], locale: MoneyLocale, withoutVat: boolean): TaxTotals {
   const lines = drafts.flatMap((d) => {
     const net = draftLineNet(d, locale);
-    return net === null ? [] : [{ net, rate: smallBusiness ? ZERO_RATE : d.vatRate }];
+    return net === null ? [] : [{ net, rate: withoutVat ? ZERO_RATE : d.vatRate }];
   });
   return taxTotals(lines);
 }

@@ -1,7 +1,10 @@
 import type { SessionError } from '../app/session';
+import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
 import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
+import { formatIban } from '../domain/iban';
+import type { IssueProblem, TaxTreatment } from '../domain/invoice';
 import type { UnitCode } from '../domain/units';
 import { t, type MessageKey } from '../i18n';
 
@@ -34,6 +37,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   negativeTotal: 'problem.negativeTotal',
   date: 'problem.date',
   validUntil: 'problem.validUntil',
+  periodEnd: 'problem.periodEnd',
   'iban.format': 'problem.ibanFormat',
   'iban.country': 'problem.ibanCountry',
   'iban.length': 'problem.ibanLength',
@@ -95,3 +99,27 @@ const UNIT_KEY: Record<UnitCode, MessageKey> = {
 };
 
 export const unitText = (u: UnitCode): string => t(UNIT_KEY[u]);
+
+/** The name of an account for lists and choices: its own name, or its kind */
+export const accountName = (a: AccountDetails): string => a.name || t(a.kind === 'bank' ? 'accounts.kindBank' : 'accounts.kindPaypal');
+/** IBAN and holder of a bank account, or the PayPal address */
+export const accountDetail = (a: AccountDetails): string => (a.kind === 'bank' ? `${formatIban(a.iban)} · ${a.holder}` : a.email);
+
+const TAX_TREATMENT_KEY: Record<TaxTreatment, { label: MessageKey; hint: MessageKey }> = {
+  standard: { label: 'invoices.taxStandard', hint: 'invoices.taxStandardHint' },
+  reverseCharge: { label: 'invoices.taxReverseCharge', hint: 'invoices.taxReverseChargeHint' },
+  intraCommunitySupply: { label: 'invoices.taxIntraCommunity', hint: 'invoices.taxIntraCommunityHint' },
+};
+
+export const taxTreatmentText = (v: TaxTreatment): { label: string; hint: string } => ({ label: t(TAX_TREATMENT_KEY[v].label), hint: t(TAX_TREATMENT_KEY[v].hint) });
+
+const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
+  noCustomer: 'issue.noCustomer',
+  noLines: 'issue.noLines',
+  customerAddress: 'issue.customerAddress',
+  customerVatId: 'issue.customerVatId',
+  ownVatId: 'issue.ownVatId',
+  accountRemoved: 'issue.accountRemoved',
+};
+
+export const issueProblemText = (p: IssueProblem): string => t(ISSUE_PROBLEM_KEY[p]);

@@ -45,13 +45,13 @@ const severalAccounts: Migration = {
 /**
  * Version 1 is the first format; contacts were added in it as a new kind of file. Items and documents (quotes) were
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
- * format is the same.
+ * format is the same. Version 3 adds invoices as a kind of document; no existing file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts],
-  contact: [unchanged(1)],
-  item: [unchanged(1)],
-  document: [unchanged(1)],
+  company: [severalAccounts, unchanged(2)],
+  contact: [unchanged(1), unchanged(2)],
+  item: [unchanged(1), unchanged(2)],
+  document: [unchanged(1), unchanged(2)],
 };
 
 export class NewerSchemaError extends Error {

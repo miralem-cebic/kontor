@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeContact, makeItem, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeInvoice, makeItem, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import type { CompanyFile } from '../../src/data/types';
 import { cents } from '../../src/domain/money';
-import { sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -226,5 +226,40 @@ describe('documents in the folder', () => {
     const written = must(await repo.saveDocument(mine));
     expect(written.subject).toBe('Neu');
     expect(written.lines).toHaveLength(1);
+  });
+
+  it('saves and loads invoices next to quotes', async () => {
+    const quote = makeQuote(customer, sampleQuote());
+    const invoice = makeInvoice(customer, company.bank.defaultAccountId, sampleInvoice(), quote.id);
+    must(await repo.saveDocument(quote));
+    must(await repo.saveDocument(invoice));
+    const { documents, issues } = must(await new FsRepository(root.asHandle()).loadDocuments());
+    expect(issues).toEqual([]);
+    expect(documents.map((d) => d.kind).sort()).toEqual(['invoice', 'quote']);
+    expect(documents.find((d) => d.kind === 'invoice')).toEqual(invoice);
+    const dir = await root.getDirectoryHandle('documents');
+    expect(JSON.parse(await text(dir, `${invoice.id}.json`))).toMatchObject({ schemaVersion: SCHEMA_VERSION, kind: 'invoice', quoteId: quote.id, service: sampleInvoice().service });
+  });
+
+  it('merges an invoice changed on another device field by field', async () => {
+    const invoice = makeInvoice(customer, company.bank.defaultAccountId, sampleInvoice(), null);
+    must(await repo.saveDocument(invoice));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadDocuments()).documents;
+    must(await other.saveDocument({ ...theirs!, paymentTermDays: 30, fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, paymentTermDays: nowIso() } } as typeof invoice));
+    const service = { kind: 'date', date: '2026-10-15' } as const;
+    const written = must(await repo.saveDocument({ ...invoice, service, fieldUpdatedAt: { ...invoice.fieldUpdatedAt, service: nowIso() } }));
+    expect(written).toMatchObject({ kind: 'invoice', service, paymentTermDays: 30 });
+  });
+
+  it('never merges a quote with an invoice of the same ID: the save stops and the file stays', async () => {
+    const invoice = makeInvoice(customer, company.bank.defaultAccountId, sampleInvoice(), null);
+    must(await repo.saveDocument(invoice));
+    const dir = await root.getDirectoryHandle('documents');
+    const before = await text(dir, `${invoice.id}.json`);
+    const quote = { ...makeQuote(customer, sampleQuote()), id: invoice.id };
+    const r = await new FsRepository(root.asHandle()).saveDocument(quote);
+    expect(!r.ok && r.error.kind).toBe('invalid');
+    expect(await text(dir, `${invoice.id}.json`)).toBe(before);
   });
 });

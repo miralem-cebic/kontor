@@ -1,8 +1,9 @@
 import {
   CONTACT_MERGEABLE_FIELDS,
-  DOCUMENT_MERGEABLE_FIELDS,
+  INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
+  QUOTE_MERGEABLE_FIELDS,
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
@@ -37,6 +38,17 @@ export const mergeContact = (local: ContactFile, remote: ContactFile): ContactFi
 
 export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeFields(local, remote, ITEM_MERGEABLE_FIELDS);
 
-export const mergeDocument = (local: DocumentFile, remote: DocumentFile): DocumentFile => mergeFields(local, remote, DOCUMENT_MERGEABLE_FIELDS);
+/**
+ * Quotes and invoices have their own fields. A quote and an invoice are never the same record (the repository
+ * refuses to merge them, see FsRepository.saveDocument); should they meet here anyway, the local one is kept.
+ */
+export function mergeDocument(local: DocumentFile, remote: DocumentFile): DocumentFile {
+  switch (local.kind) {
+    case 'quote':
+      return remote.kind === 'quote' ? mergeFields(local, remote, QUOTE_MERGEABLE_FIELDS) : local;
+    case 'invoice':
+      return remote.kind === 'invoice' ? mergeFields(local, remote, INVOICE_MERGEABLE_FIELDS) : local;
+  }
+}
 
 export const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

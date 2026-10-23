@@ -4,9 +4,9 @@ import type { FieldError, FieldProblem } from '../domain/check';
 import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
-import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import type { IssueProblem, TaxTreatment } from '../domain/invoice';
 import type { UnitCode } from '../domain/units';
+import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import { t, type MessageKey } from '../i18n';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.

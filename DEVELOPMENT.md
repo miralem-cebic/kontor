@@ -50,6 +50,10 @@ src/
     vat.ts, units.ts           VAT rates (§ 12 UStG), EU member states; units as UN/ECE Rec. 20 codes (e-invoice BT-130)
     dates.ts                   Calendar days as ISO strings (YYYY-MM-DD), without time zones
     iban.ts, taxIds.ts         IBAN/BIC, Steuernummer, USt-IdNr. (check digit)
+    links.ts                   Which URLs may become a link (http: and https: only)
+    tax/params/<year>.ts       Values that depend on the tax year, each with its legal source; tax/params/index.ts
+                               picks the year (an unknown later year gets the last known one)
+    tax/tradeTax.ts            Trade tax: the minimum multiplier of a year
     numbering.ts               Invoice number patterns ("RE-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
     contact.ts                 Customers and suppliers: profile, form draft, checks, search
@@ -81,7 +85,8 @@ src/
   features/                    setup (assistant), company (shared form fields, summary), shell (frame, switcher),
                                quotes, invoices, documents (line editor, totals, customer choice), contacts (list and
                                form), items (catalogue), settings (with the bank accounts card), home, start
-  components/                  Form fields, icon, toast, error boundary, language select, side panel with jump marks
+  components/                  Form fields, icon, toast, error boundary, language select, side panel with jump marks,
+                               links to pages outside kontor
   lib/                         labels.ts (texts for error codes), sha256.ts
   styles/                      tokens.css, base.css, fonts.css, app.css
 ```

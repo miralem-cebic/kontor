@@ -7,7 +7,7 @@ import type { CompanyFile } from '../../data/types';
 import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
 import { showToast, updateCompany, useApp } from '../../store/appStore';
-import { InvoiceFields, LogoField, MasterFields, TaxFields, type FieldsProps } from '../company/CompanyFields';
+import { InvoiceFields, LogoField, MasterFields, TaxFields, thisYear, type FieldsProps } from '../company/CompanyFields';
 import { BankAccountsCard } from './BankAccountsCard';
 
 // Settings: the fields of the setup assistant, one section at a time. A side panel on the right lists the sections
@@ -122,13 +122,13 @@ function SectionCard({
     setDraft((d) => ({ ...d, ...patch }));
     setDirty(true);
     if (errors.length) {
-      const r = readSection(section, { ...draft, ...patch });
+      const r = readSection(section, { ...draft, ...patch }, thisYear());
       setErrors(r.ok ? [] : r.error);
     }
   };
 
   const save = () => {
-    const r = readSection(section, draft);
+    const r = readSection(section, draft, thisYear());
     if (!r.ok) {
       setErrors(r.error);
       return;

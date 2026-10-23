@@ -17,6 +17,9 @@ import {
 } from '../../src/domain/company';
 import { fcParams, sampleAccount, sampleDraft, sampleProfile } from './fixtures';
 
+/** The year the forms check against; the minimum trade tax multiplier depends on it */
+const YEAR = 2026;
+
 const problems = (r: ReturnType<typeof readSection>) => (r.ok ? [] : r.error.map((e) => `${e.field}:${e.problem}`));
 
 /** The draft of the setup assistant for a profile and its first account */
@@ -30,62 +33,67 @@ const draftOf = ({ account, ...profile }: NewCompany): CompanyDraft => ({
 describe('readSection', () => {
   it('an empty draft fails every section with "required"', () => {
     const d = emptyDraft();
-    expect(problems(readSection('master', d))).toEqual(expect.arrayContaining(['name:required', 'owner:required', 'street:required', 'postalCode:required', 'city:required', 'email:required']));
-    expect(problems(readSection('tax', d))).toEqual(['taxNumber:taxIdRequired', 'smallBusiness:required', 'businessKind:required']);
-    expect(problems(readSection('bank', d))).toEqual(['bankHolder:required', 'iban:required']);
+    expect(problems(readSection('master', d, YEAR))).toEqual(expect.arrayContaining(['name:required', 'owner:required', 'street:required', 'postalCode:required', 'city:required', 'email:required']));
+    expect(problems(readSection('tax', d, YEAR))).toEqual(['taxNumber:taxIdRequired', 'smallBusiness:required', 'businessKind:required']);
+    expect(problems(readSection('bank', d, YEAR))).toEqual(['bankHolder:required', 'iban:required']);
     // the invoice defaults are filled in from the start
-    expect(readSection('invoice', d).ok).toBe(true);
+    expect(readSection('invoice', d, YEAR).ok).toBe(true);
   });
 
   it('errors only name fields of their own section', () => {
     for (const s of SECTIONS) {
-      const r = readSection(s, emptyDraft());
+      const r = readSection(s, emptyDraft(), YEAR);
       if (!r.ok) for (const e of r.error) expect(SECTION_FIELDS[s]).toContain(e.field);
     }
   });
 
   it('checks formats', () => {
     const d = sampleDraft({ email: 'erika@', postalCode: '5066', phone: 'call me' });
-    expect(problems(readSection('master', d))).toEqual(['postalCode:postalCode', 'email:email', 'phone:phone']);
-    expect(problems(readSection('master', sampleDraft({ country: 'Deutschland' })))).toEqual(['country:country']);
-    expect(problems(readSection('master', sampleDraft({ name: 'x'.repeat(121) })))).toEqual(['name:tooLong']);
+    expect(problems(readSection('master', d, YEAR))).toEqual(['postalCode:postalCode', 'email:email', 'phone:phone']);
+    expect(problems(readSection('master', sampleDraft({ country: 'Deutschland' }), YEAR))).toEqual(['country:country']);
+    expect(problems(readSection('master', sampleDraft({ name: 'x'.repeat(121) }), YEAR))).toEqual(['name:tooLong']);
   });
 
   it('accepts a foreign postal code outside Germany', () => {
-    expect(readSection('master', sampleDraft({ country: 'at', postalCode: '1010' })).ok).toBe(true);
-    expect(readSection('master', sampleDraft({ country: 'NL', postalCode: '1012 AB' })).ok).toBe(true);
+    expect(readSection('master', sampleDraft({ country: 'at', postalCode: '1010' }), YEAR).ok).toBe(true);
+    expect(readSection('master', sampleDraft({ country: 'NL', postalCode: '1012 AB' }), YEAR).ok).toBe(true);
   });
 
   it('regular VAT needs method and period; the extension is dropped for yearly returns', () => {
     const regular = sampleDraft({ smallBusiness: false });
-    expect(problems(readSection('tax', regular))).toEqual(['vatMethod:required', 'vatPeriod:required']);
-    const yearly = readSection('tax', { ...regular, vatMethod: 'cash', vatPeriod: 'yearly', permanentExtension: true });
+    expect(problems(readSection('tax', regular, YEAR))).toEqual(['vatMethod:required', 'vatPeriod:required']);
+    const yearly = readSection('tax', { ...regular, vatMethod: 'cash', vatPeriod: 'yearly', permanentExtension: true }, YEAR);
     expect(yearly.ok && yearly.value.tax.vat).toEqual({ kind: 'regular', method: 'cash', period: 'yearly', permanentExtension: false });
   });
 
-  it('a trade needs municipality and a multiplier of at least 200 %', () => {
+  it('a trade needs municipality and a multiplier of at least the minimum of the year', () => {
     const trade = sampleDraft({ businessKind: 'trade' });
-    expect(problems(readSection('tax', trade))).toEqual(['municipality:required', 'multiplier:multiplier']);
-    expect(problems(readSection('tax', { ...trade, municipality: 'Köln', multiplier: '199' }))).toEqual(['multiplier:multiplier']);
-    expect(problems(readSection('tax', { ...trade, municipality: 'Köln', multiplier: '4.5' }))).toEqual(['multiplier:multiplier']);
-    const ok = readSection('tax', { ...trade, municipality: 'Köln', multiplier: '475' });
+    expect(problems(readSection('tax', trade, YEAR))).toEqual(['municipality:required', 'multiplier:multiplier']);
+    expect(problems(readSection('tax', { ...trade, municipality: 'Köln', multiplier: '199' }, YEAR))).toEqual(['multiplier:multiplier']);
+    expect(problems(readSection('tax', { ...trade, municipality: 'Köln', multiplier: '4.5' }, YEAR))).toEqual(['multiplier:multiplier']);
+    const ok = readSection('tax', { ...trade, municipality: 'Köln', multiplier: '475' }, YEAR);
     expect(ok.ok && ok.value.tax.business).toEqual({ kind: 'trade', municipality: 'Köln', multiplierPercent: 475 });
+    // 200 % up to 2026, 280 % from 2027 (§ 16 Abs. 4 Satz 2 GewStG)
+    const low = { ...trade, municipality: 'Neuberg', multiplier: '250' };
+    expect(readSection('tax', low, 2026).ok).toBe(true);
+    expect(problems(readSection('tax', low, 2027))).toEqual(['multiplier:multiplier']);
+    expect(readSection('tax', { ...low, multiplier: '280' }, 2027).ok).toBe(true);
   });
 
   it('a VAT ID alone is enough, and it is checked', () => {
-    expect(readSection('tax', sampleDraft({ taxNumber: '', vatId: 'de136695976' })).ok).toBe(true);
-    expect(problems(readSection('tax', sampleDraft({ vatId: 'DE136695977' })))).toEqual(['vatId:vatId']);
+    expect(readSection('tax', sampleDraft({ taxNumber: '', vatId: 'de136695976' }), YEAR).ok).toBe(true);
+    expect(problems(readSection('tax', sampleDraft({ vatId: 'DE136695977' }), YEAR))).toEqual(['vatId:vatId']);
   });
 
   it('reports the IBAN problem and normalizes valid values', () => {
-    expect(problems(readSection('bank', sampleDraft({ iban: 'DE89 3704 0044 0532 0130 01' })))).toEqual(['iban:iban.checksum']);
-    const r = readSection('bank', sampleDraft({ bic: 'cobadeffxxx' }));
+    expect(problems(readSection('bank', sampleDraft({ iban: 'DE89 3704 0044 0532 0130 01' }), YEAR))).toEqual(['iban:iban.checksum']);
+    const r = readSection('bank', sampleDraft({ bic: 'cobadeffxxx' }), YEAR);
     expect(r.ok && r.value.account).toEqual({ kind: 'bank', name: '', holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX' });
   });
 
   it('checks the number pattern and the payment term', () => {
-    expect(problems(readSection('invoice', sampleDraft({ numberPattern: 'RE/{NNNN}', paymentTermDays: '366' })))).toEqual(['numberPattern:pattern.invalidCharacter', 'paymentTermDays:paymentTerm']);
-    expect(problems(readSection('invoice', sampleDraft({ paymentTermDays: '-1' })))).toEqual(['paymentTermDays:paymentTerm']);
+    expect(problems(readSection('invoice', sampleDraft({ numberPattern: 'RE/{NNNN}', paymentTermDays: '366' }), YEAR))).toEqual(['numberPattern:pattern.invalidCharacter', 'paymentTermDays:paymentTerm']);
+    expect(problems(readSection('invoice', sampleDraft({ paymentTermDays: '-1' }), YEAR))).toEqual(['paymentTermDays:paymentTerm']);
   });
 });
 
@@ -93,7 +101,7 @@ describe('draft ↔ profile', () => {
   it('a profile and its first account survive the round trip through the draft', () => {
     const { logo: _logo, ...profile } = sampleProfile();
     const company: NewCompany = { ...profile, account: sampleAccount({ name: '' }) };
-    expect(readProfile(draftOf(company))).toEqual({ ok: true, value: company });
+    expect(readProfile(draftOf(company), YEAR)).toEqual({ ok: true, value: company });
   });
 
   it('the draft of a profile leaves the bank fields empty: the settings edit accounts on their own', () => {
@@ -111,9 +119,9 @@ describe('draft ↔ profile', () => {
           smallBusiness: fc.boolean(),
         }),
         (over) => {
-          const first = readProfile(sampleDraft({ ...over, vatMethod: 'accrual', vatPeriod: 'monthly' }));
+          const first = readProfile(sampleDraft({ ...over, vatMethod: 'accrual', vatPeriod: 'monthly' }), YEAR);
           if (!first.ok) return false;
-          const second = readProfile(draftOf(first.value));
+          const second = readProfile(draftOf(first.value), YEAR);
           return second.ok && JSON.stringify(second.value) === JSON.stringify(first.value);
         },
       ),

@@ -48,9 +48,15 @@ test('the setup assistant checks each step and writes the company folder', async
   await page.getByRole('radio', { name: 'Gewerbe' }).check();
   await page.getByRole('textbox', { name: 'Gemeinde', exact: true }).fill('Köln');
   await page.getByLabel('Hebesatz in %').fill('150');
+  // the multipliers of all municipalities are linked, opened in a new window
+  const source = page.getByRole('link', { name: 'Hebesätze der Gemeinden (öffnet in einem neuen Fenster)' });
+  await expect(source).toHaveAttribute('href', 'https://www.statistikportal.de/de/karte-hebesaetze');
+  await expect(source).toHaveAttribute('target', '_blank');
+  await expect(source).toHaveAttribute('rel', 'noopener noreferrer');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Keine gültige deutsche USt-IdNr.')).toBeVisible();
-  await expect(page.getByText('Bitte eine ganze Zahl ab 200 eingeben.')).toBeVisible();
+  // the minimum depends on the year, see the test below
+  await expect(page.getByText(/^Bitte eine ganze Zahl ab \d+ eingeben\.$/)).toBeVisible();
   await expect(page.getByLabel('USt-IdNr.')).toBeFocused();
   await page.getByLabel('USt-IdNr.').fill('DE 136 695 976');
   await page.getByLabel('Hebesatz in %').fill('475');
@@ -150,5 +156,46 @@ test('a folder that is not empty gets a subfolder named after the company', asyn
   // unsafe characters in the folder name are replaced
   expect(Object.keys(files).sort()).toEqual(expect.arrayContaining(['Dokumente/notes.txt', 'Dokumente/Beta_ Büro_Web/company.json']));
   expect(files['Dokumente/notes.txt']).toBe('hello');
+  expect(errors).toEqual([]);
+});
+
+test('the minimum trade tax multiplier follows the year: 200 % in 2026, 280 % from 2027', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.clock.setFixedTime(new Date('2026-10-23T10:00:00'));
+  await page.goto(APP_URL);
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await page.getByRole('button', { name: 'Ordner wählen' }).click();
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await page.getByLabel('Firmenname').fill('Muster Design');
+  await page.getByLabel('Inhaber/in').fill('Erika Mustermann');
+  await page.getByLabel('Straße und Hausnummer').fill('Hauptstraße 1');
+  await page.getByLabel('PLZ').fill('50667');
+  await page.getByRole('textbox', { name: 'Ort', exact: true }).fill('Köln');
+  await page.getByLabel('E-Mail').fill('erika@example.com');
+  await page.getByRole('button', { name: 'Weiter' }).click();
+
+  await page.getByLabel('Steuernummer').fill('12/345/67890');
+  await page.getByLabel('Ja, ich bin Kleinunternehmer').check();
+  await page.getByRole('radio', { name: 'Gewerbe' }).check();
+  await page.getByRole('textbox', { name: 'Gemeinde', exact: true }).fill('Neuberg');
+  await page.getByLabel('Hebesatz in %').fill('199');
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await expect(page.getByText('Bitte eine ganze Zahl ab 200 eingeben.')).toBeVisible();
+  // 250 % is allowed in 2026; the form says that 280 % applies from 2027
+  await page.getByLabel('Hebesatz in %').fill('250');
+  const raised = page.getByText('Ab 2027 gilt ein Hebesatz von mindestens 280 % (§ 16 Abs. 4 GewStG)', { exact: false });
+  await expect(raised).toBeVisible();
+  await expect(page.getByText('Bitte eine ganze Zahl ab 200 eingeben.')).toHaveCount(0);
+  await page.getByLabel('Hebesatz in %').fill('280');
+  await expect(raised).toHaveCount(0);
+
+  // in 2027 the same 250 % is no longer allowed
+  await page.clock.setFixedTime(new Date('2027-01-15T10:00:00'));
+  await page.getByLabel('Hebesatz in %').fill('250');
+  await expect(page.getByText('Bitte eine ganze Zahl ab 280 eingeben.')).toBeVisible();
+  await expect(raised).toHaveCount(0);
+  await page.getByLabel('Hebesatz in %').fill('280');
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await expect(page.locator('.wizard').getByRole('heading', { name: 'Bank' })).toBeVisible();
   expect(errors).toEqual([]);
 });

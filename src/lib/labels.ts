@@ -1,11 +1,12 @@
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
-import { MIN_TRADE_TAX_MULTIPLIER_PERCENT, MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
+import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
 import type { IssueProblem, TaxTreatment } from '../domain/invoice';
 import type { UnitCode } from '../domain/units';
+import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import { t, type MessageKey } from '../i18n';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
@@ -50,7 +51,8 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   'pattern.multipleCounters': 'problem.patternCounters',
 };
 
-export const problemText = (p: FieldProblem): string => t(PROBLEM_KEY[p], { min: MIN_TRADE_TAX_MULTIPLIER_PERCENT, max: DOCUMENT_LIMITS.lines });
+/** The minimum multiplier is the one of the current year, the year the forms check against */
+export const problemText = (p: FieldProblem): string => t(PROBLEM_KEY[p], { min: minMultiplierPercent(new Date().getFullYear()), max: DOCUMENT_LIMITS.lines });
 
 /** The text of the first error of a field, or undefined */
 export function fieldError<F extends string>(errors: readonly FieldError<F>[], field: F): string | undefined {

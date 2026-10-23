@@ -6,7 +6,7 @@ import { emptyDraft, readProfile, readSection, type CompanyDraft, type Section }
 import { checkSupport } from '../../data/fs/support';
 import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
-import { BankFields, InvoiceFields, LogoField, MasterFields, TaxFields } from '../company/CompanyFields';
+import { BankFields, InvoiceFields, LogoField, MasterFields, TaxFields, thisYear } from '../company/CompanyFields';
 import { ProfileSummary } from '../company/ProfileSummary';
 
 // Setup assistant for the first start and for "Add company". Every step is checked before the next one;
@@ -52,7 +52,7 @@ export function SetupWizard() {
 
   const set = (patch: Partial<CompanyDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const section = SECTION_OF[step];
-  const sectionResult = section ? readSection(section, draft) : null;
+  const sectionResult = section ? readSection(section, draft, thisYear()) : null;
   const errors = section && checked.has(section) && sectionResult && !sectionResult.ok ? sectionResult.error : [];
 
   const go = (i: number) => {
@@ -82,11 +82,11 @@ export function SetupWizard() {
   };
 
   const finish = async () => {
-    const profile = readProfile(draft);
+    const profile = readProfile(draft, thisYear());
     if (!profile.ok) {
       // every step was checked on the way here; should a section still fail, go back to it with its errors shown
       setChecked(new Set(Object.values(SECTION_OF)));
-      return go(Math.max(0, STEPS.findIndex((s) => { const sec = SECTION_OF[s]; return sec !== undefined && !readSection(sec, draft).ok; })));
+      return go(Math.max(0, STEPS.findIndex((s) => { const sec = SECTION_OF[s]; return sec !== undefined && !readSection(sec, draft, thisYear()).ok; })));
     }
     setBusy(true);
     const failed = await finishSetup(profile.value, logo?.upload ?? null);
@@ -246,7 +246,7 @@ function FolderStep({ folder, busy, onPick }: { folder: Folder | null; busy: boo
 }
 
 function SummaryStep({ draft, folder, hasLogo, onEdit }: { draft: CompanyDraft; folder: Folder | null; hasLogo: boolean; onEdit: (step: Step) => void }) {
-  const profile = readProfile(draft);
+  const profile = readProfile(draft, thisYear());
   return (
     <>
       <p className="onb-text">{t('setup.summary.text')}</p>

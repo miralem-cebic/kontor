@@ -26,6 +26,7 @@ import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check'
 import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
 import { isIsoDate } from '../domain/dates';
 import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
+import { INVOICE_LIMITS, TAX_TREATMENTS, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { QUOTE_LIMITS } from '../domain/quote';
@@ -36,15 +37,18 @@ import { observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
-  DOCUMENT_MERGEABLE_FIELDS,
+  INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
+  QUOTE_MERGEABLE_FIELDS,
   type BankAccount,
   type Banking,
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
+  type InvoiceFile,
   type ItemFile,
+  type QuoteFile,
 } from './types';
 
 export class InvalidRecordError extends Error {
@@ -336,7 +340,7 @@ const documentLine: Check<DocumentLine> = (v, path) => {
   return lineNetInRange(line.unitPrice, line.quantity) ? line : fail(path, 'the line amount is too large');
 };
 
-export const validateDocument: Check<DocumentFile> = objectOf<DocumentFile>({
+const quoteFile = objectOf<QuoteFile>({
   schemaVersion: num,
   id: documentId,
   kind: exactly('quote'),
@@ -349,5 +353,35 @@ export const validateDocument: Check<DocumentFile> = objectOf<DocumentFile>({
   lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
-  fieldUpdatedAt: fieldTimestamps(DOCUMENT_MERGEABLE_FIELDS),
+  fieldUpdatedAt: fieldTimestamps(QUOTE_MERGEABLE_FIELDS),
 });
+
+/** The order of the dates is checked by the form; any two valid dates are safe */
+const service = variant<ServicePeriod>({
+  date: objectOf({ kind: exactly('date'), date: isoDate }),
+  period: objectOf({ kind: exactly('period'), start: isoDate, end: isoDate }),
+});
+
+const invoiceFile = objectOf<InvoiceFile>({
+  schemaVersion: num,
+  id: documentId,
+  kind: exactly('invoice'),
+  customerId: contactId,
+  accountId,
+  quoteId: nullable(documentId),
+  date: isoDate,
+  service,
+  paymentTermDays: int(0, TEXT_LIMITS.maxPaymentTermDays),
+  taxTreatment: oneOf<TaxTreatment>(TAX_TREATMENTS),
+  orderReference: text(INVOICE_LIMITS.orderReference),
+  leitwegId: text(INVOICE_LIMITS.leitwegId),
+  subject: text(INVOICE_LIMITS.subject),
+  introText: text(INVOICE_LIMITS.text),
+  closingText: text(INVOICE_LIMITS.text),
+  lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(INVOICE_MERGEABLE_FIELDS),
+});
+
+export const validateDocument: Check<DocumentFile> = variant<DocumentFile>({ quote: quoteFile, invoice: invoiceFile });

@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
+import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
 import { keysOf, type AccountId, type ContactId, type DocumentId, type ItemId } from '../data/ids';
 import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeAccount, makeContact, makeItem, makeQuote, nowIso } from '../data/schema';
+import { makeAccount, makeContact, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
 import type {
   BankAccount,
   Banking,
@@ -14,10 +15,13 @@ import type {
   ContactFile,
   ContactMergeableField,
   DocumentFile,
-  DocumentMergeableField,
+  InvoiceFile,
+  InvoiceMergeableField,
   ItemFile,
   ItemMergeableField,
   MergeableField,
+  QuoteFile,
+  QuoteMergeableField,
 } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
@@ -37,7 +41,7 @@ export interface AppState {
   contacts: ReadonlyMap<ContactId, ContactFile>;
   /** Items of the catalogue by ID, deleted ones included (they are hidden in the UI) */
   items: ReadonlyMap<ItemId, ItemFile>;
-  /** Quotes by ID, deleted ones included (they are hidden in the UI) */
+  /** Quotes and invoices by ID, deleted ones included (they are hidden in the UI) */
   documents: ReadonlyMap<DocumentId, DocumentFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
@@ -236,7 +240,7 @@ export function integrateWrittenItem(sent: ItemFile, written: ItemFile) {
   putItem(current === sent ? written : mergeItem(current, written));
 }
 
-/* ---------- Quotes ---------- */
+/* ---------- Quotes and invoices ---------- */
 
 function putDocument(document: DocumentFile) {
   set((s) => ({ documents: new Map(s.documents).set(document.id, document) }));
@@ -251,17 +255,31 @@ export function addQuote(customerId: ContactId, content: QuoteContent): Document
 
 export function updateQuote(id: DocumentId, customerId: ContactId, content: QuoteContent) {
   const current = get().documents.get(id);
-  if (!current || current.deletedAt) return;
-  const next = withChanges<DocumentMergeableField, DocumentFile>(current, { customerId, ...content });
+  if (!current || current.deletedAt || current.kind !== 'quote') return;
+  const next = withChanges<QuoteMergeableField, QuoteFile>(current, { customerId, ...content });
   if (next !== current) putDocument(next);
 }
 
-/** Soft delete: the file stays, the quote is hidden */
+/** A new invoice draft from checked content, made from a quote or not. Returns its ID. */
+export function addInvoice(customerId: ContactId, accountId: AccountId, content: InvoiceContent, quoteId: DocumentId | null): DocumentId {
+  const invoice = makeInvoice(customerId, accountId, content, quoteId);
+  putDocument(invoice);
+  return invoice.id;
+}
+
+export function updateInvoice(id: DocumentId, customerId: ContactId, accountId: AccountId, content: InvoiceContent) {
+  const current = get().documents.get(id);
+  if (!current || current.deletedAt || current.kind !== 'invoice') return;
+  const next = withChanges<InvoiceMergeableField, InvoiceFile>(current, { customerId, accountId, ...content });
+  if (next !== current) putDocument(next);
+}
+
+/** Soft delete: the file stays, the quote or the invoice draft is hidden */
 export function deleteDocument(id: DocumentId) {
   const current = get().documents.get(id);
   if (!current || current.deletedAt) return;
   const at = nowIso();
-  putDocument(withChanges<DocumentMergeableField, DocumentFile>(current, { deletedAt: at }, at));
+  putDocument(withChanges<'deletedAt', DocumentFile>(current, { deletedAt: at }, at));
 }
 
 /** Like `integrateWrittenCompany`, for one document */

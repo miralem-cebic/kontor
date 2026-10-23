@@ -137,7 +137,7 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   await expect(rows.nth(1)).not.toContainText('abgelaufen');
 
   const [file] = await readDocuments(page);
-  expect(file).toMatchObject({ schemaVersion: 2, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', deletedAt: null });
+  expect(file).toMatchObject({ schemaVersion: 3, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', deletedAt: null });
   expect(file?.lines).toEqual([
     { name: 'Lektorat', description: '', quantity: 1000, unit: 'H87', unitPrice: 30000, vatRate: 700 },
     { name: 'Webdesign', description: 'Gestaltung und Umsetzung', quantity: 12500, unit: 'HUR', unitPrice: 8500, vatRate: 1900 },

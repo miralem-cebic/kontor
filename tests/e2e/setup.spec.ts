@@ -93,7 +93,7 @@ test('the setup assistant checks each step and writes the company folder', async
   const files = await readFolders(page);
   const company = await readCompanyFile(page, 'Ordner-1');
   expect(company).toMatchObject({
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: 'Muster Design',
     address: { street: 'Hauptstraße 1', postalCode: '50667', city: 'Köln', country: 'DE' },
     tax: {

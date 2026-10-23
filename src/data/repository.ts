@@ -51,9 +51,9 @@ export interface Repository {
   loadItems(): Promise<Result<{ items: ItemFile[]; issues: LoadIssue[] }, StorageError>>;
   /** Writes items/<id>.json, with the same conflict check and merge as `saveCompany` */
   saveItem(item: ItemFile): Promise<Result<ItemFile, StorageError>>;
-  /** All quotes, deleted ones included; a broken file is reported like a contact */
+  /** All quotes and invoices, deleted ones included; a broken file is reported like a contact */
   loadDocuments(): Promise<Result<{ documents: DocumentFile[]; issues: LoadIssue[] }, StorageError>>;
-  /** Writes documents/<id>.json, with the same conflict check and merge as `saveCompany` */
+  /** Writes documents/<id>.json, with the same conflict check and merge as `saveCompany`; a quote never merges with an invoice */
   saveDocument(document: DocumentFile): Promise<Result<DocumentFile, StorageError>>;
   writeBackup(name: string, snapshot: BackupSnapshot): Promise<Result<void, StorageError>>;
   listBackups(): Promise<Result<BackupInfo[], StorageError>>;

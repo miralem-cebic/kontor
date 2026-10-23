@@ -3,6 +3,7 @@ import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
 import type { DocumentLine } from '../../src/domain/document';
+import type { InvoiceContent } from '../../src/domain/invoice';
 import type { ItemProfile } from '../../src/domain/item';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import type { QuoteContent } from '../../src/domain/quote';
@@ -112,6 +113,21 @@ export const sampleQuote = (over: Partial<QuoteContent> = {}): QuoteContent => (
   introText: 'Sehr geehrte Damen und Herren,',
   closingText: '',
   lines: [sampleLine(), sampleLine({ name: 'Lektorat', quantity: quantity(1000), unit: 'LS', unitPrice: cents(30000), vatRate: basisPoints(700) })],
+  ...over,
+});
+
+/** An invoice with the lines of the sample quote, for a service in October 2026, due in 14 days */
+export const sampleInvoice = (over: Partial<InvoiceContent> = {}): InvoiceContent => ({
+  date: '2026-10-31',
+  service: { kind: 'period', start: '2026-10-01', end: '2026-10-31' },
+  paymentTermDays: 14,
+  taxTreatment: 'standard',
+  orderReference: 'PO-4711',
+  leitwegId: '',
+  subject: 'Website-Relaunch',
+  introText: '',
+  closingText: 'Vielen Dank für Ihren Auftrag.',
+  lines: sampleQuote().lines,
   ...over,
 });
 

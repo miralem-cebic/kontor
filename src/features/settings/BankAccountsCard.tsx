@@ -8,27 +8,22 @@ import {
   emptyAccountDraft,
   MAX_ACCOUNTS,
   readAccount,
-  type AccountDetails,
   type AccountDraft,
   type AccountField,
   type AccountFieldError,
   type AccountKind,
 } from '../../domain/bankAccount';
 import { TEXT_LIMITS } from '../../domain/check';
-import { formatIban } from '../../domain/iban';
 import type { AccountId } from '../../data/ids';
 import type { BankAccount } from '../../data/types';
 import { t } from '../../i18n';
-import { fieldError } from '../../lib/labels';
+import { accountDetail, accountName, fieldError } from '../../lib/labels';
 import { addAccount, deleteAccount, setDefaultAccount, showToast, updateAccount, useApp } from '../../store/appStore';
 
 // Settings: the accounts of the company. One account is the default for new invoices; it cannot be removed.
 // An account is edited as a draft in place of its row; only "Save" puts the checked details into the store.
 
 type Editing = { kind: 'none' } | { kind: 'new' } | { kind: 'edit'; id: AccountId };
-
-const accountName = (a: AccountDetails): string => a.name || t(a.kind === 'bank' ? 'accounts.kindBank' : 'accounts.kindPaypal');
-const accountDetail = (a: AccountDetails): string => (a.kind === 'bank' ? `${formatIban(a.iban)} · ${a.holder}` : a.email);
 
 export function BankAccountsCard() {
   const company = useApp((s) => s.company);

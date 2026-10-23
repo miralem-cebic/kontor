@@ -6,7 +6,7 @@ import { err, must } from '../../src/data/result';
 import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleQuote } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -255,5 +255,40 @@ describe('Persister with quotes', () => {
     repo.saveDocument = orig;
     await persister.retry();
     expect((await documentsOnDisk()).map((d) => d.id)).toEqual([id]);
+  });
+});
+
+describe('Persister with invoices', () => {
+  const documentsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadDocuments()).documents;
+
+  it('writes a new invoice from a quote, its changes and its deletion', async () => {
+    const customer = A.addContact(sampleContact());
+    const account = A.useApp.getState().company!.bank.defaultAccountId;
+    const quoteId = A.addQuote(customer, sampleQuote());
+    const id = A.addInvoice(customer, account, sampleInvoice(), quoteId);
+    await persister.flush();
+    expect((await documentsOnDisk()).find((d) => d.id === id)).toMatchObject({ kind: 'invoice', quoteId, accountId: account });
+
+    A.updateInvoice(id, customer, account, sampleInvoice({ paymentTermDays: 30 }));
+    const stamped = A.useApp.getState().documents.get(id)!;
+    expect(stamped.kind === 'invoice' && stamped.fieldUpdatedAt.paymentTermDays! > stamped.createdAt).toBe(true);
+    expect(stamped.kind === 'invoice' && stamped.fieldUpdatedAt.service).toBe(stamped.createdAt);
+    await persister.flush();
+    expect((await documentsOnDisk()).find((d) => d.id === id)).toMatchObject({ paymentTermDays: 30 });
+
+    A.deleteDocument(id);
+    await persister.flush();
+    expect((await documentsOnDisk()).find((d) => d.id === id)?.deletedAt).toBeTruthy();
+  });
+
+  it('an invoice is not changed as a quote, nor a quote as an invoice', () => {
+    const customer = A.addContact(sampleContact());
+    const account = A.useApp.getState().company!.bank.defaultAccountId;
+    const quoteId = A.addQuote(customer, sampleQuote());
+    const invoiceId = A.addInvoice(customer, account, sampleInvoice(), null);
+    const before = A.useApp.getState().documents;
+    A.updateQuote(invoiceId, customer, sampleQuote({ subject: 'X' }));
+    A.updateInvoice(quoteId, customer, account, sampleInvoice({ subject: 'X' }));
+    expect(A.useApp.getState().documents).toBe(before);
   });
 });

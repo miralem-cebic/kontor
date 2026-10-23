@@ -29,11 +29,12 @@ Der aktuelle Stand enthält:
 - **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
 - **Bankkonten:** Mehrere Konten pro Unternehmen, zum Beispiel zwei Girokonten und PayPal. Eines davon ist das Standardkonto für Rechnungen.
 - **Artikel & Leistungen:** Ein Katalog mit Nummer, Bezeichnung, Beschreibung, Einheit, Nettopreis und Umsatzsteuersatz, mit Suche. Angebote übernehmen ihre Positionen daraus.
-- **Angebote (Entwürfe):** Kunde, Datum, Gültigkeit, Betreff, Einleitung und Schlusstext; Positionen aus dem Katalog oder frei, mit Menge, Einheit, Preis und Steuersatz. Die Summen werden je Steuersatz berechnet; als Kleinunternehmer mit dem Hinweis nach § 19 UStG. Angebotsnummer und PDF folgen.
+- **Angebote (Entwürfe):** Kunde, Datum, Gültigkeit, Betreff, Einleitung und Schlusstext; Positionen aus dem Katalog oder frei, mit Menge, Einheit, Preis und Steuersatz. Die Summen werden je Steuersatz berechnet; als Kleinunternehmer mit dem Hinweis nach § 19 UStG. Mit „Rechnung erstellen“ wird aus einem Angebot ein Rechnungsentwurf. Angebotsnummer und PDF folgen.
+- **Rechnungen (Entwürfe):** Kunde, Rechnungsdatum, Leistungsdatum oder Leistungszeitraum, Bestellnummer und Leitweg-ID, Zahlungsziel mit Fälligkeit und das Konto, auf das gezahlt wird. Bei Regelbesteuerung wählst du den Steuerfall: mit Umsatzsteuer, Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG) oder steuerfreie innergemeinschaftliche Lieferung; die Rechnung trägt dann den nötigen Hinweis. Ein Entwurf darf unvollständig sein; das Formular zeigt, was vor dem Ausstellen noch fehlt (zum Beispiel die Anschrift des Kunden, außer bei Kleinbetragsrechnungen bis 250 €, oder beide USt-IdNrn.). Rechnungsnummer, PDF und das Ausstellen folgen.
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Angebotsnummer und PDF, Rechnungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Angebots- und Rechnungsnummern, PDF, das Ausstellen von Rechnungen, Zahlungen, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

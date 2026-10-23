@@ -33,6 +33,7 @@ export type FieldProblem =
   | 'negativeTotal'
   | 'date'
   | 'validUntil'
+  | 'periodEnd'
   | `iban.${IbanProblem}`
   | `pattern.${PatternProblem}`;
 

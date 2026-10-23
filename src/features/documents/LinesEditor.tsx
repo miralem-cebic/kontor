@@ -2,16 +2,17 @@ import { useId, useMemo, useState } from 'react';
 import { SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
 import { DOCUMENT_LIMITS, draftLineNet, emptyLineDraft, lineDraftFromItem, type LineDraft, type LineFieldPath, linePath } from '../../domain/document';
+import type { VatNote } from '../../domain/invoice';
 import { byItemName, ITEM_LIMITS, itemMatches } from '../../domain/item';
 import { formatCents, formatRate, type TaxTotals } from '../../domain/money';
 import { UNITS, type UnitCode } from '../../domain/units';
 import { VAT_RATES } from '../../domain/vat';
 import type { ItemFile } from '../../data/types';
-import { currentLang, t } from '../../i18n';
+import { currentLang, t, type MessageKey } from '../../i18n';
 import { unitText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 
-// The lines of a quote (later also of an invoice): taken from the catalogue or typed freely, moved and removed.
+// The lines of a quote or an invoice: taken from the catalogue or typed freely, moved and removed.
 // The editor works on drafts; the document form checks them on "Save".
 
 let lineSeq = 0;
@@ -27,10 +28,11 @@ interface Props {
   onChange: (lines: LineDraft[]) => void;
   /** The error text of a field, if any */
   errorFor: (path: LineFieldPath | 'lines') => string | undefined;
-  smallBusiness: boolean;
+  /** The document charges no VAT: no rate per line, and the price is not called net */
+  withoutVat: boolean;
 }
 
-export function LinesEditor({ lines, onChange, errorFor, smallBusiness }: Props) {
+export function LinesEditor({ lines, onChange, errorFor, withoutVat }: Props) {
   const [picking, setPicking] = useState(false);
   const full = lines.length >= DOCUMENT_LIMITS.lines;
 
@@ -58,7 +60,7 @@ export function LinesEditor({ lines, onChange, errorFor, smallBusiness }: Props)
             line={line}
             index={i}
             last={i === lines.length - 1}
-            smallBusiness={smallBusiness}
+            withoutVat={withoutVat}
             errorFor={errorFor}
             onChange={(patch) => change(i, patch)}
             onMove={(by) => move(i, by)}
@@ -100,14 +102,14 @@ interface LineProps {
   line: LineDraft;
   index: number;
   last: boolean;
-  smallBusiness: boolean;
+  withoutVat: boolean;
   errorFor: Props['errorFor'];
   onChange: (patch: Partial<LineDraft>) => void;
   onMove: (by: -1 | 1) => void;
   onRemove: () => void;
 }
 
-function LineFields({ line, index, last, smallBusiness, errorFor, onChange, onMove, onRemove }: LineProps) {
+function LineFields({ line, index, last, withoutVat, errorFor, onChange, onMove, onRemove }: LineProps) {
   const lang = currentLang();
   const n = index + 1;
   const e = (field: Parameters<typeof linePath>[1]) => errorFor(linePath(index, field));
@@ -128,7 +130,7 @@ function LineFields({ line, index, last, smallBusiness, errorFor, onChange, onMo
         <SelectField<UnitCode> className="l-unit" label={t('lines.unit')} value={line.unit} options={UNITS.map((u) => ({ value: u, label: unitText(u) }))} onChange={(unit) => onChange({ unit })} />
         <TextField
           className="l-price"
-          label={smallBusiness ? t('lines.unitPrice') : t('lines.unitPriceNet')}
+          label={withoutVat ? t('lines.unitPrice') : t('lines.unitPriceNet')}
           value={line.unitPrice}
           onChange={(unitPrice) => onChange({ unitPrice })}
           error={e('unitPrice')}
@@ -136,7 +138,7 @@ function LineFields({ line, index, last, smallBusiness, errorFor, onChange, onMo
           inputMode="decimal"
           maxLength={20}
         />
-        {!smallBusiness && (
+        {!withoutVat && (
           <SelectField
             className="l-rate"
             label={t('lines.vatRate')}
@@ -222,13 +224,19 @@ function CataloguePicker({ onPick, onClose }: { onPick: (item: ItemFile) => void
   );
 }
 
-/** Net, VAT per rate and gross; for a small business the total and the note on § 19 UStG */
-export function Totals({ totals, smallBusiness }: { totals: TaxTotals; smallBusiness: boolean }) {
+const NOTE_KEY: Record<VatNote, MessageKey> = {
+  smallBusiness: 'totals.smallBusiness',
+  reverseCharge: 'totals.reverseCharge',
+  intraCommunitySupply: 'totals.intraCommunitySupply',
+};
+
+/** Net, VAT per rate and gross. A document without VAT shows only the total and the note that says why. */
+export function Totals({ totals, note }: { totals: TaxTotals; note: VatNote | null }) {
   const lang = currentLang();
   return (
     <div className="totals-box">
       <dl className="totals" aria-label={t('totals.label')}>
-        {!smallBusiness && (
+        {!note && (
           <>
             <dt>{t('totals.net')}</dt>
             <dd>{formatCents(totals.net, lang)}</dd>
@@ -240,7 +248,7 @@ export function Totals({ totals, smallBusiness }: { totals: TaxTotals; smallBusi
         <dt className="grand">{t('totals.gross')}</dt>
         <dd className="grand">{formatCents(totals.gross, lang)}</dd>
       </dl>
-      {smallBusiness && <p className="f-hint">{t('totals.smallBusiness')}</p>}
+      {note && <p className="f-hint">{t(NOTE_KEY[note])}</p>}
     </div>
   );
 }

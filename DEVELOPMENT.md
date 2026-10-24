@@ -34,6 +34,7 @@ Chrome blocks module scripts and CORS requests under `file://`. Therefore:
 - `vite.config.ts`: `format: 'iife'`, no code splitting, `base: './'`, `modulePreload: false`.
 - `build/fileProtocol.ts`: a Vite plugin that removes `type="module"` and `crossorigin` from the built `index.html` and loads the script with `defer`. It fails the build if `type="module"` remains.
 - The Inter font (`@fontsource/inter`, Latin subset: umlauts, ß and € included) is embedded as a `data:` URL in the CSS.
+- The PDFs embed Inter as static TTF files (`@expo-google-fonts/inter`, full character set) and an sRGB ICC profile (`src/pdf/assets/`). `src/pdf/assets.ts` imports them with `?inline`, so they are part of the script as `data:` URLs and decoded when the first PDF is made; `*.icc` is listed in `assetsInclude` of `vite.config.ts` and `vitest.config.ts`. With pdf-lib and fontkit the script is about 2.3 MB.
 - The same plugin adds a Content Security Policy (`CONTENT_SECURITY_POLICY`): no network access (`connect-src 'none'`), scripts only from the build, images from the build, `data:` and `blob:` (the logo). It is not added in `npm run dev`, because the dev server injects inline scripts. `npm run check:file` reports a refused inline script as a console error, which fails the check.
 
 ## Architecture
@@ -44,6 +45,7 @@ src/
   app/session.ts               Startup: check browser → known company folders → permission → load
                                Setup assistant actions (choose folder, finish), switching companies, logo
   app/crashReporting.ts        Global handlers for uncaught errors (emergency copy, then a toast)
+  app/documentPdf.ts           PDF of a quote or an invoice: logo from the folder (SVG drawn into a PNG), download
   domain/                      Pure logic, no I/O:
     check.ts                   Checker for form drafts, shared field checks (address, email, phone, IBAN, price, payment term)
     money.ts                   Cents, basis points, quantities, rounding, tax totals, parsing and formatting
@@ -79,6 +81,11 @@ src/
     fs/memoryFs.ts             In-memory folder (unit tests)
     fs/storageFs.ts            Folders in localStorage and their list (?e2e)
     fs/jsonFile.ts, fileNames.ts, permission.ts, support.ts
+  pdf/                         PDF of quotes and invoices (@cantoo/pdf-lib, @cantoo/fontkit):
+    content.ts                 What the document says, formatted in its language (German for now, F05)
+    layout.ts                  Where it goes: DIN 5008 form B, the lines table over several pages, footer (pure)
+    render.ts                  The file: subset fonts, logo, metadata, sRGB output intent, missing characters
+    assets.ts, assets/         The embedded font and ICC profile (sources and licences in assets/README.md)
   store/appStore.ts            State (zustand) and all actions
   store/prefs.ts               Per-browser settings: language, last company
   i18n/                        Texts in de and en
@@ -180,8 +187,8 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 
 ## Tests
 
-- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness.
+- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness, the PDF (its content per document and tax treatment, wrapping and page layout with a property test that no text runs into the footer, and a rendered file with real fonts: metadata, output intent, embedded subsets, missing characters).
 - **Property-based** (fast-check): money sums and rounding, gross/net splits, parsing and formatting, IBAN check digits, profile normalization. CI uses a fixed seed (`CI` is set); locally the seed is random. `FC_SEED=<seed>` repeats a failing run, `FC_RUNS=<n>` runs more cases.
-- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload), a company folder of version 1 that is upgraded, the catalogue (checks, search, edit, delete, reload, English prices, small business) unsaved items restored from the emergency copy, quotes (lines from the catalogue and free lines, totals per rate, checks per line, order, edit, delete, reload, small business, expired), and invoices (defaults from the customer, period of service, tax treatment, due date, what is missing before issuing, edit, delete, reload, an invoice made from a quote, small business).
+- **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload), a company folder of version 1 that is upgraded, the catalogue (checks, search, edit, delete, reload, English prices, small business) unsaved items restored from the emergency copy, quotes (lines from the catalogue and free lines, totals per rate, checks per line, order, edit, delete, reload, small business, expired, the PDF with an SVG logo), and invoices (defaults from the customer, period of service, tax treatment, due date, what is missing before issuing, edit, delete, reload, the PDF download, an invoice made from a quote, small business).
 
 Test mode `?e2e`: the native folder picker is replaced by folders in `localStorage` (`data/fs/storageFs.ts`), and the list of companies is kept in `localStorage` too. `window.__e2e` provides `flush()` (wait for pending writes) and `nextFolder(name)` (the next folder picker returns this folder). Only active with this URL parameter.

@@ -7,12 +7,16 @@ export const APP_URL = pathToFileURL(resolve('dist/index.html')).href + '?e2e';
 /** A 1×1 PNG */
 export const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
+/** A logo as SVG: a dark square */
+export const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20" viewBox="0 0 40 20"><rect width="20" height="20" fill="#0f766e"/></svg>');
+
 export interface CompanyInput {
   name: string;
   owner?: string;
   smallBusiness?: boolean;
   trade?: { municipality: string; multiplier: string };
-  logo?: boolean;
+  /** true: a PNG logo */
+  logo?: boolean | 'svg';
 }
 
 /** Collects page errors and console errors; a test ends with `expect(errors).toEqual([])` */
@@ -41,7 +45,8 @@ export async function setUpCompany(page: Page, c: CompanyInput) {
   await page.getByLabel('PLZ').fill('50667');
   await page.getByRole('textbox', { name: 'Ort', exact: true }).fill('Köln');
   await page.getByLabel('E-Mail').fill('erika@example.com');
-  if (c.logo) await page.locator('input[type=file]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  if (c.logo === 'svg') await page.locator('input[type=file]').setInputFiles({ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: SVG });
+  else if (c.logo) await page.locator('input[type=file]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG });
   await page.getByRole('button', { name: 'Weiter' }).click();
 
   await expect(wizard.getByRole('heading', { name: 'Steuer' })).toBeVisible();

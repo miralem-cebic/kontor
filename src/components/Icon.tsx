@@ -20,6 +20,7 @@ const P = {
   building: 'M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M2 21h20',
   text: 'M4 6h16M4 10h16M4 14h10M4 18h7',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
 } as const;
 
 export type IconName = keyof typeof P;

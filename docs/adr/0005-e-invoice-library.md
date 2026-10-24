@@ -58,3 +58,7 @@ Not covered by the spike:
 - **`@e-invoice-eu/core` with `unsafe-eval` in the CSP:** breaks a rule of the project, and ZUGFeRD still fails in the browser.
 - **Patching or forking `@e-invoice-eu/core`:** standalone Ajv validators and browser shims are possible, but the fork would carry the spreadsheet and LibreOffice code kontor does not need.
 - **Generating e-invoices in a separate local helper (Node or Java):** works with any library, but contradicts the double-click `file://` distribution. Could be revisited together with ELSTER (R7).
+
+## Update (24 October 2026): fontkit
+
+The invoice PDF of Phase 1 uses `@cantoo/fontkit` instead of `@pdf-lib/fontkit`. The failed font subsetting in the spike did not come from the WOFF file: `@cantoo/pdf-lib` calls `encode()` on the subset, which `@cantoo/fontkit` provides, while `@pdf-lib/fontkit` expects `encode(stream)`. With `@cantoo/fontkit`, the static TTF files of Inter are embedded as subsets (a one-page invoice is under 20 KB). The PDF already has the sRGB output intent; the XMP metadata with the PDF/A identification and the validation with veraPDF follow with the e-invoice.

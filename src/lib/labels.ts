@@ -1,3 +1,4 @@
+import type { IssueFailure } from '../app/issue';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
@@ -65,6 +66,7 @@ const SESSION_ERROR_KEY: Record<SessionError, MessageKey> = {
   notFound: 'error.notFound',
   quota: 'error.quota',
   newerSchema: 'error.newerSchema',
+  conflict: 'error.conflict',
   invalid: 'error.invalid',
   other: 'error.other',
   otherCompany: 'error.otherCompany',
@@ -137,3 +139,20 @@ const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
 };
 
 export const issueProblemText = (p: IssueProblem): string => t(ISSUE_PROBLEM_KEY[p]);
+
+export function issueFailureText(f: IssueFailure): string {
+  switch (f) {
+    case 'notReady':
+      return t('invoices.issueNotReady');
+    case 'numberTaken':
+      return t('invoices.issueNumberTaken');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('invoices.issueFailed', { reason: errorText(f) });
+  }
+}

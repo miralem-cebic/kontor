@@ -14,7 +14,7 @@ const company = sampleCompany();
 const customer = makeContact(sampleContact());
 const account = company.bank.accounts[0] as BankAccount;
 const content = (lines = sampleInvoice().lines, over: Parameters<typeof sampleInvoice>[0] = {}): DocumentContent =>
-  documentContent({ company, document: makeInvoice(customer.id, account.id, sampleInvoice({ ...over, lines }), null), customer, account, lang: 'de' });
+  documentContent({ company, document: makeInvoice(customer.id, account.id, sampleInvoice({ ...over, lines }), null), customer, account, lang: 'de', number: null });
 const texts = (items: readonly Item[]) => items.filter((i): i is TextItem => i.kind === 'text');
 const manyLines = (n: number, description = '') => Array.from({ length: n }, (_, i) => sampleLine({ name: `Position ${i + 1}`, description, quantity: quantity(1000), unitPrice: cents(10000) }));
 

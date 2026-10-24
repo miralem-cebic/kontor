@@ -6,19 +6,25 @@ import { toLocalDate } from '../domain/dates';
 import { formatIban } from '../domain/iban';
 import { dueDate, invoiceTotals, vatNote } from '../domain/invoice';
 import { formatCents, formatQuantity, formatRate, type TaxTotals } from '../domain/money';
-import type { BankAccount, CompanyFile, ContactFile, DocumentFile, InvoiceFile, QuoteFile } from '../data/types';
+import type { AccountDetails } from '../domain/bankAccount';
+import type { CompanyProfile } from '../domain/company';
+import type { ContactProfile } from '../domain/contact';
+import type { DocumentFile, InvoiceFile, QuoteFile } from '../data/types';
 import { fmtIn, tIn, type Lang, type MessageKey } from '../i18n';
 import { unitTextIn } from '../lib/labels';
 
+/** The master data come as profiles: the current ones for a draft, the snapshot for an issued invoice */
 export interface PdfSource {
-  company: CompanyFile;
+  company: CompanyProfile;
   document: DocumentFile;
   /** The document's customer; null when the contact is gone */
-  customer: ContactFile | null;
+  customer: ContactProfile | null;
   /** The account the invoice is paid to; for a quote the company's default account */
-  account: BankAccount | null;
+  account: AccountDetails | null;
   /** The language of the document */
   lang: Lang;
+  /** The number of an issued invoice; null for a draft, which is marked as such */
+  number: string | null;
 }
 
 export interface InfoRow {
@@ -85,7 +91,7 @@ const nonEmpty = (lines: readonly string[]): string[] => lines.filter((l) => l.t
 const countryLine = (country: string, lang: Lang): string => (new Intl.DisplayNames([lang], { type: 'region' }).of(country) ?? country).toLocaleUpperCase(lang);
 
 /** The recipient's address field: name lines, contact person, street, town and, abroad, the country */
-export function recipientLines(customer: ContactFile | null, lang: Lang): string[] {
+export function recipientLines(customer: ContactProfile | null, lang: Lang): string[] {
   if (!customer) return [];
   const { address } = customer;
   return nonEmpty([
@@ -104,7 +110,7 @@ export function pdfFileName(parts: readonly string[]): string {
   return `${clean.join('_') || 'Dokument'}.pdf`;
 }
 
-const accountLines = (account: BankAccount | null, lang: Lang): string[] => {
+const accountLines = (account: AccountDetails | null, lang: Lang): string[] => {
   if (!account) return [];
   switch (account.kind) {
     case 'bank':
@@ -114,7 +120,7 @@ const accountLines = (account: BankAccount | null, lang: Lang): string[] => {
   }
 };
 
-function footerColumns(company: CompanyFile, account: BankAccount | null, lang: Lang): string[][] {
+function footerColumns(company: CompanyProfile, account: AccountDetails | null, lang: Lang): string[][] {
   const { address, contact, tax } = company;
   return [
     nonEmpty([company.name, company.owner !== company.name ? company.owner : '', address.street, `${address.postalCode} ${address.city}`]),
@@ -142,16 +148,17 @@ function totalRows(totals: TaxTotals, withVat: boolean, lang: Lang): TotalRow[] 
 }
 
 /** The payment request of an invoice: amount, due date and account */
-function paymentNote(inv: InvoiceFile, gross: TaxTotals['gross'], account: BankAccount | null, lang: Lang): string | null {
+function paymentNote(inv: InvoiceFile, gross: TaxTotals['gross'], account: AccountDetails | null, number: string | null, lang: Lang): string | null {
   if (gross <= 0 || !account) return null;
   const amount = formatCents(gross, lang);
   const date = formatDate(dueDate(inv), lang);
   const now = inv.paymentTermDays === 0;
+  const reference = number ? ` ${tIn(lang, 'pdf.payReference', { number })}` : '';
   switch (account.kind) {
     case 'bank':
-      return tIn(lang, now ? 'pdf.payNow' : 'pdf.payBy', { amount, date });
+      return tIn(lang, now ? 'pdf.payNow' : 'pdf.payBy', { amount, date }) + reference;
     case 'paypal':
-      return tIn(lang, now ? 'pdf.payPaypalNow' : 'pdf.payPaypalBy', { amount, date, email: account.email });
+      return tIn(lang, now ? 'pdf.payPaypalNow' : 'pdf.payPaypalBy', { amount, date, email: account.email }) + reference;
   }
 }
 
@@ -159,12 +166,12 @@ const formatDate = (iso: string, lang: Lang) => fmtIn(lang, toLocalDate(iso), 'P
 
 /** Everything a quote or an invoice says, in the language of the document. Drafts are marked as such. */
 export function documentContent(src: PdfSource): DocumentContent {
-  const { company, document: doc, customer, account, lang } = src;
+  const { company, document: doc, customer, account, lang, number } = src;
   const isInvoice = doc.kind === 'invoice';
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const note = isInvoice ? vatNote(doc.taxTreatment, smallBusiness) : smallBusiness ? 'smallBusiness' : null;
   const totals = isInvoice ? invoiceTotals(doc, smallBusiness) : documentTotals(doc.lines, smallBusiness);
-  const title = tIn(lang, isInvoice ? 'pdf.invoiceDraft' : 'pdf.quoteDraft');
+  const title = tIn(lang, isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : 'pdf.quoteDraft');
   const date = formatDate(doc.date, lang);
   const customerName = customer?.name ?? '';
 
@@ -185,17 +192,17 @@ export function documentContent(src: PdfSource): DocumentContent {
     notes.push(nonEmpty([customer?.vatId ? tIn(lang, 'pdf.customerVatId', { id: customer.vatId }) : '', company.tax.vatId ? tIn(lang, 'pdf.ownVatId', { id: company.tax.vatId }) : '']).join(' · '));
   }
   if (isInvoice) {
-    const payment = paymentNote(doc, totals.gross, account, lang);
+    const payment = paymentNote(doc, totals.gross, account, number, lang);
     if (payment) notes.push(payment);
   } else notes.push(tIn(lang, 'pdf.quoteValid', { date: formatDate(doc.validUntil, lang) }));
 
   return {
     lang,
-    watermark: tIn(lang, 'pdf.watermark'),
+    watermark: number ? null : tIn(lang, 'pdf.watermark'),
     letterhead: company.name,
     senderLine: [company.name, company.address.street, `${company.address.postalCode} ${company.address.city}`].join(' · '),
     recipient: recipientLines(customer, lang),
-    info: isInvoice ? invoiceInfo(doc, customer, lang) : quoteInfo(doc, customer, lang),
+    info: isInvoice ? invoiceInfo(doc, customer, number, lang) : quoteInfo(doc, customer, lang),
     title,
     subject: doc.subject,
     intro: doc.introText,
@@ -219,15 +226,15 @@ export function documentContent(src: PdfSource): DocumentContent {
     runningHead: nonEmpty([title, customerName]).join(' · '),
     pageLabel: tIn(lang, 'pdf.page'),
     meta: {
-      title: nonEmpty([title, customerName, date]).join(' – '),
+      title: nonEmpty([title, number ?? '', customerName, date]).join(' – '),
       author: company.name,
       subject: doc.subject || title,
-      fileName: pdfFileName([title, doc.date, customerName]),
+      fileName: pdfFileName(number ? [title, number, customerName] : [title, doc.date, customerName]),
     },
   };
 }
 
-function quoteInfo(q: QuoteFile, customer: ContactFile | null, lang: Lang): InfoRow[] {
+function quoteInfo(q: QuoteFile, customer: ContactProfile | null, lang: Lang): InfoRow[] {
   return [
     { label: tIn(lang, 'pdf.quoteNumber'), value: tIn(lang, 'pdf.draftNumber') },
     { label: tIn(lang, 'pdf.quoteDate'), value: formatDate(q.date, lang) },
@@ -236,14 +243,14 @@ function quoteInfo(q: QuoteFile, customer: ContactFile | null, lang: Lang): Info
   ];
 }
 
-function invoiceInfo(inv: InvoiceFile, customer: ContactFile | null, lang: Lang): InfoRow[] {
+function invoiceInfo(inv: InvoiceFile, customer: ContactProfile | null, number: string | null, lang: Lang): InfoRow[] {
   const service =
     inv.service.kind === 'date'
       ? { label: tIn(lang, 'pdf.serviceDate'), value: formatDate(inv.service.date, lang) }
       : { label: tIn(lang, 'pdf.servicePeriod'), value: `${formatDate(inv.service.start, lang)} – ${formatDate(inv.service.end, lang)}` };
   const optional = (label: MessageKey, value: string): InfoRow[] => (value ? [{ label: tIn(lang, label), value }] : []);
   return [
-    { label: tIn(lang, 'pdf.invoiceNumber'), value: tIn(lang, 'pdf.draftNumber') },
+    { label: tIn(lang, 'pdf.invoiceNumber'), value: number ?? tIn(lang, 'pdf.draftNumber') },
     { label: tIn(lang, 'pdf.invoiceDate'), value: formatDate(inv.date, lang) },
     service,
     { label: tIn(lang, 'pdf.dueDate'), value: formatDate(dueDate(inv), lang) },

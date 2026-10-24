@@ -41,13 +41,18 @@ export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeF
 /**
  * Quotes and invoices have their own fields. A quote and an invoice are never the same record (the repository
  * refuses to merge them, see FsRepository.saveDocument); should they meet here anyway, the local one is kept.
+ * An issued invoice is never merged: the issued one wins as a whole (ADR 0004). Two issued invoices with different
+ * numbers are a conflict the repository stops at; here the remote one is kept.
  */
 export function mergeDocument(local: DocumentFile, remote: DocumentFile): DocumentFile {
   switch (local.kind) {
     case 'quote':
       return remote.kind === 'quote' ? mergeFields(local, remote, QUOTE_MERGEABLE_FIELDS) : local;
     case 'invoice':
-      return remote.kind === 'invoice' ? mergeFields(local, remote, INVOICE_MERGEABLE_FIELDS) : local;
+      if (remote.kind !== 'invoice') return local;
+      if (remote.issued) return remote;
+      if (local.issued) return local;
+      return mergeFields(local, remote, INVOICE_MERGEABLE_FIELDS);
   }
 }
 

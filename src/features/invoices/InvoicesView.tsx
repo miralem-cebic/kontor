@@ -29,18 +29,27 @@ import {
 import { formatCents } from '../../domain/money';
 import type { DocumentId } from '../../data/ids';
 import { isInvoice, isQuote, type CompanyFile, type InvoiceFile, type QuoteFile } from '../../data/types';
-import { currentLang, t } from '../../i18n';
-import { accountDetail, accountName, fieldError, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
+import { issueInvoice } from '../../app/issue';
+import { currentLang, t, type MessageKey } from '../../i18n';
+import { accountDetail, accountName, fieldError, issueFailureText, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
 import { addInvoice, deleteDocument, showToast, updateInvoice, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
+import { IssuedInvoiceView } from './IssuedInvoiceView';
 
 // Invoices: a searchable list and a form for a new or an existing draft. Like a quote, the form edits a draft; only
-// "Save" puts the checked invoice into the store (and the persister writes it). Issuing (number, PDF, audit entry,
-// ADR 0004) follows; until then the form shows what a draft still needs before it can be issued.
+// "Save" puts the checked invoice into the store (and the persister writes it). The form shows what a draft still needs
+// before it can be issued; issuing (app/issue.ts, ADR 0004) gives it its number and makes it read-only.
 
 type Mode = { kind: 'list' } | { kind: 'new'; fromQuote: DocumentId | null } | { kind: 'edit'; id: DocumentId };
+type StatusFilter = 'all' | 'drafts' | 'issued';
+
+const STATUS_FILTERS: { value: StatusFilter; label: MessageKey }[] = [
+  { value: 'all', label: 'invoices.filterAll' },
+  { value: 'drafts', label: 'invoices.filterDrafts' },
+  { value: 'issued', label: 'invoices.filterIssued' },
+];
 
 /** `fromQuote` opens a new invoice for that quote right away */
 export function InvoicesView({ fromQuote }: { fromQuote: DocumentId | null }) {
@@ -83,6 +92,7 @@ function EditExisting({ id, onDone }: { id: DocumentId; onDone: () => void }) {
     if (!invoice) onDone();
   }, [invoice, onDone]);
   if (!invoice || !company) return null;
+  if (invoice.issued) return <IssuedInvoiceView invoice={{ ...invoice, issued: invoice.issued }} onDone={onDone} />;
   const start = () => draftFromInvoice(invoice.customerId, invoice.accountId, invoice, currentLang(), newLineKey);
   return <InvoiceEditor key={id} company={company} invoice={invoice} quote={source && isQuote(source) ? source : null} start={start} onDone={onDone} />;
 }
@@ -94,10 +104,15 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
   const contacts = useApp((s) => s.contacts);
   const smallBusiness = useSmallBusiness();
   const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const searchId = useId();
   const active = useMemo(() => [...documents.values()].filter(isInvoice).filter((d) => !d.deletedAt).sort(byInvoiceDate), [documents]);
-  const customerName = (inv: InvoiceFile) => contacts.get(inv.customerId)?.name ?? '';
-  const shown = active.filter((inv) => invoiceMatches(inv, customerName(inv), query));
+  // an issued invoice keeps the customer and the VAT scheme it was issued with
+  const customerName = (inv: InvoiceFile) => inv.issued?.snapshot.customer.name ?? contacts.get(inv.customerId)?.name ?? '';
+  const gross = (inv: InvoiceFile) => invoiceTotals(inv, inv.issued ? inv.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
+  const inFilter = (inv: InvoiceFile, f: StatusFilter) => f === 'all' || (f === 'issued') === (inv.issued !== null);
+  const matching = active.filter((inv) => invoiceMatches(inv, customerName(inv), query) || (inv.issued?.number.toLowerCase().includes(query.trim().toLowerCase()) ?? false));
+  const shown = matching.filter((inv) => inFilter(inv, status));
   const lang = currentLang();
 
   return (
@@ -122,6 +137,13 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
               {t('invoices.search')}
             </label>
             <input id={searchId} className="search-in" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('invoices.searchPlaceholder')} />
+            <div className="seg" role="group" aria-label={t('invoices.filter')}>
+              {STATUS_FILTERS.map((f) => (
+                <button key={f.value} type="button" className={status === f.value ? 'on' : ''} aria-pressed={status === f.value} onClick={() => setStatus(f.value)}>
+                  {t(f.label)} <span className="seg-n">{matching.filter((inv) => inFilter(inv, f.value)).length}</span>
+                </button>
+              ))}
+            </div>
           </div>
           {shown.length === 0 ? (
             <p className="empty" role="status">
@@ -145,9 +167,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
               <tbody>
                 {shown.map((inv) => (
                   <tr key={inv.id}>
-                    <td>
-                      <span className="badge muted-badge">{t('invoices.draft')}</span>
-                    </td>
+                    <td>{inv.issued ? inv.issued.number : <span className="badge muted-badge">{t('invoices.draft')}</span>}</td>
                     <td>{formatDate(inv.date)}</td>
                     <td>
                       <button type="button" className="row-link" onClick={() => onOpen(inv.id)}>
@@ -156,7 +176,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
                     </td>
                     <td>{inv.subject || <span className="muted">{t('documents.noSubject')}</span>}</td>
                     <td>{formatDate(dueDate(inv))}</td>
-                    <td className="num">{formatCents(invoiceTotals(inv, smallBusiness).gross, lang)}</td>
+                    <td className="num">{formatCents(gross(inv), lang)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -420,12 +440,15 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
             </h2>
             <p className="muted">{t('invoices.issueLater')}</p>
             {problems.length === 0 ? (
-              <ul className="checks">
-                <li className="ok">
-                  <Icon n="check" s={14} />
-                  {t('invoices.ready')}
-                </li>
-              </ul>
+              <>
+                <ul className="checks">
+                  <li className="ok">
+                    <Icon n="check" s={14} />
+                    {t('invoices.ready')}
+                  </li>
+                </ul>
+                {invoice ? <IssueAction prepare={() => store()?.id ?? null} /> : <p className="f-hint">{t('invoices.issueSaveFirst')}</p>}
+              </>
             ) : (
               <>
                 <p className="muted" id="invoice-missing">
@@ -471,6 +494,51 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Issuing after asking: changes not saved yet are saved first (`prepare`), then the invoice gets its number. The view
+ * switches to the issued invoice by itself, because the store then holds it as issued.
+ */
+function IssueAction({ prepare }: { prepare: () => DocumentId | null }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    const id = prepare();
+    if (!id) {
+      setConfirming(false);
+      return;
+    }
+    setBusy(true);
+    const r = await issueInvoice(id);
+    setBusy(false);
+    if (r.ok) showToast(t(r.auditWritten ? 'invoices.issuedToast' : 'invoices.issuedAuditMissing', { number: r.invoice.issued?.number ?? '' }));
+    else {
+      setConfirming(false);
+      showToast(issueFailureText(r.failure));
+    }
+  };
+  if (!confirming) {
+    return (
+      <div className="card-actions">
+        <button type="button" className="btn primary" onClick={() => setConfirming(true)}>
+          <Icon n="check" s={14} />
+          {t('invoices.issue')}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="confirm" role="group" aria-label={t('invoices.issueConfirm')}>
+      <span>{t('invoices.issueConfirm')}</span>
+      <button type="button" className="btn primary" onClick={() => void run()} disabled={busy} autoFocus>
+        {busy ? t('invoices.issueBusy') : t('invoices.issueNow')}
+      </button>
+      <button type="button" className="btn" onClick={() => setConfirming(false)} disabled={busy}>
+        {t('common.cancel')}
+      </button>
     </div>
   );
 }

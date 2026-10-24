@@ -49,7 +49,7 @@ const german = (iso: string) => iso.split('-').reverse().join('.');
 async function readDocuments(page: Page) {
   const files = await readFolders(page);
   return Object.entries(files)
-    .filter(([path]) => path.startsWith('Ordner-1/documents/'))
+    .filter(([path]) => /^Ordner-1\/documents\/[^/]+\.json$/.test(path))
     .map(([, text]) => JSON.parse(text) as Record<string, unknown>);
 }
 
@@ -61,7 +61,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
   await addItem(page);
 
   await nav(page, 'Rechnungen');
-  await expect(page.getByRole('note')).toContainText('Rechnungen sind vorerst Entwürfe.');
+  await expect(page.getByRole('note')).toContainText('Entwürfe lassen sich ändern und löschen.');
   await expect(page.getByText('Noch keine Rechnungen.')).toBeVisible();
   await page.getByRole('button', { name: 'Neue Rechnung' }).click();
   await expect(page.getByRole('heading', { name: 'Neue Rechnung' })).toBeFocused();
@@ -134,7 +134,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
 
   const [file] = await readDocuments(page);
   expect(file).toMatchObject({
-    schemaVersion: 3,
+    schemaVersion: 4,
     kind: 'invoice',
     quoteId: null,
     date: isoToday(),
@@ -145,6 +145,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
     leitwegId: '',
     subject: 'Website-Relaunch',
     accountId: expect.any(String),
+    issued: null,
     lines: [{ name: 'Webdesign', description: '', quantity: 10000, unit: 'HUR', unitPrice: 8500, vatRate: 1900 }],
     deletedAt: null,
   });
@@ -238,5 +239,85 @@ test('a quote becomes an invoice; a small business invoices without VAT, without
   const quote = documents.find((d) => d['kind'] === 'quote');
   const invoice = documents.find((d) => d['kind'] === 'invoice');
   expect(invoice).toMatchObject({ quoteId: quote?.['id'], customerId: quote?.['customerId'], subject: 'Beratung', closingText: '', taxTreatment: 'standard' });
+  expect(errors).toEqual([]);
+});
+
+test('issuing: the next number, the PDF in the folder, the audit entry, and no change afterwards', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+  await addCustomer(page, { name: 'Kunde GmbH', address: true });
+  const year = isoToday().slice(0, 4);
+  const rows = page.getByRole('table').getByRole('row');
+
+  async function newInvoice(subject: string) {
+    await nav(page, 'Rechnungen');
+    await page.getByRole('button', { name: 'Neue Rechnung' }).click();
+    await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
+    await page.getByLabel('Betreff').fill(subject);
+    // a new draft is saved before it can be issued
+    await expect(page.getByText('Speichere den Entwurf, um ihn auszustellen.')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Freie Position' }).click();
+    await line(page, 1).getByLabel('Bezeichnung').fill('Beratung');
+    await line(page, 1).getByLabel('Menge').fill('8');
+    await line(page, 1).getByLabel('Einzelpreis netto €').fill('95');
+    await expect(page.getByText('Speichere den Entwurf, um ihn auszustellen.')).toBeVisible();
+    await page.getByRole('button', { name: 'Speichern' }).click();
+    await page.getByRole('button', { name: 'Kunde GmbH' }).filter({ hasText: 'Kunde GmbH' }).last().click();
+  }
+
+  await newInvoice('Oktober');
+  // a change not saved yet is saved before issuing; issuing asks first
+  await page.getByLabel('Betreff').fill('Beratung Oktober');
+  await page.getByRole('button', { name: 'Rechnung ausstellen' }).click();
+  const confirm = page.getByRole('group', { name: /^Rechnung jetzt ausstellen\?/ });
+  await confirm.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(confirm).toHaveCount(0);
+  await page.getByRole('button', { name: 'Rechnung ausstellen' }).click();
+  await confirm.getByRole('button', { name: 'Jetzt ausstellen' }).click();
+  await expect(page.getByRole('status').filter({ hasText: `Rechnung RE-${year}-0001 ausgestellt` })).toBeVisible();
+
+  // read-only: the number, the master data of the time, no saving or deleting
+  await expect(page.getByRole('heading', { name: `Rechnung RE-${year}-0001` })).toBeVisible();
+  await expect(page.getByText(`documents/issued/RE-${year}-0001.pdf`)).toBeVisible();
+  await expect(page.getByText('Beratung Oktober')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Speichern' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Löschen' })).toHaveCount(0);
+
+  // the PDF is the file in the folder, with the number and without the draft mark
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF herunterladen' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe(`Rechnung_RE-${year}-0001_Kunde-GmbH.pdf`);
+  const pdf = await PDFDocument.load(await readFile((await download.path()) ?? ''), { updateMetadata: false });
+  expect(pdf.getTitle()).toBe(`Rechnung – RE-${year}-0001 – Kunde GmbH – ${german(isoToday())}`);
+
+  const files = await readFolders(page);
+  expect(Object.keys(files)).toContain(`Ordner-1/documents/issued/RE-${year}-0001.pdf`);
+  const range = JSON.parse(files['Ordner-1/numbering/invoice.json'] ?? '{}') as { counters: unknown[]; reservations: { number: string }[] };
+  expect(range.counters).toEqual([{ key: year, last: 1 }]);
+  expect(range.reservations.map((r) => r.number)).toEqual([`RE-${year}-0001`]);
+  const audit = (files[`Ordner-1/audit/${isoToday().slice(0, 7)}.jsonl`] ?? '').trim().split('\n');
+  expect(audit.map((l) => (JSON.parse(l) as { action: string; number: string }).number)).toEqual([`RE-${year}-0001`]);
+  const [issued] = (await readDocuments(page)).filter((d) => (d['issued'] as { number?: string } | null)?.number);
+  expect(issued).toMatchObject({ subject: 'Beratung Oktober', issued: { number: `RE-${year}-0001`, pdf: { file: `RE-${year}-0001.pdf` } } });
+
+  // the list shows the number; the next invoice gets the next number
+  await page.getByRole('button', { name: 'Zurück zur Liste' }).first().click();
+  await expect(rows.nth(1)).toContainText(`RE-${year}-0001`);
+  await newInvoice('November');
+  await page.getByRole('button', { name: 'Rechnung ausstellen' }).click();
+  await page.getByRole('group', { name: /^Rechnung jetzt ausstellen\?/ }).getByRole('button', { name: 'Jetzt ausstellen' }).click();
+  await expect(page.getByRole('heading', { name: `Rechnung RE-${year}-0002` })).toBeVisible();
+
+  // after a reload the invoices are still issued; the filter tells drafts from issued ones
+  await page.reload();
+  await nav(page, 'Rechnungen');
+  const filter = page.getByRole('group', { name: 'Nach Status filtern' });
+  await expect(filter.getByRole('button')).toHaveText(['Alle 2', 'Entwürfe 0', 'Ausgestellt 2']);
+  await page.getByRole('searchbox').fill(`RE-${year}-0002`);
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByRole('button', { name: 'Kunde GmbH' }).click();
+  await expect(page.getByRole('heading', { name: `Rechnung RE-${year}-0002` })).toBeVisible();
   expect(errors).toEqual([]);
 });

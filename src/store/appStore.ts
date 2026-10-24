@@ -267,19 +267,26 @@ export function addInvoice(customerId: ContactId, accountId: AccountId, content:
   return invoice.id;
 }
 
+/** Only a draft can change; an issued invoice stays as it is (ADR 0004) */
 export function updateInvoice(id: DocumentId, customerId: ContactId, accountId: AccountId, content: InvoiceContent) {
   const current = get().documents.get(id);
-  if (!current || current.deletedAt || current.kind !== 'invoice') return;
+  if (!current || current.deletedAt || current.kind !== 'invoice' || current.issued) return;
   const next = withChanges<InvoiceMergeableField, InvoiceFile>(current, { customerId, accountId, ...content });
   if (next !== current) putDocument(next);
 }
 
-/** Soft delete: the file stays, the quote or the invoice draft is hidden */
+/** Soft delete: the file stays, the quote or the invoice draft is hidden. An issued invoice cannot be deleted. */
 export function deleteDocument(id: DocumentId) {
   const current = get().documents.get(id);
-  if (!current || current.deletedAt) return;
+  if (!current || current.deletedAt || (current.kind === 'invoice' && current.issued)) return;
   const at = nowIso();
   putDocument(withChanges<'deletedAt', DocumentFile>(current, { deletedAt: at }, at));
+}
+
+/** An invoice as the issue flow wrote it (app/issue.ts): issued, with its number, snapshot and PDF */
+export function putIssuedInvoice(written: InvoiceFile) {
+  if (!written.issued) return;
+  putDocument(written);
 }
 
 /** Like `integrateWrittenCompany`, for one document */

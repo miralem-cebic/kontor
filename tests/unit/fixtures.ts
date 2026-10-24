@@ -3,7 +3,7 @@ import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
 import type { DocumentLine } from '../../src/domain/document';
-import type { InvoiceContent } from '../../src/domain/invoice';
+import type { InvoiceContent, IssuedInfo } from '../../src/domain/invoice';
 import type { ItemProfile } from '../../src/domain/item';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import type { QuoteContent } from '../../src/domain/quote';
@@ -128,6 +128,17 @@ export const sampleInvoice = (over: Partial<InvoiceContent> = {}): InvoiceConten
   introText: '',
   closingText: 'Vielen Dank für Ihren Auftrag.',
   lines: sampleQuote().lines,
+  ...over,
+});
+
+/** What an invoice holds once issued: number, counter, snapshot of the sample data and its PDF */
+export const sampleIssued = (number = 'RE-2026-0001', over: Partial<IssuedInfo> = {}): IssuedInfo => ({
+  number,
+  counter: 1,
+  counterKey: '2026',
+  issuedAt: '2026-10-31T10:00:00.000Z',
+  snapshot: { company: sampleProfile(), customer: sampleContact(), account: sampleAccount() },
+  pdf: { file: `${number}.pdf`, sha256: 'a'.repeat(64) },
   ...over,
 });
 

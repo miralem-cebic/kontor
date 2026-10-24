@@ -11,7 +11,7 @@ const inAustria = makeContact(sampleContact({ nameLine2: '', contactPerson: '', 
 const invoice = (over: Parameters<typeof sampleInvoice>[0] = {}, who = customer) => makeInvoice(who.id, account.id, sampleInvoice(over), null);
 /** Amounts and rates come with a no-break space before "€" and "%"; the tests read them as plain spaces */
 const documentContent = (s: PdfSource): DocumentContent => JSON.parse(JSON.stringify(contentOf(s)).replace(/\u00a0/g, ' ')) as DocumentContent;
-const src = (over: Partial<PdfSource>): PdfSource => ({ company, document: invoice(), customer, account, lang: 'de', ...over });
+const src = (over: Partial<PdfSource>): PdfSource => ({ company, document: invoice(), customer, account, lang: 'de', number: null, ...over });
 
 describe('the content of an invoice', () => {
   const c = documentContent(src({}));
@@ -96,7 +96,7 @@ describe('the content of a quote', () => {
   it('a small business: no VAT, the note on § 19 UStG and the validity', () => {
     const small = sampleCompany({ tax: { taxNumber: '12/345/67890', vatId: '', vat: { kind: 'smallBusiness' }, business: { kind: 'freelance' } } });
     const quote = makeQuote(customer.id, sampleQuote());
-    const c = documentContent({ company: small, document: quote, customer, account: small.bank.accounts[0] ?? null, lang: 'de' });
+    const c = documentContent({ company: small, document: quote, customer, account: small.bank.accounts[0] ?? null, lang: 'de', number: null });
     expect(c.title).toBe('Angebotsentwurf');
     expect(c.info.map((r) => r.label)).toEqual(['Angebotsnummer', 'Angebotsdatum', 'Gültig bis', 'Kundennummer']);
     expect(c.totals).toEqual([{ label: 'Gesamtbetrag', value: '1.362,50 €', grand: true }]);

@@ -252,6 +252,10 @@ const MESSAGES_SRC = {
   },
   'error.invalid': { de: 'Eine Datei im Ordner ist beschädigt oder hat ein unbekanntes Format.', en: 'A file in the folder is damaged or has an unknown format.' },
   'error.other': { de: 'Ein unerwarteter Fehler ist aufgetreten.', en: 'An unexpected error occurred.' },
+  'error.conflict': {
+    de: 'Ein anderes Gerät hat gleichzeitig in den Ordner geschrieben. Es wurde nichts überschrieben; bitte den Ordner prüfen.',
+    en: 'Another device wrote to the folder at the same time. Nothing was overwritten; please check the folder.',
+  },
   'error.otherCompany': {
     de: 'Der Ordner enthält inzwischen ein anderes Unternehmen.',
     en: 'The folder now contains a different company.',
@@ -423,6 +427,10 @@ const MESSAGES_SRC = {
     en: 'PDF “{name}” downloaded. The font does not have these characters, they appear as boxes: {chars}',
   },
   'documents.pdfFailed': { de: 'Das PDF konnte nicht erstellt werden.', en: 'The PDF could not be made.' },
+  'documents.pdfChanged': {
+    de: 'Achtung: „{name}“ wurde nach dem Ausstellen verändert, die Datei stimmt nicht mehr mit ihrer Prüfsumme (SHA-256) überein.',
+    en: 'Warning: “{name}” was changed after it was issued; the file no longer matches its checksum (SHA-256).',
+  },
 
   'quotes.title': { de: 'Angebote', en: 'Quotes' },
   'quotes.new': { de: 'Neues Angebot', en: 'New quote' },
@@ -456,9 +464,41 @@ const MESSAGES_SRC = {
   'invoices.title': { de: 'Rechnungen', en: 'Invoices' },
   'invoices.new': { de: 'Neue Rechnung', en: 'New invoice' },
   'invoices.draftNote': {
-    de: 'Rechnungen sind vorerst Entwürfe. Rechnungsnummer, PDF und das Ausstellen folgen in einer der nächsten Versionen.',
-    en: 'Invoices are drafts for now. The invoice number, the PDF and issuing follow in one of the next versions.',
+    de: 'Entwürfe lassen sich ändern und löschen. Beim Ausstellen bekommt eine Rechnung ihre Nummer, ihr PDF wird im Unternehmensordner abgelegt, und sie lässt sich nicht mehr ändern.',
+    en: 'Drafts can be changed and deleted. Issuing gives an invoice its number and stores its PDF in the company folder; after that it cannot be changed.',
   },
+  'invoices.filter': { de: 'Nach Status filtern', en: 'Filter by status' },
+  'invoices.filterAll': { de: 'Alle', en: 'All' },
+  'invoices.filterDrafts': { de: 'Entwürfe', en: 'Drafts' },
+  'invoices.filterIssued': { de: 'Ausgestellt', en: 'Issued' },
+  'invoices.issued': { de: 'Ausgestellt', en: 'Issued' },
+  'invoices.issuedTitle': { de: 'Rechnung {number}', en: 'Invoice {number}' },
+  'invoices.issuedAt': { de: 'Ausgestellt am', en: 'Issued on' },
+  'invoices.issuedFile': { de: 'PDF im Ordner', en: 'PDF in the folder' },
+  'invoices.issuedNote': {
+    de: 'Ausgestellte Rechnungen lassen sich weder ändern noch löschen. Die Angaben zu Unternehmen, Kunde und Konto sind die vom Zeitpunkt des Ausstellens. Korrekturen über eine Stornorechnung folgen in einer der nächsten Versionen.',
+    en: 'Issued invoices can be neither changed nor deleted. The company, customer and account details are those at the time of issuing. Corrections through a cancellation invoice follow in one of the next versions.',
+  },
+  'invoices.servicePeriodLabel': { de: 'Leistungszeitraum', en: 'Period of service' },
+  'invoices.issue': { de: 'Rechnung ausstellen', en: 'Issue invoice' },
+  'invoices.issueNow': { de: 'Jetzt ausstellen', en: 'Issue now' },
+  'invoices.issueConfirm': {
+    de: 'Rechnung jetzt ausstellen? Sie bekommt die nächste Rechnungsnummer und lässt sich danach weder ändern noch löschen.',
+    en: 'Issue the invoice now? It gets the next invoice number and can be neither changed nor deleted afterwards.',
+  },
+  'invoices.issueBusy': { de: 'Wird ausgestellt …', en: 'Issuing …' },
+  'invoices.issueSaveFirst': { de: 'Speichere den Entwurf, um ihn auszustellen.', en: 'Save the draft to issue it.' },
+  'invoices.issuedToast': { de: 'Rechnung {number} ausgestellt', en: 'Invoice {number} issued' },
+  'invoices.issuedAuditMissing': {
+    de: 'Rechnung {number} ausgestellt, aber der Eintrag im Protokoll (audit/) konnte nicht geschrieben werden.',
+    en: 'Invoice {number} issued, but the entry in the log (audit/) could not be written.',
+  },
+  'invoices.issueNotReady': { de: 'Die Rechnung ist noch nicht vollständig und wurde nicht ausgestellt.', en: 'The invoice is not complete yet and was not issued.' },
+  'invoices.issueNumberTaken': {
+    de: 'Die nächste Rechnungsnummer ist im Ordner schon vergeben, der Nummernkreis (numbering/invoice.json) ist nicht aktuell. Es wurde nichts ausgestellt.',
+    en: 'The next invoice number is already taken in the folder; the number range (numbering/invoice.json) is out of date. Nothing was issued.',
+  },
+  'invoices.issueFailed': { de: 'Die Rechnung wurde nicht ausgestellt: {reason}', en: 'The invoice was not issued: {reason}' },
   'invoices.empty': {
     de: 'Noch keine Rechnungen. Lege eine neue an oder erstelle sie aus einem Angebot.',
     en: 'No invoices yet. Add a new one or create it from a quote.',
@@ -528,8 +568,8 @@ const MESSAGES_SRC = {
   'invoices.accountRemoved': { de: '{name} (entfernt)', en: '{name} (removed)' },
   'invoices.sectionIssue': { de: 'Ausstellen', en: 'Issue' },
   'invoices.issueLater': {
-    de: 'Beim Ausstellen bekommt die Rechnung ihre Nummer und ihr PDF; danach lässt sie sich nicht mehr ändern. Das Ausstellen folgt in einer der nächsten Versionen.',
-    en: 'Issuing gives the invoice its number and its PDF; after that it cannot be changed. Issuing follows in one of the next versions.',
+    de: 'Beim Ausstellen bekommt die Rechnung ihre Nummer, und ihr PDF wird im Ordner abgelegt (documents/issued/). Danach lässt sie sich weder ändern noch löschen.',
+    en: 'Issuing gives the invoice its number and stores its PDF in the folder (documents/issued/). After that it can be neither changed nor deleted.',
   },
   'invoices.ready': { de: 'Alle Angaben für das Ausstellen sind da.', en: 'Everything needed for issuing is there.' },
   'invoices.missing': { de: 'Vor dem Ausstellen noch zu tun:', en: 'To do before issuing:' },
@@ -593,7 +633,9 @@ const MESSAGES_SRC = {
   },
 
   'pdf.watermark': { de: 'ENTWURF', en: 'DRAFT' },
+  'pdf.invoice': { de: 'Rechnung', en: 'Invoice' },
   'pdf.invoiceDraft': { de: 'Rechnungsentwurf', en: 'Draft invoice' },
+  'pdf.payReference': { de: 'Verwendungszweck: {number}', en: 'Payment reference: {number}' },
   'pdf.quoteDraft': { de: 'Angebotsentwurf', en: 'Draft quote' },
   'pdf.invoiceNumber': { de: 'Rechnungsnummer', en: 'Invoice number' },
   'pdf.quoteNumber': { de: 'Angebotsnummer', en: 'Quote number' },
@@ -651,8 +693,8 @@ const MESSAGES_SRC = {
   'home.title': { de: 'Übersicht', en: 'Dashboard' },
   'home.welcome': { de: '{name} ist eingerichtet.', en: '{name} is set up.' },
   'home.next': {
-    de: 'Hier erscheinen bald Gewinn, offene Forderungen und die Steuer-Rücklage. Das Ausstellen von Rechnungen und die Ausgaben folgen in den nächsten Versionen.',
-    en: 'Profit, open receivables and the tax reserve will appear here. Issuing invoices and expenses follow in the next versions.',
+    de: 'Hier erscheinen bald Gewinn, offene Forderungen und die Steuer-Rücklage. Zahlungen und Ausgaben folgen in den nächsten Versionen.',
+    en: 'Profit, open receivables and the tax reserve will appear here. Payments and expenses follow in the next versions.',
   },
 
   'settings.title': { de: 'Einstellungen', en: 'Settings' },

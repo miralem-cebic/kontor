@@ -14,6 +14,7 @@ const source = (over: Parameters<typeof sampleInvoice>[0] = {}): PdfSource => ({
   customer,
   account,
   lang: 'de',
+  number: null,
 });
 /** A 1×1 PNG */
 const PNG = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));

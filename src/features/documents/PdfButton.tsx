@@ -18,6 +18,7 @@ export function PdfButton({ prepare }: { prepare: () => DocumentId | null }) {
     const r = await downloadDocumentPdf(id);
     setBusy(false);
     if (!r.ok) showToast(t('documents.pdfFailed'));
+    else if (r.changed) showToast(t('documents.pdfChanged', { name: r.fileName }));
     else if (r.missing.length) showToast(t('documents.pdfMissing', { name: r.fileName, chars: r.missing.join(' ') }));
     else showToast(t('documents.pdfDone', { name: r.fileName }));
   };

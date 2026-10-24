@@ -80,7 +80,7 @@ Must features added from the market analysis:
 | F05 | **Layouts and language** | 2–3 invoice layouts, accent colour, footer in columns. **Invoices in English** (language per customer) | M |
 | I3 | **Import contacts from CSV** | see Phase 3.5; possible as early as Phase 1, because contacts exist already | M |
 
-From user feedback (22 October 2026), agreed:
+From user feedback (22 and 24 October 2026), agreed:
 
 | ID | Feature | Content | Effort |
 | --- | --- | --- | --- |
@@ -88,6 +88,7 @@ From user feedback (22 October 2026), agreed:
 | F22 | **Quote versions** | once a quote is sent, a change creates a new version instead of overwriting it (number with a suffix, for example `AN-2026-0012-2`). The history shows what changed between versions (lines removed or added, quantities, prices, discounts) and how often quotes are changed, per customer and overall. Fits the immutability of issued documents (ADR 0004) | M |
 | F23 | **Discounts** | per line (percent or amount) and on the whole document, on quotes, orders and invoices, including the final invoice of F02. The VAT is calculated on the discounted amounts per rate, rounded in `money.ts`. In the e-invoice they are allowances (BG-27 per line, BG-20 per document). Until then a line with a negative quantity works as a deduction | M |
 | F25 | **Source of the trade tax multiplier** (done) | a live lookup needs the network, and a table of all municipalities would have to be updated every year. Instead, a link to the official source next to the multiplier field (setup assistant and settings), so the user looks the rate up there. Only an `https:` link (see the link rule in CLAUDE.md). The link goes to the map "Hebesätze der Gemeinden" of the statistical offices (statistikportal.de) | S |
+| F26 | **Footer from the master data** (improvement) | the footer of quotes and invoices already shows, in columns, the company's name and address, phone and email, tax number and VAT ID, and the bank details of the account the invoice is paid to; the free text "Fußzeile" is printed below them. The setup assistant and the settings do not say so, so users may type their address and bank details a second time. The step "Rechnungen" of the assistant and the invoice settings show a preview of the footer built from what was entered, with a choice of the parts it shows (for example without the phone number); the hint of the free text says that it is for additions only (for example a website). The PDF (`footerColumns` in `src/pdf/content.ts`) uses the same choice, so it becomes a field of `invoiceDefaults` (a schema change) | S |
 
 ### Phase 2: e-invoices
 

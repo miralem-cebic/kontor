@@ -1,4 +1,6 @@
+import { PDFDocument } from '@cantoo/pdf-lib';
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { APP_URL, isoToday, readFolders, setUpCompany, watchErrors } from './helpers';
 
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('button', { name }).click();
@@ -159,6 +161,21 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
   await page.getByLabel('Zahlungsziel in Tagen').fill('7');
   await page.getByRole('button', { name: 'Speichern' }).click();
   await expect(rows.nth(1)).toContainText(german(daysFromToday(7)));
+
+  // the PDF of the draft: changes not saved yet are saved first, then the file is downloaded
+  await page.getByRole('button', { name: 'Kunde GmbH' }).click();
+  await page.getByLabel('Betreff').fill('Website-Relaunch Oktober');
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF herunterladen' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe(`Rechnungsentwurf_${isoToday()}_Kunde-GmbH.pdf`);
+  await expect(page.getByRole('status').filter({ hasText: `PDF „Rechnungsentwurf_${isoToday()}_Kunde-GmbH.pdf“ heruntergeladen` })).toBeVisible();
+  const pdf = await PDFDocument.load(await readFile((await download.path()) ?? ''), { updateMetadata: false });
+  expect(pdf.getPageCount()).toBe(1);
+  expect(pdf.getTitle()).toBe(`Rechnungsentwurf – Kunde GmbH – ${german(isoToday())}`);
+  expect(pdf.getSubject()).toBe('Website-Relaunch Oktober');
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(rows.nth(1)).toContainText('Website-Relaunch Oktober');
 
   // delete after asking; the file stays
   await page.getByRole('button', { name: 'Kunde GmbH' }).click();

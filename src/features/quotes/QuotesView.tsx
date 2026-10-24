@@ -13,6 +13,7 @@ import { fieldError, problemText } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
+import { PdfButton } from '../documents/PdfButton';
 
 // Quotes: a searchable list and a form for a new or an existing quote. The form edits a draft; only "Save" puts
 // the checked quote into the store (and the persister writes it). Quotes are drafts until numbering and the PDF come;
@@ -277,10 +278,13 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
               {t('common.cancel')}
             </button>
             {quote && (
-              <button type="button" className="btn" onClick={createInvoice}>
-                <Icon n="invoice" s={14} />
-                {t('quotes.createInvoice')}
-              </button>
+              <>
+                <PdfButton prepare={() => store()?.id ?? null} />
+                <button type="button" className="btn" onClick={createInvoice}>
+                  <Icon n="invoice" s={14} />
+                  {t('quotes.createInvoice')}
+                </button>
+              </>
             )}
             <span className="sp" />
             {quote &&

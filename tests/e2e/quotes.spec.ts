@@ -1,4 +1,6 @@
+import { PDFDict, PDFDocument, PDFName } from '@cantoo/pdf-lib';
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { APP_URL, isoToday, readFolders, setUpCompany, watchErrors } from './helpers';
 
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('button', { name }).click();
@@ -163,10 +165,10 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   expect(errors).toEqual([]);
 });
 
-test('a small business quotes without VAT; an old quote is marked as expired and can be filtered', async ({ page }) => {
+test('a small business quotes without VAT; an old quote is marked as expired and can be filtered; its PDF has the logo', async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto(APP_URL);
-  await setUpCompany(page, { name: 'Klein Design' });
+  await setUpCompany(page, { name: 'Klein Design', logo: 'svg' });
   await addContact(page, 'Kunde GmbH', { customer: true, supplier: false });
 
   await nav(page, 'Angebote');
@@ -212,5 +214,18 @@ test('a small business quotes without VAT; an old quote is marked as expired and
   await page.getByRole('searchbox').fill('nichts');
   await expect(filter.getByRole('button')).toHaveText(['Alle 0', 'Gültig 0', 'Abgelaufen 0']);
   await expect(page.getByText('Keine Angebote gefunden.')).toBeVisible();
+
+  // the PDF of the quote, with the SVG logo drawn as an image
+  await page.getByRole('searchbox').fill('');
+  await filter.getByRole('button', { name: /^Alle/ }).click();
+  await page.getByRole('button', { name: 'Kunde GmbH' }).first().click();
+  await expect(page.getByRole('button', { name: 'PDF herunterladen' })).toBeVisible();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF herunterladen' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toMatch(/^Angebotsentwurf_\d{4}-\d\d-\d\d_Kunde-GmbH\.pdf$/);
+  const pdf = await PDFDocument.load(await readFile((await download.path()) ?? ''), { updateMetadata: false });
+  const images = pdf.getPage(0).node.Resources()?.lookup(PDFName.of('XObject'), PDFDict);
+  expect(images?.keys()).toHaveLength(1);
   expect(errors).toEqual([]);
 });

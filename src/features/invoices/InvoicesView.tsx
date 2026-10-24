@@ -34,6 +34,7 @@ import { accountDetail, accountName, fieldError, issueProblemText, problemText, 
 import { addInvoice, deleteDocument, showToast, updateInvoice, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
+import { PdfButton } from '../documents/PdfButton';
 
 // Invoices: a searchable list and a form for a new or an existing draft. Like a quote, the form edits a draft; only
 // "Save" puts the checked invoice into the store (and the persister writes it). Issuing (number, PDF, audit entry,
@@ -242,7 +243,8 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
     { id: 'invoice-sec-issue', title: t('invoices.sectionIssue'), icon: 'check' },
   ];
 
-  const save = () => {
+  /** Checks the draft and puts it into the store; returns the invoice's ID and its customer's name, or null on errors */
+  const store = (): { id: DocumentId; customerName: string } | null => {
     const r = readInvoice(draft, lang, smallBusiness);
     const chosen = r.ok ? findContact(r.value.customerId) : undefined;
     const paidTo = r.ok ? findAccount(r.value.accountId) : undefined;
@@ -254,11 +256,16 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
       setChecked(true);
       setErrors(r.ok ? missing : r.error);
       focusFirstError('invoice-form');
-      return;
+      return null;
     }
     if (invoice) updateInvoice(invoice.id, chosen.id, paidTo.id, r.value.content);
-    else addInvoice(chosen.id, paidTo.id, r.value.content, quote?.id ?? null);
-    showToast(t('invoices.saved', { name: chosen.name }));
+    return { id: invoice ? invoice.id : addInvoice(chosen.id, paidTo.id, r.value.content, quote?.id ?? null), customerName: chosen.name };
+  };
+
+  const save = () => {
+    const saved = store();
+    if (!saved) return;
+    showToast(t('invoices.saved', { name: saved.customerName }));
     onDone();
   };
 
@@ -443,6 +450,7 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
             <button type="button" className="btn" onClick={onDone}>
               {t('common.cancel')}
             </button>
+            {invoice && <PdfButton prepare={() => store()?.id ?? null} />}
             <span className="sp" />
             {invoice &&
               (confirmDelete ? (

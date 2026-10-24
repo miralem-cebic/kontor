@@ -7,7 +7,7 @@ import { formatIban } from '../domain/iban';
 import type { IssueProblem, TaxTreatment, TaxTreatmentHint } from '../domain/invoice';
 import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
-import { t, type MessageKey } from '../i18n';
+import { t, tIn, type Lang, type MessageKey } from '../i18n';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
 
@@ -101,6 +101,9 @@ const UNIT_KEY: Record<UnitCode, MessageKey> = {
 };
 
 export const unitText = (u: UnitCode): string => t(UNIT_KEY[u]);
+
+/** The name of a unit in a given language, for example on a document */
+export const unitTextIn = (lang: Lang, u: UnitCode): string => tIn(lang, UNIT_KEY[u]);
 
 /** The name of an account for lists and choices: its own name, or its kind */
 export const accountName = (a: AccountDetails): string => a.name || t(a.kind === 'bank' ? 'accounts.kindBank' : 'accounts.kindPaypal');

@@ -364,6 +364,18 @@ async function loadLogo() {
   else console.warn('Could not read the logo', res.error.cause);
 }
 
+/** The logo file of the open company, for a PDF; null when there is none or it cannot be read */
+export async function readLogo(): Promise<{ bytes: Uint8Array; type: LogoType } | null> {
+  const company = useApp.getState().company;
+  if (!repo || !company?.logo) return null;
+  const res = await repo.readAsset(company.logo.file);
+  if (!res.ok) {
+    console.warn('Could not read the logo', res.error.cause);
+    return null;
+  }
+  return { bytes: new Uint8Array(await res.value.arrayBuffer()), type: company.logo.type };
+}
+
 /** Settings: a new logo is written as a new file (named after its hash); the old file stays in the folder. */
 export async function replaceLogo(logo: LogoUpload): Promise<StorageErrorKind | null> {
   if (!repo) return 'notFound';

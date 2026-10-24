@@ -1,6 +1,6 @@
 # 0004: Invoice finalization and numbering
 
-- Status: Accepted; issuing implemented on 24 October 2026 (`src/app/issue.ts`), cancellation and correction invoices open
+- Status: Accepted; issuing and cancelling implemented on 24 October 2026 (`src/app/issue.ts`), correction invoices open
 - Date: 2026-10-21
 
 ## Context
@@ -26,6 +26,15 @@ German law and the GoBD (principles for proper bookkeeping in electronic form) e
 - **Assumption for the MVP:** only one device writes to a company at a time. The reservation detects violations of this assumption; it does not make concurrent issuing safe. The README tells users not to edit one company on two devices at the same time.
 - **Yearly restart:** when the pattern contains a year (`{YYYY}` or `{YY}`), the counter starts again at 1 in every calendar year, counted by the invoice date: `RE-2026-0042` is followed by `RE-2027-0001`. Without a year in the pattern the counter runs on across years (a month alone, `{MM}`, does not restart it). The range file keeps the last number per year.
 - Uniqueness is checked on the full formatted number against all issued documents of the company. Changing the pattern during a year therefore cannot produce a duplicate unnoticed.
+
+### Cancellation (added 24 October 2026)
+
+- A cancellation invoice reverses an issued invoice as a whole: the same lines with the opposite quantity, so every amount and the VAT per rate are the invoice's with the opposite sign. It names the invoice it cancels by number and date (§ 31 Abs. 5 UStDV: a correction refers specifically and unambiguously to the invoice it corrects).
+- It is issued at once, with the next number of the invoice range: one consecutive range for invoices and cancellations, so there is no second pattern to set up. It is dated on the day of cancelling, never before the invoice, and counted in that year.
+- It takes the snapshot of the cancelled invoice, not the current master data: it reverses what the invoice said, also when the company switched its VAT scheme or the customer moved since.
+- The cancelled invoice does not change. It counts as cancelled because a cancellation refers to it. The cancellation's ID is derived from the invoice's ID, so an invoice has at most one cancellation, and a second attempt finishes the first one.
+- The corrected invoice is a new invoice: "Copy as new invoice" starts a draft with everything from the cancelled one.
+- A correction of a part of an invoice (a correction invoice with only the difference) is not covered yet.
 
 ## Consequences
 

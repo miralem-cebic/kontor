@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { documentTotals, emptyLineDraft, hasNegativeRate, type LineDraft } from '../../src/domain/document';
 import {
   byInvoiceDate,
+  cancellationContent,
   customerDefaults,
   draftDueDate,
   draftFromInvoice,
   dueDate,
   emptyInvoiceDraft,
+  invoiceDraftFromCopy,
   invoiceDraftFromQuote,
   invoiceMatches,
   invoiceTotals,
@@ -149,15 +151,16 @@ describe('defaults', () => {
   });
 });
 
+const arbLine = fc.record({
+  name: fc.string({ minLength: 1, maxLength: 200 }).filter((s) => s.trim() === s && s !== ''),
+  description: fc.constantFrom('', 'Zweite Zeile\nund dritte'),
+  quantity: fc.integer({ min: -999_999, max: 999_999 }).filter((q) => q !== 0).map(quantity),
+  unit: fc.constantFrom(...UNITS),
+  unitPrice: fc.integer({ min: 0, max: 99_999_999 }).map(cents),
+  vatRate: fc.constantFrom(...VAT_RATES),
+});
+
 describe('draft ↔ invoice', () => {
-  const arbLine = fc.record({
-    name: fc.string({ minLength: 1, maxLength: 200 }).filter((s) => s.trim() === s && s !== ''),
-    description: fc.constantFrom('', 'Zweite Zeile\nund dritte'),
-    quantity: fc.integer({ min: -999_999, max: 999_999 }).filter((q) => q !== 0).map(quantity),
-    unit: fc.constantFrom(...UNITS),
-    unitPrice: fc.integer({ min: 0, max: 99_999_999 }).map(cents),
-    vatRate: fc.constantFrom(...VAT_RATES),
-  });
   const arbService = fc.oneof(
     fc.constant({ kind: 'date' as const, date: '2026-10-15' }),
     fc.constant({ kind: 'period' as const, start: '2026-10-01', end: '2026-10-31' }),
@@ -180,6 +183,42 @@ describe('draft ↔ invoice', () => {
       ),
       fcParams,
     ));
+});
+
+describe('cancellation', () => {
+  it('reverses every line and keeps service, tax treatment and references, without the texts and the term', () => {
+    const original = sampleInvoice({ introText: 'Hallo', paymentTermDays: 14 });
+    const c = cancellationContent(original, '2026-11-05');
+    expect(c).toEqual({ ...original, date: '2026-11-05', paymentTermDays: 0, introText: '', closingText: '', lines: original.lines.map((l) => ({ ...l, quantity: -l.quantity })) });
+  });
+
+  it('is never dated before the invoice it cancels', () => {
+    expect(cancellationContent(sampleInvoice({ date: '2026-12-01' }), '2026-11-05').date).toBe('2026-12-01');
+  });
+
+  it('its totals are those of the invoice with the opposite sign, per rate and with every tax treatment', () =>
+    fc.assert(
+      fc.property(fc.array(arbLine, { minLength: 1, maxLength: 8 }), fc.constantFrom(...TAX_TREATMENTS), fc.boolean(), (lines, taxTreatment, smallBusiness) => {
+        const original = sampleInvoice({ lines, taxTreatment });
+        const o = invoiceTotals(original, smallBusiness);
+        const c = invoiceTotals(cancellationContent(original, '2026-11-05'), smallBusiness);
+        return (
+          c.net === -o.net &&
+          c.tax === -o.tax &&
+          c.gross === -o.gross &&
+          c.byRate.length === o.byRate.length &&
+          c.byRate.every((r, i) => r.rate === o.byRate[i]?.rate && r.net === -o.byRate[i].net && r.tax === -o.byRate[i].tax)
+        );
+      }),
+      fcParams,
+    ));
+
+  it('a copy of an invoice is a new draft of today with its content', () => {
+    const original = sampleInvoice();
+    const copy = invoiceDraftFromCopy('c1', 'a1', original, '2026-11-05', 'de', key);
+    expect(copy).toEqual({ ...draftFromInvoice('c1', 'a1', original, 'de', key), date: '2026-11-05', lines: copy.lines });
+    expect(readInvoice(copy, 'de', false)).toEqual({ ok: true, value: { customerId: 'c1', accountId: 'a1', content: { ...original, date: '2026-11-05' } } });
+  });
 });
 
 describe('issueProblems', () => {

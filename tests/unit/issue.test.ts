@@ -1,12 +1,13 @@
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { issue, type IssueContext } from '../../src/app/issue';
+import { cancel, issue, type IssueContext } from '../../src/app/issue';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
-import type { DocumentId } from '../../src/data/ids';
+import { cancellationId, type DocumentId } from '../../src/data/ids';
 import { err, must } from '../../src/data/result';
 import { makeContact, makeInvoice } from '../../src/data/schema';
 import type { CompanyFile, ContactFile, DocumentFile, InvoiceFile } from '../../src/data/types';
+import { invoiceTotals } from '../../src/domain/invoice';
 import { sha256Hex } from '../../src/lib/sha256';
 import { sampleCompany, sampleContact, sampleInvoice } from './fixtures';
 
@@ -146,5 +147,96 @@ describe('issue', () => {
     repo.writeNumbering = async (file) => write({ ...file, reservations: file.reservations.map((r) => ({ ...r, documentId: 'other' as DocumentId })) });
     expect(await issue(inv.id, ctx())).toEqual({ ok: false, failure: 'conflict' });
     expect(must(await repo.listIssuedFiles())).toEqual([]);
+  });
+});
+
+describe('cancel', () => {
+  const later = { now: new Date('2026-11-05T09:00:00Z') };
+
+  /** Cancels and keeps the result in the documents, as the store does */
+  async function cancelOk(id: DocumentId, over: Partial<IssueContext> = later): Promise<InvoiceFile> {
+    const r = await cancel(id, ctx(over));
+    if (!r.ok) throw new Error(`cancel failed: ${r.failure}`);
+    documents.set(r.invoice.id, r.invoice);
+    return r.invoice;
+  }
+
+  it('issues the cancellation with the next number, the opposite amounts, its PDF and an audit entry', async () => {
+    const original = await issueOk((await draft()).id);
+    const c = await cancelOk(original.id);
+    expect(c.id).not.toBe(original.id);
+    expect(c.cancels).toEqual({ id: original.id, number: 'RE-2026-0001', date: '2026-10-31' });
+    expect(c).toMatchObject({ date: '2026-11-05', service: original.service, customerId: original.customerId, quoteId: null });
+    expect(c.issued).toMatchObject({ number: 'RE-2026-0002', counter: 2, counterKey: '2026', pdf: { file: 'RE-2026-0002.pdf' } });
+    expect(c.issued?.snapshot).toEqual(original.issued?.snapshot);
+    expect(invoiceTotals(c, false).gross).toBe(-invoiceTotals(original, false).gross);
+
+    const bytes = must(await repo.readIssuedFile('RE-2026-0002.pdf'));
+    expect(await sha256Hex(bytes.slice())).toBe(c.issued?.pdf.sha256);
+    expect((await PDFDocument.load(bytes, { updateMetadata: false })).getTitle()).toBe('Stornorechnung – RE-2026-0002 – Kunde GmbH – 05.11.2026');
+
+    // in the folder: the invoice as it was, and its cancellation
+    const onDisk = must(await new FsRepository(root.asHandle()).loadDocuments()).documents;
+    expect(onDisk.find((d) => d.id === original.id)).toEqual(original);
+    expect(onDisk.find((d) => d.id === c.id)).toEqual(c);
+    const lines = (await text(await root.getDirectoryHandle('audit'), '2026-11.jsonl')).trim().split('\n');
+    expect(JSON.parse(lines[0] ?? '')).toEqual({
+      at: '2026-11-05T09:00:00.000Z',
+      action: 'cancel',
+      documentId: c.id,
+      number: 'RE-2026-0002',
+      files: [{ file: 'RE-2026-0002.pdf', sha256: c.issued?.pdf.sha256 }],
+      device: 'device-1',
+      cancels: { documentId: original.id, number: 'RE-2026-0001' },
+    });
+    // the next invoice goes on in the same range
+    expect((await issueOk((await draft()).id, later)).issued?.number).toBe('RE-2026-0003');
+  });
+
+  it('keeps the master data of the invoice, also when the customer and the account changed since', async () => {
+    const original = await issueOk((await draft()).id);
+    customer = { ...customer, name: 'Neuer Name AG', deletedAt: '2026-11-01T00:00:00.000Z' };
+    company = { ...company, bank: { ...company.bank, accounts: company.bank.accounts.map((a) => ({ ...a, deletedAt: '2026-11-01T00:00:00.000Z' })) } };
+    const c = await cancelOk(original.id);
+    expect(c.issued?.snapshot.customer.name).toBe('Kunde GmbH');
+    expect(c.issued?.snapshot.account).toEqual(original.issued?.snapshot.account);
+  });
+
+  it('the ID of a cancellation is a UUID that follows from the invoice', async () => {
+    const a = await cancellationId('0f8fad5b-d9cb-469f-a165-70867728950e' as DocumentId);
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(await cancellationId('0f8fad5b-d9cb-469f-a165-70867728950e' as DocumentId)).toBe(a);
+    expect(await cancellationId('7c9e6679-7425-40de-944b-e07fc1f90ae7' as DocumentId)).not.toBe(a);
+  });
+
+  it('is numbered in the year of the cancellation', async () => {
+    const original = await issueOk((await draft({ date: '2026-12-30' })).id);
+    const c = await cancelOk(original.id, { now: new Date('2027-01-04T09:00:00Z') });
+    expect(c.issued?.number).toBe('RE-2027-0001');
+  });
+
+  it('an invoice is cancelled once: a second call returns its cancellation', async () => {
+    const original = await issueOk((await draft()).id);
+    const c = await cancelOk(original.id);
+    expect(await cancel(original.id, ctx(later))).toEqual({ ok: true, invoice: c, auditWritten: true });
+    expect(must(await repo.listIssuedFiles())).toEqual(['RE-2026-0001.pdf', 'RE-2026-0002.pdf']);
+  });
+
+  it('refuses a draft, a cancellation and an unknown invoice', async () => {
+    const d = await draft();
+    const c = await cancelOk((await issueOk((await draft()).id)).id);
+    for (const id of [d.id, c.id, 'nope' as DocumentId]) expect(await cancel(id, ctx(later))).toEqual({ ok: false, failure: 'notReady' });
+    expect(must(await repo.listIssuedFiles())).toHaveLength(2);
+  });
+
+  it('a second attempt after a failure in the middle goes on with the same number and file', async () => {
+    const original = await issueOk((await draft()).id);
+    const save = repo.saveDocument.bind(repo);
+    repo.saveDocument = async () => err({ kind: 'permission', cause: new Error('denied') });
+    expect(await cancel(original.id, ctx(later))).toEqual({ ok: false, failure: 'permission' });
+    repo.saveDocument = save;
+    const c = await cancelOk(original.id, { now: new Date('2026-11-05T09:10:00Z') });
+    expect(c.issued?.number).toBe('RE-2026-0002');
+    expect(must(await repo.listIssuedFiles())).toEqual(['RE-2026-0001.pdf', 'RE-2026-0002.pdf']);
   });
 });

@@ -156,3 +156,20 @@ export function issueFailureText(f: IssueFailure): string {
       return t('invoices.issueFailed', { reason: errorText(f) });
   }
 }
+
+export function cancelFailureText(f: IssueFailure): string {
+  switch (f) {
+    case 'notReady':
+      return t('invoices.cancelNotPossible');
+    case 'numberTaken':
+      return t('invoices.issueNumberTaken');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('invoices.cancelFailed', { reason: errorText(f) });
+  }
+}

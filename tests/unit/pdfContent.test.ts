@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { makeAccount, makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
+import { makeAccount, makeCancellation, makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
+import { newDocumentId } from '../../src/data/ids';
 import type { BankAccount } from '../../src/data/types';
 import { documentContent as contentOf, pdfFileName, recipientLines, type DocumentContent, type PdfSource } from '../../src/pdf/content';
-import { sampleCompany, sampleContact, sampleInvoice, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleQuote } from './fixtures';
 
 const company = sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', paymentTermDays: 14, footer: 'Amtsgericht Köln' } });
 const customer = makeContact(sampleContact());
@@ -89,6 +90,39 @@ describe('the content of an invoice', () => {
     expect(c2.info[1]).toEqual({ label: 'Invoice date', value: '31/10/2026' });
     expect(c2.totals.at(-1)).toEqual({ label: 'Total', value: '€1,585.38', grand: true });
     expect(c2.pageLabel).toBe('Page {n} of {m}');
+  });
+});
+
+describe('the content of a cancellation invoice', () => {
+  const original = { ...invoice(), issued: sampleIssued('RE-2026-0001') };
+  const c = documentContent(src({ document: makeCancellation(original, '2026-11-05', newDocumentId()), number: 'RE-2026-0002' }));
+
+  it('is a cancellation with its own number that names the invoice it cancels, without a due date', () => {
+    expect(c.watermark).toBeNull();
+    expect(c.title).toBe('Stornorechnung');
+    expect(c.info.map((r) => `${r.label}: ${r.value}`)).toEqual([
+      'Rechnungsnummer: RE-2026-0002',
+      'Rechnungsdatum: 05.11.2026',
+      'Leistungszeitraum: 01.10.2026 – 31.10.2026',
+      'Storno zu: RE-2026-0001',
+      'Kundennummer: K-1001',
+      'Ihre Bestellnummer: PO-4711',
+    ]);
+  });
+
+  it('has the lines and totals with the opposite sign and no payment request', () => {
+    expect(c.table.rows[0]).toMatchObject({ quantity: '-12,5', price: '85,00 €', total: '-1.062,50 €' });
+    expect(c.totals.at(-1)).toEqual({ label: 'Gesamtbetrag', value: '-1.585,38 €', grand: true });
+    expect(c.notes).toEqual(['Diese Stornorechnung hebt die Rechnung RE-2026-0001 vom 31.10.2026 vollständig auf.']);
+    expect(c.closing).toBe('');
+    expect(c.meta.fileName).toBe('Stornorechnung_RE-2026-0002_Kunde-GmbH.pdf');
+  });
+
+  it('keeps the VAT note of the invoice', () => {
+    const rc = { ...invoice({ taxTreatment: 'reverseCharge' }, inAustria), issued: sampleIssued('RE-2026-0001') };
+    const c2 = documentContent(src({ document: makeCancellation(rc, '2026-11-05', newDocumentId()), customer: inAustria, number: 'RE-2026-0002' }));
+    expect(c2.notes[0]).toBe('Steuerschuldnerschaft des Leistungsempfängers');
+    expect(c2.notes.at(-1)).toBe('Diese Stornorechnung hebt die Rechnung RE-2026-0001 vom 31.10.2026 vollständig auf.');
   });
 });
 

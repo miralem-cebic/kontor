@@ -242,6 +242,7 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .page-note{margin:0 0 12px}
 .f-row>.w-date{flex:0 1 180px}
 .muted-badge{color:var(--text-2);background:var(--muted-soft)}
+.list-badge{margin-left:6px}
 .lines{display:flex;flex-direction:column;gap:10px;container-type:inline-size}
 .line{margin:0;padding:12px 0 0;border:0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;min-width:0}
 .line:first-child{border-top:0;padding-top:0}

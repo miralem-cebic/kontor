@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeContact, makeInvoice, makeItem, makeQuote } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeInvoice, makeItem, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
@@ -276,9 +276,33 @@ describe('issued invoice validation', () => {
   });
 });
 
+describe('cancellation invoice validation', () => {
+  const original = () => ({
+    ...makeInvoice(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), brandId<'AccountId'>('account-1'), sampleInvoice(), null),
+    issued: sampleIssued(),
+  });
+  const cancellationFile = (over: Record<string, unknown> = {}) =>
+    ({ ...JSON.parse(JSON.stringify(makeCancellation(original(), '2026-11-02', brandId<'DocumentId'>('6f1f0b0e-3c1a-8d2b-9a4e-1b2c3d4e5f60')))), issued: JSON.parse(JSON.stringify(sampleIssued('RE-2026-0002'))), ...over }) as Record<string, unknown>;
+  const readDocument = (raw: unknown) => migrate('document', raw);
+
+  it('accepts a cancellation issued by the app', () => {
+    const raw = cancellationFile();
+    expect(readDocument(raw)).toEqual(raw);
+  });
+
+  it.each([
+    ['a cancellation that is not issued', { issued: null }],
+    ['a number that is no file name', { cancels: { id: 'd1', number: '../RE-1', date: '2026-10-31' } }],
+    ['an ID that is no ID', { cancels: { id: '__proto__', number: 'RE-2026-0001', date: '2026-10-31' } }],
+    ['no date', { cancels: { id: 'd1', number: 'RE-2026-0001' } }],
+  ])('rejects %s', (_, over) => {
+    expect(() => readDocument(cancellationFile(over))).toThrow(InvalidFileError);
+  });
+});
+
 describe('range file validation', () => {
   const file = (over: Record<string, unknown> = {}) => ({
-    schemaVersion: 4,
+    schemaVersion: SCHEMA_VERSION,
     range: 'invoice',
     counters: [{ key: '2026', last: 3 }, { key: 'all', last: 0 }],
     reservations: [{ number: 'RE-2026-0003', counterKey: '2026', counter: 3, documentId: 'd1', device: 'dev-1', at: '2026-10-31T10:00:00.000Z' }],

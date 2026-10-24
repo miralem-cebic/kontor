@@ -1,5 +1,6 @@
 import type { DocumentId } from '../data/ids';
 import type { BankAccount, InvoiceFile } from '../data/types';
+import { tIn } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, pdfFileName, type LogoImage } from '../pdf/documentPdf';
 import { useApp } from '../store/appStore';
@@ -76,7 +77,7 @@ async function downloadIssued(inv: InvoiceFile & { issued: NonNullable<InvoiceFi
     return { ok: false };
   }
   const changed = (await sha256Hex(read.value.slice())) !== inv.issued.pdf.sha256;
-  const fileName = pdfFileName(['Rechnung', inv.issued.number, inv.issued.snapshot.customer.name]);
+  const fileName = pdfFileName([tIn('de', inv.cancels ? 'pdf.cancellation' : 'pdf.invoice'), inv.issued.number, inv.issued.snapshot.customer.name]);
   download(read.value, fileName);
   return { ok: true, fileName, missing: [], changed };
 }

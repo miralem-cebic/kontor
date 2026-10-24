@@ -139,7 +139,7 @@ test('a company folder of version 1 opens; its bank account becomes the default 
 
   const saved = await readCompanyFile(page, 'Alt');
   expect(saved).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     bank: {
       defaultAccountId: 'account-1',
       accounts: [

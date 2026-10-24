@@ -55,18 +55,24 @@ const invoicesIssued: Migration = {
   up: (raw) => (raw['kind'] === 'invoice' && !('issued' in raw) ? { ...raw, issued: null } : raw),
 };
 
+/** Version 5: invoices can be cancelled. Every invoice of version 4 gets `cancels: null`; a quote does not change. */
+const invoicesCancelled: Migration = {
+  from: 4,
+  up: (raw) => (raw['kind'] === 'invoice' && !('cancels' in raw) ? { ...raw, cancels: null } : raw),
+};
+
 /**
  * Version 1 is the first format; contacts were added in it as a new kind of file. Items and documents (quotes) were
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
  * format is the same. Version 3 adds invoices as a kind of document; no existing file changes. Version 4 lets
- * invoices be issued and adds the range files (numbering/), a new kind of file.
+ * invoices be issued and adds the range files (numbering/), a new kind of file. Version 5 adds cancellation invoices.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3)],
-  contact: [unchanged(1), unchanged(2), unchanged(3)],
-  item: [unchanged(1), unchanged(2), unchanged(3)],
-  document: [unchanged(1), unchanged(2), invoicesIssued],
-  numbering: [unchanged(1), unchanged(2), unchanged(3)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
 };
 
 export class NewerSchemaError extends Error {

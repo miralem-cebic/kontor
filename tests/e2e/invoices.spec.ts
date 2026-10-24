@@ -106,7 +106,14 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
   await page.getByRole('radio', { name: 'Steuerfreie innergemeinschaftliche Lieferung' }).check();
   await expect(issueList(page)).toContainText('Trage beim Kunden seine USt-IdNr. aus dem anderen EU-Staat ein');
   await expect(issueList(page)).toContainText('Trage in den Einstellungen deine eigene USt-IdNr. ein');
+  // not taxable in Germany: no VAT and the note; a customer in Germany gets a hint
+  await page.getByRole('radio', { name: 'Nicht im Inland steuerbar' }).check();
+  await expect(totals).toHaveText('Gesamtbetrag850,00 €');
+  await expect(page.locator('.totals-box')).toContainText('Nicht im Inland steuerbare Leistung (Leistungsort im Ausland, § 3a UStG)');
+  await expect(page.getByText('Der Kunde sitzt in Deutschland. Leistungen an ihn sind in der Regel im Inland steuerbar.')).toBeVisible();
+  await expect(page.getByText('Alle Angaben für das Ausstellen sind da.')).toBeVisible();
   await page.getByRole('radio', { name: 'Mit Umsatzsteuer' }).check();
+  await expect(page.getByText('Der Kunde sitzt in Deutschland.', { exact: false })).toHaveCount(0);
   await expect(totals).toContainText('Gesamtbetrag1.011,50 €');
 
   // the side panel lists the sections

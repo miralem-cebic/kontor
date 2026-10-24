@@ -15,6 +15,7 @@ import {
   readInvoice,
   SMALL_AMOUNT_LIMIT,
   TAX_TREATMENTS,
+  taxTreatmentHint,
   vatNote,
   type InvoiceDraft,
   type IssueFacts,
@@ -86,6 +87,7 @@ describe('readInvoice', () => {
     expect(problems(readInvoice(draft({ lines }), 'de', false))).toEqual(['lines:negativeTotal']);
     expect(problems(readInvoice(draft({ lines, taxTreatment: 'reverseCharge' }), 'de', false))).toEqual([]);
     expect(problems(readInvoice(draft({ lines, taxTreatment: 'intraCommunitySupply' }), 'de', false))).toEqual([]);
+    expect(problems(readInvoice(draft({ lines, taxTreatment: 'notTaxable' }), 'de', false))).toEqual([]);
   });
 
   it('names the line and the field of an error', () => {
@@ -94,19 +96,26 @@ describe('readInvoice', () => {
 });
 
 describe('totals and due date', () => {
-  it('VAT per rate with standard VAT; none for reverse charge, an intra-community supply or a small business', () => {
+  it('VAT per rate with standard VAT; none for reverse charge, an intra-community supply, a service not taxable in Germany or a small business', () => {
     const inv = sampleInvoice();
     expect(invoiceTotals(inv, false)).toEqual(documentTotals(inv.lines, false));
     expect(invoiceTotals(inv, false).tax).toBe(22288);
-    for (const taxTreatment of ['reverseCharge', 'intraCommunitySupply'] as const) {
+    for (const taxTreatment of ['reverseCharge', 'intraCommunitySupply', 'notTaxable'] as const) {
       expect(invoiceTotals({ ...inv, taxTreatment }, false)).toMatchObject({ net: 136250, tax: 0, gross: 136250 });
     }
     expect(invoiceTotals(inv, true)).toMatchObject({ tax: 0, gross: 136250 });
   });
 
   it('the note that explains why there is no VAT', () => {
-    expect(TAX_TREATMENTS.map((v) => vatNote(v, false))).toEqual([null, 'reverseCharge', 'intraCommunitySupply']);
-    expect(TAX_TREATMENTS.map((v) => vatNote(v, true))).toEqual(['smallBusiness', 'smallBusiness', 'smallBusiness']);
+    expect(TAX_TREATMENTS.map((v) => vatNote(v, false))).toEqual([null, 'reverseCharge', 'intraCommunitySupply', 'notTaxable']);
+    expect(TAX_TREATMENTS.map((v) => vatNote(v, true))).toEqual(['smallBusiness', 'smallBusiness', 'smallBusiness', 'smallBusiness']);
+  });
+
+  it('a hint when the tax treatment does not fit where the customer is', () => {
+    expect(['DE', 'AT', 'US', null].map((c) => taxTreatmentHint('standard', c))).toEqual([null, 'customerAbroad', 'customerAbroad', null]);
+    expect(['DE', 'AT', 'US', 'CH', null].map((c) => taxTreatmentHint('notTaxable', c))).toEqual(['customerInGermany', 'customerInEu', null, null, null]);
+    expect(['DE', 'AT', 'US'].map((c) => taxTreatmentHint('reverseCharge', c))).toEqual([null, null, null]);
+    expect(['DE', 'AT', 'US'].map((c) => taxTreatmentHint('intraCommunitySupply', c))).toEqual([null, null, null]);
   });
 
   it('the due date follows from the date and the payment term', () => {
@@ -213,6 +222,12 @@ describe('issueProblems', () => {
     expect(issueProblems(facts({ taxTreatment: 'reverseCharge', customer: inAustria(''), ownVatId: '' }))).toEqual(['customerVatId', 'ownVatId']);
     const inSwitzerland = sampleContact({ address: { street: 'Bahnhofstrasse 1', postalCode: '8001', city: 'Zürich', country: 'CH' }, vatId: '' });
     expect(issueProblems(facts({ taxTreatment: 'reverseCharge', customer: inSwitzerland }))).toEqual([]);
+  });
+
+  it('a service not taxable in Germany needs the address of the customer, also for a small amount, but no VAT ID', () => {
+    const inUsa = sampleContact({ address: { street: '1 Main St', postalCode: '10001', city: 'New York', country: 'US' }, vatId: '' });
+    expect(issueProblems(facts({ taxTreatment: 'notTaxable', customer: inUsa, ownVatId: '' }))).toEqual([]);
+    expect(issueProblems(facts({ taxTreatment: 'notTaxable', customer: noAddress, gross: cents(10_000) }))).toEqual(['customerAddress']);
   });
 });
 

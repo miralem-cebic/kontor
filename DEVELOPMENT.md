@@ -162,7 +162,7 @@ An item file (`items/<id>.json`, types in `src/domain/item.ts`) has `number` (un
 A document file (`documents/<id>.json`, types in `src/data/types.ts`, `src/domain/quote.ts`, `src/domain/invoice.ts` and `src/domain/document.ts`) is a quote or an invoice, told apart by `kind`. Both have `customerId` (a contact), `date` (`YYYY-MM-DD`), `subject`, `introText`, `closingText`, `lines`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. A line has `name`, `description`, `quantity` (thousandths, not 0, negative for a deduction), `unit`, `unitPrice` (cents, not negative) and `vatRate`; its amount stays within 999,999,999.99 €, so every total is an exact integer. The lines are one mergeable field.
 
 - `kind: 'quote'` adds `validUntil`.
-- `kind: 'invoice'` adds `service` (`{ kind: 'date', date }` or `{ kind: 'period', start, end }`), `paymentTermDays` (0 to 365; the due date is the date plus the term), `accountId` (an account of `company.json`, possibly removed since), `taxTreatment` (`standard`, `reverseCharge` or `intraCommunitySupply`; always `standard` for a small business), `orderReference` (BT-13), `leitwegId` (BT-10) and `quoteId` (the quote it was made from, or `null`; not mergeable, it never changes).
+- `kind: 'invoice'` adds `service` (`{ kind: 'date', date }` or `{ kind: 'period', start, end }`), `paymentTermDays` (0 to 365; the due date is the date plus the term), `accountId` (an account of `company.json`, possibly removed since), `taxTreatment` (`standard`, `reverseCharge`, `intraCommunitySupply` or `notTaxable`; always `standard` for a small business), `orderReference` (BT-13), `leitwegId` (BT-10) and `quoteId` (the quote it was made from, or `null`; not mergeable, it never changes).
 
 Quotes and invoices are drafts for now: they have no number and no snapshot of the customer yet (ADR 0004). The repository never merges a quote with an invoice of the same ID; such a save stops. Documents were added in schema version 2 as a new kind of file, invoices in version 3.
 
@@ -176,7 +176,7 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | --- | --- |
 | 1 | First format; contacts were added in it as a new kind of file |
 | 2 | `company.json`: the one bank account `{ holder, iban, bic }` becomes `bank.accounts[0]` with the fixed ID `account-1` and is the default (two devices that upgrade the same file get the same ID). Contact files are unchanged. Item and document files are new. |
-| 3 | Document files can be invoices (`kind: 'invoice'`). No existing file changes; every kind gets `unchanged(2)`. An app of version 2 refuses the files of version 3 instead of overwriting them. |
+| 3 | Document files can be invoices (`kind: 'invoice'`). No existing file changes; every kind gets `unchanged(2)`. An app of version 2 refuses the files of version 3 instead of overwriting them. `notTaxable` joined the tax treatments before version 3 was released, so it did not get a version of its own. |
 
 ## Tests
 

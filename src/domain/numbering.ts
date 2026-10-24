@@ -1,7 +1,8 @@
 // Number patterns for invoices, for example "RE-{YYYY}-{NNNN}" → "RE-2026-0001".
 // The number is used as a file name (documents/issued/<number>.pdf), so only characters that are safe in
-// file names on every system are allowed. Assigning numbers (gap-free, never reused, restarting every year when the
-// pattern contains {YYYY} or {YY}) is not done here, see ADR 0004.
+// file names on every system are allowed. The rules for the counter (one more than the highest known, restarting
+// every year when the pattern contains {YYYY} or {YY}) are here; reserving a number in the folder is app/issue.ts
+// (ADR 0004).
 
 export const DEFAULT_INVOICE_PATTERN = 'RE-{YYYY}-{NNNN}';
 export const MAX_PATTERN_LENGTH = 40;
@@ -68,4 +69,26 @@ export function formatNumber(pattern: string, parts: NumberParts): string {
       }
     })
     .join('');
+}
+
+/* ---------- Assigning (ADR 0004) ---------- */
+
+/** Does the counter start again every year? It does when the pattern contains {YYYY} or {YY}; a month alone does not. */
+export function restartsYearly(pattern: string): boolean {
+  const tokens = tokenize(pattern);
+  return typeof tokens !== 'string' && tokens.some((t) => t.kind === 'year4' || t.kind === 'year2');
+}
+
+/** The counter a number belongs to: the year of the document date when the counter restarts yearly, otherwise "all" */
+export const counterKey = (pattern: string, isoDate: string): string => (restartsYearly(pattern) ? isoDate.slice(0, 4) : 'all');
+
+/**
+ * The next counter of a key: one more than the highest one known, from the range file or from the issued documents,
+ * so that a range file that fell behind (for example a sync conflict) never leads to a number given twice.
+ */
+export const nextCounter = (known: readonly number[]): number => Math.max(0, ...known) + 1;
+
+/** The number for a document date (YYYY-MM-DD) and a counter */
+export function numberFor(pattern: string, isoDate: string, counter: number): string {
+  return formatNumber(pattern, { year: Number(isoDate.slice(0, 4)), month: Number(isoDate.slice(5, 7)), counter });
 }

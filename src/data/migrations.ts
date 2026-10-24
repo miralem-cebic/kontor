@@ -1,6 +1,6 @@
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateItem, type Check } from './validate';
-import type { CompanyFile, ContactFile, DocumentFile, ItemFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateItem, validateNumbering, type Check } from './validate';
+import type { CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
@@ -12,10 +12,17 @@ interface FileTypes {
   contact: ContactFile;
   item: ItemFile;
   document: DocumentFile;
+  numbering: NumberingFile;
 }
 export type FileKind = keyof FileTypes;
 
-const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = { company: validateCompany, contact: validateContact, item: validateItem, document: validateDocument };
+const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = {
+  company: validateCompany,
+  contact: validateContact,
+  item: validateItem,
+  document: validateDocument,
+  numbering: validateNumbering,
+};
 
 export interface Migration {
   from: number;
@@ -42,16 +49,24 @@ const severalAccounts: Migration = {
   },
 };
 
+/** Version 4: invoices can be issued. A draft of version 3 gets `issued: null`; a quote does not change. */
+const invoicesIssued: Migration = {
+  from: 3,
+  up: (raw) => (raw['kind'] === 'invoice' && !('issued' in raw) ? { ...raw, issued: null } : raw),
+};
+
 /**
  * Version 1 is the first format; contacts were added in it as a new kind of file. Items and documents (quotes) were
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
- * format is the same. Version 3 adds invoices as a kind of document; no existing file changes.
+ * format is the same. Version 3 adds invoices as a kind of document; no existing file changes. Version 4 lets
+ * invoices be issued and adds the range files (numbering/), a new kind of file.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2)],
-  contact: [unchanged(1), unchanged(2)],
-  item: [unchanged(1), unchanged(2)],
-  document: [unchanged(1), unchanged(2)],
+  company: [severalAccounts, unchanged(2), unchanged(3)],
+  contact: [unchanged(1), unchanged(2), unchanged(3)],
+  item: [unchanged(1), unchanged(2), unchanged(3)],
+  document: [unchanged(1), unchanged(2), invoicesIssued],
+  numbering: [unchanged(1), unchanged(2), unchanged(3)],
 };
 
 export class NewerSchemaError extends Error {

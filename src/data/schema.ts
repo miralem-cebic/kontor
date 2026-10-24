@@ -26,7 +26,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const nowIso = (): string => stampNow();
 
@@ -71,5 +71,5 @@ export function makeInvoice(customerId: ContactId, accountId: AccountId, content
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<InvoiceMergeableField, string>> = {};
   for (const f of INVOICE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'invoice', customerId, accountId, quoteId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'invoice', customerId, accountId, quoteId, ...content, issued: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

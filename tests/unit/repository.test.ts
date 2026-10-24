@@ -6,7 +6,7 @@ import { makeContact, makeInvoice, makeItem, makeQuote, nowIso, SCHEMA_VERSION }
 import { brandId } from '../../src/data/ids';
 import type { CompanyFile } from '../../src/data/types';
 import { cents } from '../../src/domain/money';
-import { sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -261,5 +261,63 @@ describe('documents in the folder', () => {
     const r = await new FsRepository(root.asHandle()).saveDocument(quote);
     expect(!r.ok && r.error.kind).toBe('invalid');
     expect(await text(dir, `${invoice.id}.json`)).toBe(before);
+  });
+});
+
+describe('issued invoices in the folder', () => {
+  const customer = brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e');
+  const draft = () => makeInvoice(customer, company.bank.defaultAccountId, sampleInvoice(), null);
+
+  it('a draft saved on another device never overwrites the issued invoice: it gets the issued one back', async () => {
+    const inv = draft();
+    must(await repo.saveDocument(inv));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadDocuments()).documents;
+    const issued = { ...inv, issued: sampleIssued() };
+    must(await repo.saveDocument(issued));
+    const dir = await root.getDirectoryHandle('documents');
+    const before = await text(dir, `${inv.id}.json`);
+    const edited = { ...theirs!, subject: 'Geändert', fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, subject: nowIso() } } as typeof inv;
+    const written = must(await other.saveDocument(edited));
+    expect(written).toMatchObject({ subject: 'Website-Relaunch', issued: { number: 'RE-2026-0001' } });
+    expect(await text(dir, `${inv.id}.json`)).toBe(before);
+  });
+
+  it('an invoice issued with another number elsewhere stops the save', async () => {
+    const inv = draft();
+    must(await repo.saveDocument({ ...inv, issued: sampleIssued('RE-2026-0001') }));
+    const r = await new FsRepository(root.asHandle()).saveDocument({ ...inv, issued: sampleIssued('RE-2026-0002') });
+    expect(!r.ok && r.error.kind).toBe('conflict');
+  });
+
+  it('an issued file is written once and never replaced', async () => {
+    must(await repo.writeIssuedFile('RE-2026-0001.pdf', new Uint8Array([37, 80, 68, 70])));
+    const again = await repo.writeIssuedFile('RE-2026-0001.pdf', new Uint8Array([1, 2, 3]));
+    expect(!again.ok && again.error.kind).toBe('conflict');
+    expect([...must(await repo.readIssuedFile('RE-2026-0001.pdf'))]).toEqual([37, 80, 68, 70]);
+    expect(must(await repo.listIssuedFiles())).toEqual(['RE-2026-0001.pdf']);
+    expect((await repo.writeIssuedFile('../company.json', new Uint8Array([1]))).ok).toBe(false);
+    expect((await repo.readIssuedFile('../company.json')).ok).toBe(false);
+  });
+
+  it('the range file is read back after it is written', async () => {
+    expect(must(await repo.readNumbering('invoice'))).toBeNull();
+    const file = {
+      schemaVersion: SCHEMA_VERSION,
+      range: 'invoice' as const,
+      counters: [{ key: '2026', last: 1 }],
+      reservations: [{ number: 'RE-2026-0001', counterKey: '2026', counter: 1, documentId: brandId<'DocumentId'>('d1'), device: 'dev-1', at: nowIso() }],
+    };
+    expect(must(await repo.writeNumbering(file))).toEqual(file);
+    expect(must(await new FsRepository(root.asHandle()).readNumbering('invoice'))).toEqual(file);
+  });
+
+  it('audit entries are appended as JSON lines', async () => {
+    const entry = { at: nowIso(), action: 'issue' as const, documentId: brandId<'DocumentId'>('d1'), number: 'RE-2026-0001', files: [{ file: 'RE-2026-0001.pdf', sha256: 'a'.repeat(64) }], device: 'dev-1' };
+    must(await repo.appendAudit('2026-10', entry));
+    must(await repo.appendAudit('2026-10', { ...entry, number: 'RE-2026-0002' }));
+    const lines = (await text(await root.getDirectoryHandle('audit'), '2026-10.jsonl')).trimEnd().split('\n');
+    expect(lines.map((l) => (JSON.parse(l) as { number: string }).number)).toEqual(['RE-2026-0001', 'RE-2026-0002']);
+    expect((await repo.appendAudit('../x', entry)).ok).toBe(false);
   });
 });

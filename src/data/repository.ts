@@ -1,5 +1,5 @@
 import type { Result } from './result';
-import type { BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile } from './types';
+import type { AuditEntry, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange } from './types';
 
 export interface BackupInfo {
   name: string;
@@ -19,7 +19,8 @@ export interface StorageError {
   cause: unknown;
 }
 
-export type StorageErrorKind = 'permission' | 'notFound' | 'quota' | 'newerSchema' | 'invalid' | 'other';
+/** `conflict`: another writer got there first (a number or an issued file that exists already); nothing was overwritten */
+export type StorageErrorKind = 'permission' | 'notFound' | 'quota' | 'newerSchema' | 'invalid' | 'conflict' | 'other';
 
 /**
  * Storage of one company folder. The UI and the store only know this interface, not the folder of files;
@@ -53,12 +54,32 @@ export interface Repository {
   saveItem(item: ItemFile): Promise<Result<ItemFile, StorageError>>;
   /** All quotes and invoices, deleted ones included; a broken file is reported like a contact */
   loadDocuments(): Promise<Result<{ documents: DocumentFile[]; issues: LoadIssue[] }, StorageError>>;
-  /** Writes documents/<id>.json, with the same conflict check and merge as `saveCompany`; a quote never merges with an invoice */
+  /**
+   * Writes documents/<id>.json, with the same conflict check and merge as `saveCompany`; a quote never merges with an
+   * invoice. An issued invoice in the folder is never overwritten: a draft saved over it gets the issued one back, and
+   * an invoice issued with another number stops the save (`conflict`).
+   */
   saveDocument(document: DocumentFile): Promise<Result<DocumentFile, StorageError>>;
+  /** numbering/<range>.json, or null when no number of that range was given yet */
+  readNumbering(range: NumberRange): Promise<Result<NumberingFile | null, StorageError>>;
+  /** Writes the range file and reads it back: what holds after the write, in case another device wrote at the same time */
+  writeNumbering(file: NumberingFile): Promise<Result<NumberingFile, StorageError>>;
+  /** The names of the files in documents/issued/ */
+  listIssuedFiles(): Promise<Result<string[], StorageError>>;
+  /** Writes documents/issued/<name> once: an existing file of that name is never replaced (`conflict`) */
+  writeIssuedFile(name: string, data: Uint8Array): Promise<Result<void, StorageError>>;
+  readIssuedFile(name: string): Promise<Result<Uint8Array, StorageError>>;
+  /** Adds a line to audit/<YYYY-MM>.jsonl */
+  appendAudit(month: string, entry: AuditEntry): Promise<Result<void, StorageError>>;
   writeBackup(name: string, snapshot: BackupSnapshot): Promise<Result<void, StorageError>>;
   listBackups(): Promise<Result<BackupInfo[], StorageError>>;
   /** Physical removal: only maintenance.ts calls it, for backups beyond the retention */
   removeBackup(name: string): Promise<Result<void, StorageError>>;
+}
+
+/** Another writer got there first; thrown inside the repository and returned as `conflict` */
+export class ConflictError extends Error {
+  override name = 'ConflictError';
 }
 
 export interface Asset {
@@ -73,6 +94,7 @@ export function classifyError(e: unknown): StorageErrorKind {
     if (e.name === 'QuotaExceededError') return 'quota';
   }
   if (e instanceof Error && e.name === 'NewerSchemaError') return 'newerSchema';
+  if (e instanceof Error && e.name === 'ConflictError') return 'conflict';
   if (e instanceof Error && (e.name === 'InvalidFileError' || e.name === 'UnsafeFileNameError' || e instanceof SyntaxError)) return 'invalid';
   return 'other';
 }

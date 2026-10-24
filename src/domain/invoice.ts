@@ -4,7 +4,9 @@
 // A draft may be saved incomplete; `issueProblems` lists what still keeps it from being issued.
 
 import type { Result } from '../data/result';
+import type { AccountDetails } from './bankAccount';
 import { Checker, TEXT_LIMITS, type FieldError } from './check';
+import type { CompanyProfile } from './company';
 import { CONTACT_LIMITS, type ContactProfile } from './contact';
 import { addDays, isIsoDate } from './dates';
 import { documentTotals, draftFromLine, readLines, type DocumentLine, type LineDraft, type LineFieldPath } from './document';
@@ -109,6 +111,24 @@ export const invoiceTotals = (inv: Pick<InvoiceContent, 'lines' | 'taxTreatment'
   documentTotals(inv.lines, !chargesVat(inv.taxTreatment, smallBusiness));
 
 export const dueDate = (inv: Pick<InvoiceContent, 'date' | 'paymentTermDays'>): string => addDays(inv.date, inv.paymentTermDays);
+
+/** The master data an invoice was issued with. They stay as they were when the company, the customer or the account change later (ADR 0004). */
+export interface IssueSnapshot {
+  company: CompanyProfile;
+  customer: ContactProfile;
+  account: AccountDetails;
+}
+
+/** An issued invoice: its number, the time it was issued, the snapshot and the PDF in documents/issued/ with its SHA-256 */
+export interface IssuedInfo {
+  number: string;
+  /** The counter behind the number and its key: the year, or "all" when the pattern has no year */
+  counter: number;
+  counterKey: string;
+  issuedAt: string;
+  snapshot: IssueSnapshot;
+  pdf: { file: string; sha256: string };
+}
 
 /* ---------- Draft ---------- */
 

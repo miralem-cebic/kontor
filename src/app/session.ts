@@ -11,7 +11,7 @@ import { dailyBackup } from '../data/maintenance';
 import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
 import { emergencyKey, Persister } from '../data/persister';
-import { classifyError, type Asset, type StorageErrorKind } from '../data/repository';
+import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
 import { makeCompany } from '../data/schema';
 import type { CompanyFile } from '../data/types';
 import { isRecord } from '../data/validate';
@@ -404,6 +404,15 @@ useApp.subscribe((s, prev) => {
 
 export function retrySave() {
   return persister?.retry();
+}
+
+/** The folder of the open company, for the actions that need it beyond loading and saving (issuing, issued PDFs) */
+export const openRepository = (): Repository | null => repo;
+
+/** Writes what is pending now; true when everything is saved */
+export async function flushWrites(): Promise<boolean> {
+  await persister?.flush();
+  return useApp.getState().save.state === 'saved';
 }
 
 /** Keeps unsaved edits in the browser before anything else happens (used when the UI crashed). */

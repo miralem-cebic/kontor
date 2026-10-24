@@ -20,12 +20,12 @@ import {
   type VatPeriod,
   type VatScheme,
 } from '../domain/company';
-import { ACCOUNT_LIMITS, MAX_ACCOUNTS } from '../domain/bankAccount';
+import { ACCOUNT_LIMITS, MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
 import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
 import { isIsoDate } from '../domain/dates';
 import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
-import { INVOICE_LIMITS, TAX_TREATMENTS, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
+import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { QUOTE_LIMITS } from '../domain/quote';
@@ -48,7 +48,10 @@ import {
   type DocumentFile,
   type InvoiceFile,
   type ItemFile,
+  type NumberingFile,
+  type NumberRange,
   type QuoteFile,
+  type Reservation,
 } from './types';
 
 export class InvalidRecordError extends Error {
@@ -213,23 +216,21 @@ const business = variant<BusinessType>({
 
 const tax = objectOf<TaxSettings>({ taxNumber: text(40), vatId: text(20), vat: vatScheme, business });
 
+const bankDetailsShape = {
+  kind: exactly('bank'),
+  name: text(ACCOUNT_LIMITS.name),
+  holder: text(ACCOUNT_LIMITS.holder),
+  iban: (v: unknown, path: string) => (typeof v === 'string' && /^[A-Z0-9]{0,34}$/.test(v) ? v : fail(path, `expected an IBAN, got ${describe(v)}`)),
+  bic: (v: unknown, path: string) => (typeof v === 'string' && /^[A-Z0-9]{0,11}$/.test(v) ? v : fail(path, `expected a BIC, got ${describe(v)}`)),
+};
+const paypalDetailsShape = { kind: exactly('paypal'), name: text(ACCOUNT_LIMITS.name), email: text(LIMITS.email) };
+
+/** The details of an account without its ID, as in the snapshot of an issued invoice */
+const accountDetails = variant<AccountDetails>({ bank: objectOf(bankDetailsShape), paypal: objectOf(paypalDetailsShape) });
+
 const bankAccount = variant<BankAccount>({
-  bank: objectOf({
-    id: accountId,
-    kind: exactly('bank'),
-    name: text(ACCOUNT_LIMITS.name),
-    holder: text(ACCOUNT_LIMITS.holder),
-    iban: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,34}$/.test(v) ? v : fail(path, `expected an IBAN, got ${describe(v)}`)),
-    bic: (v, path) => (typeof v === 'string' && /^[A-Z0-9]{0,11}$/.test(v) ? v : fail(path, `expected a BIC, got ${describe(v)}`)),
-    deletedAt: nullable(dateTime),
-  }),
-  paypal: objectOf({
-    id: accountId,
-    kind: exactly('paypal'),
-    name: text(ACCOUNT_LIMITS.name),
-    email: text(LIMITS.email),
-    deletedAt: nullable(dateTime),
-  }),
+  bank: objectOf({ id: accountId, ...bankDetailsShape, deletedAt: nullable(dateTime) }),
+  paypal: objectOf({ id: accountId, ...paypalDetailsShape, deletedAt: nullable(dateTime) }),
 });
 
 /** Account IDs are unique, so that a reference finds one account; the default is one of the active accounts */
@@ -267,26 +268,28 @@ const fieldTimestamps =
     return out;
   };
 
-export const validateCompany: Check<CompanyFile> = objectOf<CompanyFile>({
-  schemaVersion: num,
-  id: companyId,
+const companyProfileShape = {
   name: text(LIMITS.name),
   owner: text(LIMITS.owner),
   address,
   contact: contactDetails,
   logo: nullable(logo),
   tax,
-  bank,
   invoiceDefaults,
+};
+
+export const validateCompany: Check<CompanyFile> = objectOf<CompanyFile>({
+  schemaVersion: num,
+  id: companyId,
+  ...companyProfileShape,
+  bank,
   createdAt: dateTime,
   fieldUpdatedAt: fieldTimestamps(MERGEABLE_FIELDS),
 });
 
 const roles = objectOf<ContactRoles>({ customer: bool, supplier: bool });
 
-export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
-  schemaVersion: num,
-  id: contactId,
+const contactProfileShape = {
   kind: oneOf<ContactKind>(['company', 'person']),
   roles,
   name: text(CONTACT_LIMITS.name),
@@ -300,6 +303,12 @@ export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
   orderReference: text(CONTACT_LIMITS.orderReference),
   paymentTermDays: nullable(int(0, TEXT_LIMITS.maxPaymentTermDays)),
   notes: text(CONTACT_LIMITS.notes),
+};
+
+export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
+  schemaVersion: num,
+  id: contactId,
+  ...contactProfileShape,
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(CONTACT_MERGEABLE_FIELDS),
@@ -363,6 +372,27 @@ const service = variant<ServicePeriod>({
   period: objectOf({ kind: exactly('period'), start: isoDate, end: isoDate }),
 });
 
+/** A document number becomes a file name (documents/issued/<number>.pdf): only the characters a pattern can produce */
+const documentNumber: Check<string> = (v, path) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(v) ? v : fail(path, `expected a document number, got ${describe(v)}`));
+const counterKey: Check<string> = (v, path) => (typeof v === 'string' && /^(\d{4}|all)$/.test(v) ? v : fail(path, `expected a year or "all", got ${describe(v)}`));
+const counter = int(1, 999_999_999);
+const sha256: Check<string> = (v, path) => (typeof v === 'string' && SHA256.test(v) ? v : fail(path, `expected a SHA-256 hex digest, got ${describe(v)}`));
+
+const snapshot = objectOf<IssueSnapshot>({ company: objectOf(companyProfileShape), customer: objectOf(contactProfileShape), account: accountDetails });
+
+/** The PDF of an issued invoice is named after its number, so a file name from another device cannot point elsewhere */
+const issued: Check<IssuedInfo> = (v, path) => {
+  const info = objectOf<IssuedInfo>({
+    number: documentNumber,
+    counter,
+    counterKey,
+    issuedAt: dateTime,
+    snapshot,
+    pdf: objectOf({ file: text(100), sha256 }),
+  })(v, path);
+  return info.pdf.file === `${info.number}.pdf` ? info : fail(`${path}.pdf.file`, 'does not match the number');
+};
+
 const invoiceFile = objectOf<InvoiceFile>({
   schemaVersion: num,
   id: documentId,
@@ -382,7 +412,38 @@ const invoiceFile = objectOf<InvoiceFile>({
   lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
+  issued: nullable(issued),
   fieldUpdatedAt: fieldTimestamps(INVOICE_MERGEABLE_FIELDS),
 });
 
 export const validateDocument: Check<DocumentFile> = variant<DocumentFile>({ quote: quoteFile, invoice: invoiceFile });
+
+/** Reservations the range file keeps (the app keeps fewer); a bound for file content */
+const MAX_RESERVATIONS = 100;
+
+const reservation = objectOf<Reservation>({
+  number: documentNumber,
+  counterKey,
+  counter,
+  documentId,
+  device: (v, path) => (isValidId(v) ? v : fail(path, `expected a device ID, got ${describe(v)}`)),
+  at: dateTime,
+});
+
+/** Every key once, so that the highest counter of a year is unambiguous */
+const counters: Check<NumberingFile['counters']> = (v, path) => {
+  const list = listOf(objectOf({ key: counterKey, last: int(0, 999_999_999) }), 500)(v, path);
+  const keys = new Set<string>();
+  list.forEach((c, i) => {
+    if (keys.has(c.key)) fail(`${path}[${i}].key`, 'used twice');
+    keys.add(c.key);
+  });
+  return list;
+};
+
+export const validateNumbering: Check<NumberingFile> = objectOf<NumberingFile>({
+  schemaVersion: num,
+  range: oneOf<NumberRange>(['invoice']),
+  counters,
+  reservations: listOf(reservation, MAX_RESERVATIONS),
+});

@@ -1,6 +1,6 @@
 # 0004: Invoice finalization and numbering
 
-- Status: Accepted (implementation in Phase 1)
+- Status: Accepted; issuing implemented on 24 October 2026 (`src/app/issue.ts`), cancellation and correction invoices open
 - Date: 2026-10-21
 
 ## Context

@@ -24,8 +24,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(3);
-    expect(migrate('company', company()).schemaVersion).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
+    expect(migrate('company', company()).schemaVersion).toBe(4);
   });
 
   it('a file without version counts as version 1', () => {
@@ -100,7 +100,7 @@ describe('version 2 → 3: invoices', () => {
   it('files of version 2 stay as they are', () => {
     const files = { company: asV2(sampleCompany()), contact: asV2(makeContact(sampleContact())), item: asV2(makeItem(sampleItem())), document: asV2(makeQuote(makeContact(sampleContact()).id, sampleQuote())) };
     for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
-      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: 3 });
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
     }
   });
 
@@ -110,13 +110,34 @@ describe('version 2 → 3: invoices', () => {
   });
 });
 
+describe('version 3 → 4: issued invoices', () => {
+  const invoiceV3 = () => {
+    const { issued: _i, ...raw } = JSON.parse(JSON.stringify(makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null))) as Record<string, unknown>;
+    return { ...raw, schemaVersion: 3 };
+  };
+
+  it('a draft invoice of version 3 is not issued', () => {
+    const raw = invoiceV3();
+    expect(migrate('document', raw)).toEqual({ ...raw, issued: null, schemaVersion: 4 });
+  });
+
+  it('a quote of version 3 stays as it is', () => {
+    const raw = { ...JSON.parse(JSON.stringify(makeQuote(makeContact(sampleContact()).id, sampleQuote()))), schemaVersion: 3 } as Record<string, unknown>;
+    expect(migrate('document', raw)).toEqual({ ...raw, schemaVersion: 4 });
+  });
+
+  it('an app that knows only version 3 refuses a file of version 4, so it never edits an issued invoice', () => {
+    expect(() => upgrade('document', { ...invoiceV3(), schemaVersion: 4 }, MIGRATIONS.document, 3)).toThrow(NewerSchemaError);
+  });
+});
+
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 3 → 4, not in use)', () => {
+describe('migration template (version 4 → 5, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 3,
+      from: 4,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, quotePattern: 'AN-{YYYY}-{NNNN}' } };
@@ -125,23 +146,23 @@ describe('migration template (version 3 → 4, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 4);
-    expect(doc['schemaVersion']).toBe(4);
+    const doc = upgrade('company', company(), steps, 5);
+    expect(doc['schemaVersion']).toBe(5);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 4);
+    const doc = upgrade('company', companyV1(), steps, 5);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
   });
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(3)], 4)).toEqual({ ...raw, schemaVersion: 4 });
+    expect(upgrade('company', raw, [unchanged(4)], 5)).toEqual({ ...raw, schemaVersion: 5 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 4)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 5)).toThrow(InvalidFileError);
   });
 });

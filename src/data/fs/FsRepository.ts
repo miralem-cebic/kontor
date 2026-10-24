@@ -1,9 +1,9 @@
 import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
-import { classifyError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
+import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile } from '../types';
+import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
@@ -12,11 +12,16 @@ import { writeFile, writeJson } from './jsonFile';
 //   contacts/<id>.json         one file per customer or supplier
 //   items/<id>.json            one file per item or service of the catalogue
 //   documents/<id>.json        one file per quote or invoice
+//   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
+//   numbering/<range>.json     the counters and reservations of a number range
+//   audit/<YYYY-MM>.jsonl      what happened to documents, one JSON line each, only appended
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', issued: 'issued', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+
+const AUDIT_MONTH = /^\d{4}-\d{2}$/;
 
 const BACKUP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 /** A record file (contact, item) is named after its ID; other names (conflict copies of sync clients) are not read */
@@ -133,14 +138,92 @@ export class FsRepository implements Repository {
     });
   }
 
-  /** A file of the same ID but another kind (a quote where an invoice is saved) is not merged: the save stops. */
+  /**
+   * A file of the same ID but another kind (a quote where an invoice is saved) is not merged: the save stops. Neither
+   * is an invoice issued with another number. An issued invoice in the folder wins over a draft (see mergeDocument),
+   * and since the merge then leaves the file as it is, nothing is written.
+   */
   saveDocument(document: DocumentFile) {
     const read = (raw: unknown) => {
       const remote = migrate('document', raw);
       if (remote.kind !== document.kind) throw new InvalidFileError(`documents/${document.id}.json holds a ${remote.kind}, not a ${document.kind}`);
+      if (remote.kind === 'invoice' && document.kind === 'invoice' && remote.issued && document.issued && remote.issued.number !== document.issued.number) {
+        throw new ConflictError(`documents/${document.id}.json was issued as ${remote.issued.number}, not ${document.issued.number}`);
+      }
       return remote;
     };
     return attempt(() => this.saveRecord(DIRS.documents, document, read, mergeDocument));
+  }
+
+  /* ---------- Numbering, issued files, audit ---------- */
+
+  readNumbering(range: NumberRange) {
+    return attempt(async () => {
+      const dir = await this.root.getDirectoryHandle(DIRS.numbering, { create: true });
+      const text = await dir.getFileHandle(`${range}.json`).then(
+        async (h) => (await h.getFile()).text(),
+        (e: unknown) => {
+          if (isNotFound(e)) return null;
+          throw e;
+        },
+      );
+      return text === null ? null : migrate('numbering', JSON.parse(text));
+    });
+  }
+
+  writeNumbering(file: NumberingFile) {
+    return attempt(async () => {
+      const dir = await this.root.getDirectoryHandle(DIRS.numbering, { create: true });
+      const name = `${file.range}.json`;
+      await writeJson(dir, name, { ...file, schemaVersion: SCHEMA_VERSION });
+      // read back: a sync client or another device may have replaced the file in the meantime
+      return migrate('numbering', JSON.parse(await (await (await dir.getFileHandle(name)).getFile()).text()));
+    });
+  }
+
+  listIssuedFiles() {
+    return attempt(async () => [...(await listFiles(await this.issuedDir())).keys()]);
+  }
+
+  writeIssuedFile(name: string, data: Uint8Array) {
+    return attempt(async () => {
+      checkName(name);
+      const dir = await this.issuedDir();
+      if (await fileExists(dir, name)) throw new ConflictError(`documents/issued/${name} exists already`);
+      await writeFile(dir, name, new Blob([data.slice()], { type: 'application/pdf' }));
+    });
+  }
+
+  readIssuedFile(name: string) {
+    return attempt(async () => {
+      // the name comes from a document file, which other devices may have written: never use it unchecked
+      checkName(name);
+      const file = await (await (await this.issuedDir()).getFileHandle(name)).getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    });
+  }
+
+  appendAudit(month: string, entry: AuditEntry) {
+    return attempt(async () => {
+      if (!AUDIT_MONTH.test(month)) throw new UnsafeFileNameError(month);
+      const dir = await this.root.getDirectoryHandle(DIRS.audit, { create: true });
+      const name = `${month}.jsonl`;
+      const before = await dir.getFileHandle(name).then(
+        async (h) => (await h.getFile()).text(),
+        (e: unknown) => {
+          if (isNotFound(e)) return '';
+          throw e;
+        },
+      );
+      // the lines so far are written again unchanged and the new one added; the file is never shortened
+      const prefix = before === '' || before.endsWith('\n') ? before : `${before}\n`;
+      await writeFile(dir, name, `${prefix}${JSON.stringify(entry)}\n`);
+    });
+  }
+
+  private async issuedDir() {
+    const documents = await this.root.getDirectoryHandle(DIRS.documents, { create: true });
+    return documents.getDirectoryHandle(DIRS.issued, { create: true });
   }
 
   /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */
@@ -195,6 +278,11 @@ export class FsRepository implements Repository {
           const remote = read(JSON.parse(text));
           if (remote.id !== record.id) throw new InvalidFileError(`${path} belongs to another record`);
           next = merge(data, remote);
+          // the file already holds the merged state (for example an issued invoice that wins): nothing to write
+          if (sameJson(next, remote)) {
+            this.known.set(path, file.lastModified);
+            return sameJson(next, data) ? record : next;
+          }
         }
       }
     } catch (e) {

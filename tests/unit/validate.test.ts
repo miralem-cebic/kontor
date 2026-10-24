@@ -3,7 +3,7 @@ import { InvalidFileError, migrate } from '../../src/data/migrations';
 import { makeContact, makeInvoice, makeItem, makeQuote } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
-import { sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
 
 /** A company file as it would be read from disk (plain JSON) */
 const file = (over: Record<string, unknown> = {}) => ({ ...JSON.parse(JSON.stringify(sampleCompany())), ...over }) as Record<string, unknown>;
@@ -243,5 +243,60 @@ describe('invoice file validation', () => {
   it('keeps the merge stamps of invoice fields only', () => {
     const at = '2026-10-31T10:00:00.000Z';
     expect(readDocument(invoiceFile({ fieldUpdatedAt: { service: at, validUntil: at, quoteId: at } })).fieldUpdatedAt).toEqual({ service: at });
+  });
+});
+
+describe('issued invoice validation', () => {
+  const issuedFile = (over: Record<string, unknown> = {}) =>
+    ({
+      ...JSON.parse(JSON.stringify(makeInvoice(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), brandId<'AccountId'>('account-1'), sampleInvoice(), null))),
+      issued: JSON.parse(JSON.stringify(sampleIssued())),
+      ...over,
+    }) as Record<string, unknown>;
+  const readDocument = (raw: unknown) => migrate('document', raw);
+  const withIssued = (over: Record<string, unknown>) => issuedFile({ issued: { ...JSON.parse(JSON.stringify(sampleIssued())), ...over } });
+
+  it('accepts an invoice issued by the app', () => {
+    const raw = issuedFile();
+    expect(readDocument(raw)).toEqual(raw);
+  });
+
+  it.each([
+    ['number', 'RE/2026/1'],
+    ['number', ''],
+    ['counter', 0],
+    ['counterKey', '26'],
+    ['issuedAt', 'gestern'],
+    ['pdf', { file: '../company.json', sha256: 'a'.repeat(64) }],
+    ['pdf', { file: 'RE-2026-0002.pdf', sha256: 'a'.repeat(64) }],
+    ['pdf', { file: 'RE-2026-0001.pdf', sha256: 'xyz' }],
+    ['snapshot', { company: sampleProfile(), customer: sampleContact(), account: { kind: 'cash' } }],
+  ])('rejects issued.%s = %j', (field, value) => {
+    expect(() => readDocument(withIssued({ [field]: value }))).toThrow(InvalidFileError);
+  });
+});
+
+describe('range file validation', () => {
+  const file = (over: Record<string, unknown> = {}) => ({
+    schemaVersion: 4,
+    range: 'invoice',
+    counters: [{ key: '2026', last: 3 }, { key: 'all', last: 0 }],
+    reservations: [{ number: 'RE-2026-0003', counterKey: '2026', counter: 3, documentId: 'd1', device: 'dev-1', at: '2026-10-31T10:00:00.000Z' }],
+    ...over,
+  });
+
+  it('accepts a range file', () => {
+    expect(migrate('numbering', file())).toEqual(file());
+  });
+
+  it.each([
+    ['range', 'quote'],
+    ['counters', [{ key: '2026', last: 1 }, { key: '2026', last: 2 }]],
+    ['counters', [{ key: '__proto__', last: 1 }]],
+    ['counters', [{ key: '2026', last: -1 }]],
+    ['reservations', [{ number: 'RE 1', counterKey: '2026', counter: 1, documentId: 'd1', device: 'dev-1', at: '2026-10-31T10:00:00.000Z' }]],
+    ['reservations', [{ number: 'RE-1', counterKey: '2026', counter: 1, documentId: 'constructor', device: 'dev-1', at: '2026-10-31T10:00:00.000Z' }]],
+  ])('rejects %s = %j', (field, value) => {
+    expect(() => migrate('numbering', file({ [field]: value }))).toThrow(InvalidFileError);
   });
 });

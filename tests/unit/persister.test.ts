@@ -6,7 +6,7 @@ import { err, must } from '../../src/data/result';
 import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleItem, sampleQuote } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -290,5 +290,20 @@ describe('Persister with invoices', () => {
     A.updateQuote(invoiceId, customer, sampleQuote({ subject: 'X' }));
     A.updateInvoice(quoteId, customer, account, sampleInvoice({ subject: 'X' }));
     expect(A.useApp.getState().documents).toBe(before);
+  });
+});
+
+describe('issued invoices in the store', () => {
+  it('can be neither changed nor deleted', () => {
+    const customer = A.addContact(sampleContact());
+    const account = A.useApp.getState().company!.bank.defaultAccountId;
+    const id = A.addInvoice(customer, account, sampleInvoice(), null);
+    const draft = A.useApp.getState().documents.get(id);
+    if (draft?.kind !== 'invoice') throw new Error('expected an invoice');
+    A.putIssuedInvoice({ ...draft, issued: sampleIssued() });
+    const issued = A.useApp.getState().documents.get(id);
+    A.updateInvoice(id, customer, account, sampleInvoice({ subject: 'X' }));
+    A.deleteDocument(id);
+    expect(A.useApp.getState().documents.get(id)).toBe(issued);
   });
 });

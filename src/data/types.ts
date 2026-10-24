@@ -3,7 +3,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import type { InvoiceContent } from '../domain/invoice';
+import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
 import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId } from './ids';
@@ -161,6 +161,11 @@ export interface InvoiceFile extends InvoiceContent {
   accountId: AccountId;
   /** The quote the invoice was made from; null when it was written without one */
   quoteId: DocumentId | null;
+  /**
+   * null for a draft. Once issued, the invoice never changes again: not in the app, not by the merge, and its PDF is
+   * never overwritten (ADR 0004). Not a mergeable field: the issued state wins as a whole.
+   */
+  issued: IssuedInfo | null;
   createdAt: string;
   /** Soft delete: a deleted draft stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -172,6 +177,41 @@ export type DocumentFile = QuoteFile | InvoiceFile;
 
 export const isQuote = (d: DocumentFile): d is QuoteFile => d.kind === 'quote';
 export const isInvoice = (d: DocumentFile): d is InvoiceFile => d.kind === 'invoice';
+
+/** The number ranges; only invoices have numbers so far */
+export type NumberRange = 'invoice';
+
+/** A number given to a document, written before its PDF so that a second writer is noticed (ADR 0004) */
+export interface Reservation {
+  number: string;
+  counterKey: string;
+  counter: number;
+  documentId: DocumentId;
+  /** The browser that reserved it */
+  device: string;
+  at: string;
+}
+
+/** numbering/<range>.json: the highest counter per key and the latest reservations */
+export interface NumberingFile {
+  schemaVersion: number;
+  range: NumberRange;
+  /** The highest counter per key ("2026", or "all" for a pattern without year) */
+  counters: { key: string; last: number }[];
+  /** The latest reservations, newest last; the audit log keeps all of them */
+  reservations: Reservation[];
+}
+
+/** A line of audit/<YYYY-MM>.jsonl: what happened to a document, appended and never changed */
+export interface AuditEntry {
+  at: string;
+  action: 'issue';
+  documentId: DocumentId;
+  number: string;
+  /** The files written, with their SHA-256 */
+  files: { file: string; sha256: string }[];
+  device: string;
+}
 
 /** What a backup holds */
 export interface BackupSnapshot {

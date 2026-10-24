@@ -4,7 +4,7 @@ import { renderPdf, type LogoImage, type RenderedPdf } from './render';
 
 // A quote or an invoice as PDF: what it says (content.ts), where it goes (layout.ts), and the file (render.ts).
 
-export type { PdfSource } from './content';
+export { pdfFileName, type PdfSource } from './content';
 export type { LogoImage } from './render';
 
 export interface DocumentPdf extends RenderedPdf {

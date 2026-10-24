@@ -21,11 +21,14 @@ import { isEuMemberState } from './vat';
  *   VAT IDs are required (§ 14a Abs. 1 UStG).
  * - `intraCommunitySupply`: a tax-free supply of goods to a business in another EU state (§ 4 Nr. 1 Buchst. b,
  *   § 6a UStG). The invoice says that it is tax-free and shows both VAT IDs (§ 14a Abs. 3 UStG).
+ * - `notTaxable`: a service whose place of supply is abroad, so it is not taxable in Germany (§ 3a UStG), for example
+ *   consulting or software development for a customer outside the EU (§ 3a Abs. 2 and Abs. 4 UStG). The invoice shows
+ *   no VAT and says why.
  * A small business (§ 19 UStG) charges no VAT at all; its invoices are always `standard`.
- * Source: https://www.gesetze-im-internet.de/ustg_1980/__14a.html
+ * Sources: https://www.gesetze-im-internet.de/ustg_1980/__14a.html, https://www.gesetze-im-internet.de/ustg_1980/__3a.html
  */
-export type TaxTreatment = 'standard' | 'reverseCharge' | 'intraCommunitySupply';
-export const TAX_TREATMENTS: readonly TaxTreatment[] = ['standard', 'reverseCharge', 'intraCommunitySupply'];
+export type TaxTreatment = 'standard' | 'reverseCharge' | 'intraCommunitySupply' | 'notTaxable';
+export const TAX_TREATMENTS: readonly TaxTreatment[] = ['standard', 'reverseCharge', 'intraCommunitySupply', 'notTaxable'];
 
 /** Date or period of the service (§ 14 Abs. 4 Nr. 6 UStG; EN 16931 BT-72, or BT-73 and BT-74) */
 export type ServicePeriod = { kind: 'date'; date: string } | { kind: 'period'; start: string; end: string };
@@ -60,7 +63,7 @@ export const INVOICE_LIMITS = { subject: 200, text: 4000, orderReference: CONTAC
 export const SMALL_AMOUNT_LIMIT: Cents = cents(25_000);
 
 /** Why a document shows no VAT; the document has to say so */
-export type VatNote = 'smallBusiness' | 'reverseCharge' | 'intraCommunitySupply';
+export type VatNote = 'smallBusiness' | 'reverseCharge' | 'intraCommunitySupply' | 'notTaxable';
 
 /** The note a document needs, or null when it charges VAT */
 export function vatNote(treatment: TaxTreatment, smallBusiness: boolean): VatNote | null {
@@ -70,7 +73,31 @@ export function vatNote(treatment: TaxTreatment, smallBusiness: boolean): VatNot
       return null;
     case 'reverseCharge':
     case 'intraCommunitySupply':
+    case 'notTaxable':
       return treatment;
+  }
+}
+
+/**
+ * A hint when the tax treatment does not fit where the customer is: a customer abroad with VAT charged (it may owe
+ * the VAT itself, or the service may not be taxable in Germany), or a service called not taxable for a customer in
+ * Germany or in another EU state (there it is usually taxable, or reverse charge applies). Only a hint: the place of
+ * supply has exceptions (for example services related to land), so it does not keep the invoice from being issued.
+ */
+export type TaxTreatmentHint = 'customerAbroad' | 'customerInGermany' | 'customerInEu';
+
+/** `country` is the ISO code of the customer's address, or null when the customer has none */
+export function taxTreatmentHint(treatment: TaxTreatment, country: string | null): TaxTreatmentHint | null {
+  if (!country) return null;
+  switch (treatment) {
+    case 'standard':
+      return country === 'DE' ? null : 'customerAbroad';
+    case 'notTaxable':
+      if (country === 'DE') return 'customerInGermany';
+      return isEuMemberState(country) ? 'customerInEu' : null;
+    case 'reverseCharge':
+    case 'intraCommunitySupply':
+      return null;
   }
 }
 
@@ -224,7 +251,8 @@ export function readInvoice(
  * - `noCustomer`: no customer is chosen yet.
  * - `noLines`: an invoice needs at least one line.
  * - `customerAddress`: the name and address of the customer (§ 14 Abs. 4 Nr. 1 UStG), not needed for a small amount
- *   invoice (`SMALL_AMOUNT_LIMIT`).
+ *   invoice (`SMALL_AMOUNT_LIMIT`). A service that is not taxable in Germany always needs it: the address shows where
+ *   the service is supplied.
  * - `customerVatId`: the VAT ID of the customer from another EU state, for an intra-community supply and for
  *   reverse charge with a customer in another EU state (§ 14a Abs. 1 and 3 UStG).
  * - `ownVatId`: the company's own VAT ID, in the same cases.

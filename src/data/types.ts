@@ -150,6 +150,14 @@ const INVOICE_MERGEABLE: Record<InvoiceMergeableField, true> = {
 export const INVOICE_MERGEABLE_FIELDS = keysOf(INVOICE_MERGEABLE);
 export type InvoiceMergeableField = keyof InvoiceContent | 'customerId' | 'accountId' | 'deletedAt';
 
+/** The invoice a cancellation cancels, with its number and date, so that the cancellation says what it cancels by itself */
+export interface CancelledInvoice {
+  id: DocumentId;
+  number: string;
+  /** The date of the cancelled invoice */
+  date: string;
+}
+
 /** documents/<id>.json with `kind: 'invoice'`: an invoice, a draft until it is issued (ADR 0004) */
 export interface InvoiceFile extends InvoiceContent {
   schemaVersion: number;
@@ -166,6 +174,11 @@ export interface InvoiceFile extends InvoiceContent {
    * never overwritten (ADR 0004). Not a mergeable field: the issued state wins as a whole.
    */
   issued: IssuedInfo | null;
+  /**
+   * For a cancellation invoice (Stornorechnung): the issued invoice it cancels; null for any other invoice. A
+   * cancellation is issued as soon as it is made (app/issue.ts), so it is never a draft. Not a mergeable field.
+   */
+  cancels: CancelledInvoice | null;
   createdAt: string;
   /** Soft delete: a deleted draft stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -177,6 +190,12 @@ export type DocumentFile = QuoteFile | InvoiceFile;
 
 export const isQuote = (d: DocumentFile): d is QuoteFile => d.kind === 'quote';
 export const isInvoice = (d: DocumentFile): d is InvoiceFile => d.kind === 'invoice';
+
+/** The cancellation of an invoice, if it has one */
+export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId): InvoiceFile | undefined {
+  for (const d of documents) if (d.kind === 'invoice' && d.cancels?.id === id) return d;
+  return undefined;
+}
 
 /** The number ranges; only invoices have numbers so far */
 export type NumberRange = 'invoice';
@@ -202,16 +221,20 @@ export interface NumberingFile {
   reservations: Reservation[];
 }
 
-/** A line of audit/<YYYY-MM>.jsonl: what happened to a document, appended and never changed */
-export interface AuditEntry {
+interface AuditBase {
   at: string;
-  action: 'issue';
   documentId: DocumentId;
   number: string;
   /** The files written, with their SHA-256 */
   files: { file: string; sha256: string }[];
   device: string;
 }
+
+/**
+ * A line of audit/<YYYY-MM>.jsonl: what happened to a document, appended and never changed. `issue`: an invoice was
+ * issued; `cancel`: a cancellation invoice was issued, `cancels` names the invoice it cancels.
+ */
+export type AuditEntry = (AuditBase & { action: 'issue' }) | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } });
 
 /** What a backup holds */
 export interface BackupSnapshot {

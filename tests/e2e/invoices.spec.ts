@@ -134,7 +134,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
 
   const [file] = await readDocuments(page);
   expect(file).toMatchObject({
-    schemaVersion: 4,
+    schemaVersion: 5,
     kind: 'invoice',
     quoteId: null,
     date: isoToday(),
@@ -146,6 +146,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
     subject: 'Website-Relaunch',
     accountId: expect.any(String),
     issued: null,
+    cancels: null,
     lines: [{ name: 'Webdesign', description: '', quantity: 10000, unit: 'HUR', unitPrice: 8500, vatRate: 1900 }],
     deletedAt: null,
   });
@@ -319,5 +320,87 @@ test('issuing: the next number, the PDF in the folder, the audit entry, and no c
   await expect(rows).toHaveCount(2);
   await rows.nth(1).getByRole('button', { name: 'Kunde GmbH' }).click();
   await expect(page.getByRole('heading', { name: `Rechnung RE-${year}-0002` })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('cancelling: a cancellation invoice with the next number, its PDF and audit entry, and a copy for the corrected invoice', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+  await addCustomer(page, { name: 'Kunde GmbH', address: true });
+  const year = isoToday().slice(0, 4);
+  const today = german(isoToday());
+  const [first, second] = [`RE-${year}-0001`, `RE-${year}-0002`];
+  const rows = page.getByRole('table').getByRole('row');
+
+  await nav(page, 'Rechnungen');
+  await page.getByRole('button', { name: 'Neue Rechnung' }).click();
+  await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
+  await page.getByLabel('Betreff').fill('Beratung');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 1).getByLabel('Bezeichnung').fill('Beratung');
+  await line(page, 1).getByLabel('Menge').fill('8');
+  await line(page, 1).getByLabel('Einzelpreis netto €').fill('95');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await rows.nth(1).getByRole('button', { name: 'Kunde GmbH' }).click();
+  await page.getByRole('button', { name: 'Rechnung ausstellen' }).click();
+  await page.getByRole('group', { name: /^Rechnung jetzt ausstellen\?/ }).getByRole('button', { name: 'Jetzt ausstellen' }).click();
+  await expect(page.getByRole('heading', { name: `Rechnung ${first}` })).toBeVisible();
+
+  // cancelling asks first, then issues the cancellation and shows it
+  await page.getByRole('button', { name: 'Stornieren' }).click();
+  const confirm = page.getByRole('group', { name: `Rechnung ${first} stornieren?`, exact: false });
+  await confirm.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(confirm).toHaveCount(0);
+  await page.getByRole('button', { name: 'Stornieren' }).click();
+  await confirm.getByRole('button', { name: 'Jetzt stornieren' }).click();
+  await expect(page.getByRole('status').filter({ hasText: `Rechnung ${first} storniert, Stornorechnung ${second} ausgestellt` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Stornorechnung ${second}` })).toBeVisible();
+  await expect(page.getByText(/Gesamtbetrag\s*-904,40\s€/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stornieren' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Als neue Rechnung kopieren' })).toHaveCount(0);
+
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF herunterladen' }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe(`Stornorechnung_${second}_Kunde-GmbH.pdf`);
+  const pdf = await PDFDocument.load(await readFile((await download.path()) ?? ''), { updateMetadata: false });
+  expect(pdf.getTitle()).toBe(`Stornorechnung – ${second} – Kunde GmbH – ${today}`);
+
+  // in the folder: the invoice unchanged, its cancellation with its PDF, and both audit entries
+  const files = await readFolders(page);
+  expect(Object.keys(files)).toContain(`Ordner-1/documents/issued/${second}.pdf`);
+  const audit = (files[`Ordner-1/audit/${isoToday().slice(0, 7)}.jsonl`] ?? '').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+  expect(audit).toMatchObject([
+    { action: 'issue', number: first },
+    { action: 'cancel', number: second, cancels: { number: first } },
+  ]);
+  const documents = await readDocuments(page);
+  expect(documents.find((d) => d['cancels'] === null)).toMatchObject({ issued: { number: first } });
+  expect(documents.find((d) => d['cancels'] !== null)).toMatchObject({ issued: { number: second }, cancels: { number: first } });
+
+  // the invoice is cancelled and no longer due; a copy is the start of the corrected invoice
+  await page.getByRole('button', { name: `${first} vom ${today}` }).click();
+  await expect(page.getByRole('heading', { name: `Rechnung ${first}` })).toBeVisible();
+  await expect(page.getByText('Storniert', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: `${second} vom ${today}` })).toBeVisible();
+  await expect(page.getByText('Fällig am')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Stornieren' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Als neue Rechnung kopieren' }).click();
+  await expect(page.getByText(`Kopie der Rechnung ${first}.`)).toBeVisible();
+  await expect(page.getByLabel('Betreff')).toHaveValue('Beratung');
+  await expect(line(page, 1).getByLabel('Menge')).toHaveValue('8');
+  await page.getByLabel('Betreff').fill('Beratung, korrigiert');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Rechnungsentwurf für „Kunde GmbH“ gespeichert' })).toBeVisible();
+
+  // the list marks both and keeps them after a reload
+  await page.reload();
+  await nav(page, 'Rechnungen');
+  await expect(page.getByRole('group', { name: 'Nach Status filtern' }).getByRole('button')).toHaveText(['Alle 3', 'Entwürfe 1', 'Ausgestellt 2']);
+  await expect(rows.filter({ hasText: second })).toContainText('Storno');
+  await expect(rows.filter({ hasText: second })).toContainText(/-904,40\s€/);
+  await expect(rows.filter({ hasText: first })).toContainText('Storniert');
+  await expect(rows.filter({ hasText: 'Beratung, korrigiert' })).toContainText('Entwurf');
   expect(errors).toEqual([]);
 });

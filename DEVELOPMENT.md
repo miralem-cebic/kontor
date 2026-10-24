@@ -47,7 +47,8 @@ src/
   app/crashReporting.ts        Global handlers for uncaught errors (emergency copy, then a toast)
   app/documentPdf.ts           PDF of a quote or an invoice: logo from the folder (SVG drawn into a PNG), download;
                                an issued invoice is its stored file, checked against its SHA-256
-  app/issue.ts                 Issuing an invoice (ADR 0004): reserve the number, write the PDF once, the record, audit
+  app/issue.ts                 Issuing and cancelling an invoice (ADR 0004): reserve the number, write the PDF once,
+                               the record, audit
   domain/                      Pure logic, no I/O:
     check.ts                   Checker for form drafts, shared field checks (address, email, phone, IBAN, price, payment term)
     money.ts                   Cents, basis points, quantities, rounding, tax totals, parsing and formatting
@@ -126,7 +127,7 @@ src/
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the invoice number pattern (it produces file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
 - `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
 
-## Data format (schema version 4)
+## Data format (schema version 5)
 
 kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/`), `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
@@ -137,14 +138,14 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
   backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items, documents }
   contacts/<id>.json      customers and suppliers, file name = contact ID; other names (conflict copies) are not read
   items/<id>.json         catalogue of items and services, named like contacts
-  documents/<id>.json     quotes and invoices, named like contacts; cancellations are planned
+  documents/<id>.json     quotes, invoices and cancellation invoices, named like contacts
   documents/issued/<nr>.pdf  the PDF of an issued invoice, named after its number, written once (XML planned)
   numbering/<range>.json  { schemaVersion, range, counters: [{ key, last }], reservations: [...] }
   payments/<id>.json                                                               (planned)
   expenses/<id>.json      with receipt: { kind: 'file', path, sha256 } | { kind: 'link', url } (planned)
   belege/<year>/…         receipt files                                            (planned)
   eingang/                inbox: files waiting to be assigned (F06)                 (planned)
-  audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue', documentId, number, files, device }), only appended
+  audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue' | 'cancel', documentId, number, files, device }), only appended
   exports/                generated exports                                        (planned)
 ```
 
@@ -172,9 +173,13 @@ A document file (`documents/<id>.json`, types in `src/data/types.ts`, `src/domai
 - `kind: 'quote'` adds `validUntil`.
 - `kind: 'invoice'` adds `service` (`{ kind: 'date', date }` or `{ kind: 'period', start, end }`), `paymentTermDays` (0 to 365; the due date is the date plus the term), `accountId` (an account of `company.json`, possibly removed since), `taxTreatment` (`standard`, `reverseCharge`, `intraCommunitySupply` or `notTaxable`; always `standard` for a small business), `orderReference` (BT-13), `leitwegId` (BT-10) and `quoteId` (the quote it was made from, or `null`; not mergeable, it never changes).
 
-An invoice also has `issued`: `null` for a draft, or `{ number, counter, counterKey, issuedAt, snapshot, pdf: { file, sha256 } }` once issued (ADR 0004). `snapshot` holds the company profile, the customer profile and the account details at that time; `pdf.file` must be `<number>.pdf`. `issued` is not a mergeable field: an issued invoice wins over a draft as a whole, the repository never writes a draft over it, and two different numbers for one invoice stop the save (`conflict`). The store neither changes nor deletes an issued invoice. Quotes are drafts for now: they have no number yet. The repository never merges a quote with an invoice of the same ID; such a save stops. Documents were added in schema version 2 as a new kind of file, invoices in version 3, issuing in version 4.
+An invoice also has `issued`: `null` for a draft, or `{ number, counter, counterKey, issuedAt, snapshot, pdf: { file, sha256 } }` once issued (ADR 0004). `snapshot` holds the company profile, the customer profile and the account details at that time; `pdf.file` must be `<number>.pdf`. `issued` is not a mergeable field: an issued invoice wins over a draft as a whole, the repository never writes a draft over it, and two different numbers for one invoice stop the save (`conflict`). The store neither changes nor deletes an issued invoice. Quotes are drafts for now: they have no number yet. The repository never merges a quote with an invoice of the same ID; such a save stops. Documents were added in schema version 2 as a new kind of file, invoices in version 3, issuing in version 4, cancelling in version 5.
+
+An invoice also has `cancels`: `null`, or for a cancellation invoice `{ id, number, date }` of the issued invoice it cancels. A cancellation is issued as soon as it is made, so a file with `cancels` and without `issued` is refused. Its ID is a UUID derived from the invoice's ID (`cancellationId`, SHA-256, version 8 of RFC 9562), so an invoice has at most one cancellation, also when two attempts or two devices make it. The cancelled invoice itself does not change: it counts as cancelled because a document cancels it (`cancellationOf`).
 
 Issuing (`src/app/issue.ts`) reads `numbering/invoice.json` and the files in `documents/issued/`, takes the next counter of the key (the year of the invoice date when the pattern contains `{YYYY}` or `{YY}`, otherwise `all`) as one more than the highest counter known from the range file, its reservations and the issued invoices, and stops when the formatted number is taken already. It writes the reservation (number, document ID, device, time), reads the file back and checks that the reservation holds, then writes the PDF (never replacing a file), saves the invoice and appends the audit line. A second attempt for the same invoice finds its reservation and its file and goes on with them. The device is a random ID of the browser (`localStorage` `kontor.device.v1`).
+
+Cancelling (`cancel` in the same file) makes the cancellation of an issued invoice (`cancellationContent`): the lines with the opposite quantity, the service, tax treatment and references of the invoice, no texts, dated today but never before the invoice. It is issued like an invoice, with the next number of the invoice range and the snapshot of the cancelled invoice, so it reverses exactly what the invoice said; the audit line has `action: 'cancel'` and `cancels: { documentId, number }`. Calling it again returns the cancellation issued before.
 
 App-wide data is not in a company folder: the list of folder handles (IndexedDB `kontor`, store `companies`), the last company and the language (`localStorage` `kontor.prefs.v1`).
 
@@ -188,10 +193,11 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | 2 | `company.json`: the one bank account `{ holder, iban, bic }` becomes `bank.accounts[0]` with the fixed ID `account-1` and is the default (two devices that upgrade the same file get the same ID). Contact files are unchanged. Item and document files are new. |
 | 3 | Document files can be invoices (`kind: 'invoice'`). No existing file changes; every kind gets `unchanged(2)`. An app of version 2 refuses the files of version 3 instead of overwriting them. `notTaxable` joined the tax treatments before version 3 was released, so it did not get a version of its own. |
 | 4 | Invoices can be issued: a draft of version 3 gets `issued: null`; the other kinds get `unchanged(3)`. Range files (`numbering/`) are a new kind of file. An app of version 3 refuses the files of version 4, so it can never edit an issued invoice as a draft. |
+| 5 | Invoices can be cancelled: every invoice of version 4 gets `cancels: null`; the other kinds get `unchanged(4)`. An app of version 4 refuses the files of version 5, so it never shows a cancelled invoice as open. |
 
 ## Tests
 
-- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness, the PDF (its content per document and tax treatment, wrapping and page layout with a property test that no text runs into the footer, and a rendered file with real fonts: metadata, output intent, embedded subsets, missing characters), issuing on an in-memory folder (numbers per year, a range file that fell behind, a taken number, a second attempt after an interruption, a reservation that does not hold), and that an issued invoice is never overwritten.
+- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness, the PDF (its content per document and tax treatment, wrapping and page layout with a property test that no text runs into the footer, and a rendered file with real fonts: metadata, output intent, embedded subsets, missing characters), issuing on an in-memory folder (numbers per year, a range file that fell behind, a taken number, a second attempt after an interruption, a reservation that does not hold), cancelling (the next number, the master data of the invoice, once per invoice, a second attempt; a property test that the totals are reversed exactly), and that an issued invoice is never overwritten.
 - **Property-based** (fast-check): money sums and rounding, gross/net splits, parsing and formatting, IBAN check digits, profile normalization. CI uses a fixed seed (`CI` is set); locally the seed is random. `FC_SEED=<seed>` repeats a failing run, `FC_RUNS=<n>` runs more cases.
 - **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload), a company folder of version 1 that is upgraded, the catalogue (checks, search, edit, delete, reload, English prices, small business) unsaved items restored from the emergency copy, quotes (lines from the catalogue and free lines, totals per rate, checks per line, order, edit, delete, reload, small business, expired, the PDF with an SVG logo), and invoices (defaults from the customer, period of service, tax treatment, due date, what is missing before issuing, edit, delete, reload, the PDF download, an invoice made from a quote, small business, issuing with the files in the folder and the read-only view).
 

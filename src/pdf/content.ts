@@ -63,7 +63,7 @@ export interface DocumentContent {
   recipient: string[];
   /** Number, dates and references on the right of the first page */
   info: InfoRow[];
-  /** "Rechnung" or "Angebot", marked as a draft */
+  /** "Rechnung", "Stornorechnung" or "Angebot"; a draft is marked as such */
   title: string;
   subject: string;
   intro: string;
@@ -74,7 +74,7 @@ export interface DocumentContent {
     rows: TableRow[];
   };
   totals: TotalRow[];
-  /** Paragraphs after the totals: the note on VAT, payment or validity */
+  /** Paragraphs after the totals: the note on VAT, payment, the cancelled invoice or validity */
   notes: string[];
   closing: string;
   footer: { text: string; columns: string[][] };
@@ -171,7 +171,8 @@ export function documentContent(src: PdfSource): DocumentContent {
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const note = isInvoice ? vatNote(doc.taxTreatment, smallBusiness) : smallBusiness ? 'smallBusiness' : null;
   const totals = isInvoice ? invoiceTotals(doc, smallBusiness) : documentTotals(doc.lines, smallBusiness);
-  const title = tIn(lang, isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : 'pdf.quoteDraft');
+  const cancels = isInvoice ? doc.cancels : null;
+  const title = tIn(lang, cancels ? 'pdf.cancellation' : isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : 'pdf.quoteDraft');
   const date = formatDate(doc.date, lang);
   const customerName = customer?.name ?? '';
 
@@ -191,7 +192,8 @@ export function documentContent(src: PdfSource): DocumentContent {
   if (note === 'reverseCharge' || note === 'intraCommunitySupply') {
     notes.push(nonEmpty([customer?.vatId ? tIn(lang, 'pdf.customerVatId', { id: customer.vatId }) : '', company.tax.vatId ? tIn(lang, 'pdf.ownVatId', { id: company.tax.vatId }) : '']).join(' · '));
   }
-  if (isInvoice) {
+  if (cancels) notes.push(tIn(lang, 'pdf.cancellationNote', { number: cancels.number, date: formatDate(cancels.date, lang) }));
+  else if (isInvoice) {
     const payment = paymentNote(doc, totals.gross, account, number, lang);
     if (payment) notes.push(payment);
   } else notes.push(tIn(lang, 'pdf.quoteValid', { date: formatDate(doc.validUntil, lang) }));
@@ -249,11 +251,13 @@ function invoiceInfo(inv: InvoiceFile, customer: ContactProfile | null, number: 
       ? { label: tIn(lang, 'pdf.serviceDate'), value: formatDate(inv.service.date, lang) }
       : { label: tIn(lang, 'pdf.servicePeriod'), value: `${formatDate(inv.service.start, lang)} – ${formatDate(inv.service.end, lang)}` };
   const optional = (label: MessageKey, value: string): InfoRow[] => (value ? [{ label: tIn(lang, label), value }] : []);
+  // a cancellation names the invoice it cancels instead of a due date
+  const reference = inv.cancels ? { label: tIn(lang, 'pdf.cancels'), value: inv.cancels.number } : { label: tIn(lang, 'pdf.dueDate'), value: formatDate(dueDate(inv), lang) };
   return [
     { label: tIn(lang, 'pdf.invoiceNumber'), value: number ?? tIn(lang, 'pdf.draftNumber') },
     { label: tIn(lang, 'pdf.invoiceDate'), value: formatDate(inv.date, lang) },
     service,
-    { label: tIn(lang, 'pdf.dueDate'), value: formatDate(dueDate(inv), lang) },
+    reference,
     ...optional('pdf.customerNumber', customer?.customerNumber ?? ''),
     ...optional('pdf.orderReference', inv.orderReference),
     ...optional('pdf.leitwegId', inv.leitwegId),

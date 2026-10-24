@@ -22,5 +22,18 @@ export const newAccountId = (): AccountId => brandId<'AccountId'>(crypto.randomU
 export const newItemId = (): ItemId => brandId<'ItemId'>(crypto.randomUUID());
 export const newDocumentId = (): DocumentId => brandId<'DocumentId'>(crypto.randomUUID());
 
+/**
+ * The ID of the cancellation of an invoice: a UUID made from the invoice's ID (name-based with SHA-256, version 8 of
+ * RFC 9562). It follows from the invoice, so that a second attempt, also on another device, issues the same
+ * cancellation instead of a second one, and like every record it is a UUID.
+ */
+export async function cancellationId(invoiceId: DocumentId): Promise<DocumentId> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kontor:cancellation:${invoiceId}`))).slice(0, 16);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return brandId<'DocumentId'>(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+}
+
 /** The keys of a record, typed as the record's key type. Object.keys only knows `string`; the record was built with these keys. */
 export const keysOf = <K extends string>(record: Partial<Record<K, unknown>>): K[] => Object.keys(record) as K[];

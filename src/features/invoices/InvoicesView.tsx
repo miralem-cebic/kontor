@@ -12,6 +12,7 @@ import {
   dueDate,
   emptyInvoiceDraft,
   INVOICE_LIMITS,
+  invoiceDraftFromCopy,
   invoiceDraftFromQuote,
   invoiceMatches,
   invoiceTotals,
@@ -42,7 +43,8 @@ import { IssuedInvoiceView } from './IssuedInvoiceView';
 // "Save" puts the checked invoice into the store (and the persister writes it). The form shows what a draft still needs
 // before it can be issued; issuing (app/issue.ts, ADR 0004) gives it its number and makes it read-only.
 
-type Mode = { kind: 'list' } | { kind: 'new'; fromQuote: DocumentId | null } | { kind: 'edit'; id: DocumentId };
+/** A new invoice starts empty, from a quote, or as a copy of an issued invoice */
+type Mode = { kind: 'list' } | { kind: 'new'; fromQuote: DocumentId | null; copyOf: DocumentId | null } | { kind: 'edit'; id: DocumentId };
 type StatusFilter = 'all' | 'drafts' | 'issued';
 
 const STATUS_FILTERS: { value: StatusFilter; label: MessageKey }[] = [
@@ -53,36 +55,44 @@ const STATUS_FILTERS: { value: StatusFilter; label: MessageKey }[] = [
 
 /** `fromQuote` opens a new invoice for that quote right away */
 export function InvoicesView({ fromQuote }: { fromQuote: DocumentId | null }) {
-  const [mode, setMode] = useState<Mode>(fromQuote ? { kind: 'new', fromQuote } : { kind: 'list' });
+  const [mode, setMode] = useState<Mode>(fromQuote ? { kind: 'new', fromQuote, copyOf: null } : { kind: 'list' });
   const back = () => setMode({ kind: 'list' });
+  const open = (id: DocumentId) => setMode({ kind: 'edit', id });
   switch (mode.kind) {
     case 'list':
-      return <InvoiceList onNew={() => setMode({ kind: 'new', fromQuote: null })} onOpen={(id) => setMode({ kind: 'edit', id })} />;
+      return <InvoiceList onNew={() => setMode({ kind: 'new', fromQuote: null, copyOf: null })} onOpen={open} />;
     case 'new':
-      return <NewInvoice fromQuote={mode.fromQuote} onDone={back} />;
+      return <NewInvoice key={mode.copyOf ?? mode.fromQuote ?? 'new'} fromQuote={mode.fromQuote} copyOf={mode.copyOf} onDone={back} />;
     case 'edit':
-      return <EditExisting id={mode.id} onDone={back} />;
+      return <EditExisting key={mode.id} id={mode.id} onDone={back} onOpen={open} onCopy={(id) => setMode({ kind: 'new', fromQuote: null, copyOf: id })} />;
   }
 }
 
-/** A new invoice with the company's defaults; made from a quote, with its customer, subject and lines */
-function NewInvoice({ fromQuote, onDone }: { fromQuote: DocumentId | null; onDone: () => void }) {
+/**
+ * A new invoice with the company's defaults; made from a quote, with its customer, subject and lines; or a copy of an
+ * issued invoice, dated today
+ */
+function NewInvoice({ fromQuote, copyOf, onDone }: { fromQuote: DocumentId | null; copyOf: DocumentId | null; onDone: () => void }) {
   const company = useApp((s) => s.company);
   const contacts = useApp((s) => s.contacts);
   const source = useApp((s) => (fromQuote ? s.documents.get(fromQuote) : undefined));
+  const original = useApp((s) => (copyOf ? s.documents.get(copyOf) : undefined));
   if (!company) return null;
   const quote = source && isQuote(source) ? source : null;
+  const copy = original && isInvoice(original) && original.issued ? { invoice: original, number: original.issued.number } : null;
   const start = () => {
     const termDays = company.invoiceDefaults.paymentTermDays;
-    const base = emptyInvoiceDraft(isoDateOf(new Date()), company.bank.defaultAccountId, termDays);
+    const today = isoDateOf(new Date());
+    if (copy) return invoiceDraftFromCopy(copy.invoice.customerId, copy.invoice.accountId, copy.invoice, today, currentLang(), newLineKey);
+    const base = emptyInvoiceDraft(today, company.bank.defaultAccountId, termDays);
     if (!quote) return base;
     const customer = [...contacts.values()].find((c) => c.id === quote.customerId);
     return invoiceDraftFromQuote({ ...base, customerId: quote.customerId, ...(customer ? customerDefaults(customer, termDays) : {}) }, quote, currentLang(), newLineKey);
   };
-  return <InvoiceEditor company={company} invoice={null} quote={quote} start={start} onDone={onDone} />;
+  return <InvoiceEditor company={company} invoice={null} quote={quote} copyOf={copy?.number ?? null} start={start} onDone={onDone} />;
 }
 
-function EditExisting({ id, onDone }: { id: DocumentId; onDone: () => void }) {
+function EditExisting({ id, onDone, onOpen, onCopy }: { id: DocumentId; onDone: () => void; onOpen: (id: DocumentId) => void; onCopy: (id: DocumentId) => void }) {
   const company = useApp((s) => s.company);
   const found = useApp((s) => s.documents.get(id));
   const invoice = found && isInvoice(found) && !found.deletedAt ? found : null;
@@ -92,9 +102,9 @@ function EditExisting({ id, onDone }: { id: DocumentId; onDone: () => void }) {
     if (!invoice) onDone();
   }, [invoice, onDone]);
   if (!invoice || !company) return null;
-  if (invoice.issued) return <IssuedInvoiceView invoice={{ ...invoice, issued: invoice.issued }} onDone={onDone} />;
+  if (invoice.issued) return <IssuedInvoiceView invoice={{ ...invoice, issued: invoice.issued }} onDone={onDone} onOpen={onOpen} onCopy={onCopy} />;
   const start = () => draftFromInvoice(invoice.customerId, invoice.accountId, invoice, currentLang(), newLineKey);
-  return <InvoiceEditor key={id} company={company} invoice={invoice} quote={source && isQuote(source) ? source : null} start={start} onDone={onDone} />;
+  return <InvoiceEditor company={company} invoice={invoice} quote={source && isQuote(source) ? source : null} copyOf={null} start={start} onDone={onDone} />;
 }
 
 /* ---------- List ---------- */
@@ -107,6 +117,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
   const [status, setStatus] = useState<StatusFilter>('all');
   const searchId = useId();
   const active = useMemo(() => [...documents.values()].filter(isInvoice).filter((d) => !d.deletedAt).sort(byInvoiceDate), [documents]);
+  const cancelled = useMemo(() => new Set(active.flatMap((inv) => (inv.cancels ? [inv.cancels.id] : []))), [active]);
   // an issued invoice keeps the customer and the VAT scheme it was issued with
   const customerName = (inv: InvoiceFile) => inv.issued?.snapshot.customer.name ?? contacts.get(inv.customerId)?.name ?? '';
   const gross = (inv: InvoiceFile) => invoiceTotals(inv, inv.issued ? inv.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
@@ -167,7 +178,11 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
               <tbody>
                 {shown.map((inv) => (
                   <tr key={inv.id}>
-                    <td>{inv.issued ? inv.issued.number : <span className="badge muted-badge">{t('invoices.draft')}</span>}</td>
+                    <td>
+                      {inv.issued ? inv.issued.number : <span className="badge muted-badge">{t('invoices.draft')}</span>}
+                      {inv.cancels && <span className="badge muted-badge list-badge">{t('invoices.cancellationShort')}</span>}
+                      {cancelled.has(inv.id) && <span className="badge muted-badge list-badge">{t('invoices.cancelled')}</span>}
+                    </td>
                     <td>{formatDate(inv.date)}</td>
                     <td>
                       <button type="button" className="row-link" onClick={() => onOpen(inv.id)}>
@@ -175,7 +190,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
                       </button>
                     </td>
                     <td>{inv.subject || <span className="muted">{t('documents.noSubject')}</span>}</td>
-                    <td>{formatDate(dueDate(inv))}</td>
+                    <td>{inv.cancels || cancelled.has(inv.id) ? <span className="muted">–</span> : formatDate(dueDate(inv))}</td>
                     <td className="num">{formatCents(gross(inv), lang)}</td>
                   </tr>
                 ))}
@@ -195,12 +210,14 @@ interface EditorProps {
   invoice: InvoiceFile | null;
   /** The quote the invoice is made from, if any */
   quote: QuoteFile | null;
+  /** The number of the issued invoice this new one is a copy of, if any */
+  copyOf: string | null;
   /** The draft the form starts with */
   start: () => InvoiceDraft;
   onDone: () => void;
 }
 
-function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) {
+function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: EditorProps) {
   const contacts = useApp((s) => s.contacts);
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const lang = currentLang();
@@ -324,6 +341,7 @@ function InvoiceEditor({ company, invoice, quote, start, onDone }: EditorProps) 
               {t('invoices.sectionInvoice')}
             </h2>
             {quote && <p className="f-hint">{t('invoices.fromQuote', { date: formatDate(quote.date), subject: quote.subject || t('documents.noSubject') })}</p>}
+            {copyOf && <p className="f-hint">{t('invoices.copyOf', { number: copyOf })}</p>}
             <SelectField
               label={t('documents.customer')}
               hint={options.length === 0 ? t('documents.noCustomers') : undefined}

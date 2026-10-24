@@ -2,11 +2,12 @@ import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import { invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
+import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
-import type { DocumentId } from '../data/ids';
+import { cancellationId, type DocumentId } from '../data/ids';
 import type { Repository, StorageErrorKind } from '../data/repository';
-import { SCHEMA_VERSION } from '../data/schema';
-import type { BankAccount, CompanyFile, ContactFile, DocumentFile, InvoiceFile, NumberingFile, Reservation } from '../data/types';
+import { makeCancellation, SCHEMA_VERSION } from '../data/schema';
+import { cancellationOf, type BankAccount, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type NumberingFile, type Reservation } from '../data/types';
 import { isValidId } from '../data/validate';
 import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, type LogoImage } from '../pdf/documentPdf';
@@ -18,8 +19,12 @@ import { flushWrites, openRepository } from './session';
 // once to documents/issued/<number>.pdf, the invoice gets its number, the snapshot of the master data and the PDF's
 // SHA-256, and an entry is appended to audit/<YYYY-MM>.jsonl. A second attempt after a failure in the middle finds its
 // own reservation and file and goes on with them, so a number is never given twice and never lost to this invoice.
+// Cancelling an issued invoice issues its cancellation invoice the same way.
 
-/** `notReady`: the draft is incomplete (issueProblems); `numberTaken`: the next number exists already, the range file fell behind */
+/**
+ * `notReady`: the draft is incomplete (issueProblems), or the invoice cannot be cancelled (not issued, or a
+ * cancellation itself); `numberTaken`: the next number exists already, the range file fell behind
+ */
 export type IssueFailure = 'notReady' | 'numberTaken' | StorageErrorKind;
 
 export type IssueResult = { ok: true; invoice: InvoiceFile; auditWritten: boolean } | { ok: false; failure: IssueFailure };
@@ -135,11 +140,29 @@ export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueRes
     accountActive: !!account && !account.deletedAt,
   });
   if (problems.length > 0 || !customer || !account) return fail('notReady');
+  return finalize(inv, { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) }, ctx);
+}
 
+/**
+ * Cancels an issued invoice: its cancellation (cancellationContent) is issued at once with the next number of the
+ * invoice range, with the master data the invoice was issued with, so that it reverses exactly what the invoice said.
+ * The invoice itself does not change; it counts as cancelled because its cancellation exists. Calling it again
+ * returns the cancellation issued before; an interrupted attempt is finished by the next one, as when issuing.
+ */
+export async function cancel(id: DocumentId, ctx: IssueContext): Promise<IssueResult> {
+  const original = ctx.documents.get(id);
+  if (!original || original.kind !== 'invoice' || !original.issued || original.cancels) return fail('notReady');
+  const done = cancellationOf(ctx.documents.values(), original.id);
+  if (done) return { ok: true, invoice: done, auditWritten: true };
+  const cancellation = makeCancellation({ ...original, issued: original.issued }, isoDateOf(ctx.now), await cancellationId(original.id));
+  return finalize(cancellation, original.issued.snapshot, ctx);
+}
+
+/** Reserves the number, writes the PDF, saves the invoice as issued and appends the audit entry */
+async function finalize(inv: InvoiceFile, snapshot: IssueSnapshot, ctx: IssueContext): Promise<IssueResult> {
   const reserved = await reserve(inv, ctx);
   if (!reserved.ok) return fail(reserved.failure);
   const { number, counter, counterKey: key } = reserved.reservation;
-  const snapshot: IssueSnapshot = { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) };
 
   // the PDF is written once; a file of this number from an earlier attempt of this invoice is kept
   const file = `${number}.pdf`;
@@ -161,14 +184,11 @@ export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueRes
   if (!saved.ok) return fail(saved.error.kind);
   if (saved.value.kind !== 'invoice' || saved.value.issued?.number !== number) return fail('conflict');
 
-  const audit = await ctx.repo.appendAudit(ctx.now.toISOString().slice(0, 7), {
-    at: ctx.now.toISOString(),
-    action: 'issue',
-    documentId: inv.id,
-    number,
-    files: [{ file, sha256 }],
-    device: ctx.device,
-  });
+  const entry = { at: ctx.now.toISOString(), documentId: inv.id, number, files: [{ file, sha256 }], device: ctx.device };
+  const audit = await ctx.repo.appendAudit(
+    entry.at.slice(0, 7),
+    inv.cancels ? { ...entry, action: 'cancel', cancels: { documentId: inv.cancels.id, number: inv.cancels.number } } : { ...entry, action: 'issue' },
+  );
   return { ok: true, invoice: saved.value, auditWritten: audit.ok };
 }
 
@@ -188,8 +208,8 @@ export function deviceId(): string {
   }
 }
 
-/** Issues an invoice of the open company: what is pending is written first, then the invoice is issued */
-export async function issueInvoice(id: DocumentId): Promise<IssueResult> {
+/** Runs `step` on the open company: what is pending is written first; the issued invoice goes into the store */
+async function inOpenCompany(step: (ctx: IssueContext) => Promise<IssueResult>): Promise<IssueResult> {
   const repo = openRepository();
   if (!repo) return fail('notFound');
   if (!(await flushWrites())) return fail('other');
@@ -197,7 +217,7 @@ export async function issueInvoice(id: DocumentId): Promise<IssueResult> {
   if (!company) return fail('notFound');
   let result: IssueResult;
   try {
-    result = await issue(id, { repo, company, contacts, documents, logo: await logoImage(), device: deviceId(), now: new Date() });
+    result = await step({ repo, company, contacts, documents, logo: await logoImage(), device: deviceId(), now: new Date() });
   } catch (e) {
     // for example the PDF could not be made; a reservation already written is used again by the next attempt
     console.error('Could not issue the invoice', e);
@@ -206,3 +226,9 @@ export async function issueInvoice(id: DocumentId): Promise<IssueResult> {
   if (result.ok) putIssuedInvoice(result.invoice);
   return result;
 }
+
+/** Issues an invoice draft of the open company */
+export const issueInvoice = (id: DocumentId): Promise<IssueResult> => inOpenCompany((ctx) => issue(id, ctx));
+
+/** Cancels an issued invoice of the open company; the result is its cancellation */
+export const cancelInvoice = (id: DocumentId): Promise<IssueResult> => inOpenCompany((ctx) => cancel(id, ctx));

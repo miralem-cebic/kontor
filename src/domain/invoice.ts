@@ -1,7 +1,8 @@
 // Invoices (Rechnungen): to whom, when, for which period of service, when they are due, to which account they are
-// paid, how VAT applies, and the lines. An invoice is a draft for now; issuing assigns the number, writes the PDF
-// and makes it immutable (ADR 0004). The invoice form edits a draft of plain strings; `readInvoice` checks it.
-// A draft may be saved incomplete; `issueProblems` lists what still keeps it from being issued.
+// paid, how VAT applies, and the lines. An invoice is a draft until it is issued; issuing assigns the number, writes
+// the PDF and makes it immutable (ADR 0004); a mistake in it is undone by a cancellation invoice. The invoice form
+// edits a draft of plain strings; `readInvoice` checks it. A draft may be saved incomplete; `issueProblems` lists
+// what still keeps it from being issued.
 
 import type { Result } from '../data/result';
 import type { AccountDetails } from './bankAccount';
@@ -10,7 +11,7 @@ import type { CompanyProfile } from './company';
 import { CONTACT_LIMITS, type ContactProfile } from './contact';
 import { addDays, isIsoDate } from './dates';
 import { documentTotals, draftFromLine, readLines, type DocumentLine, type LineDraft, type LineFieldPath } from './document';
-import { cents, type Cents, type MoneyLocale, type TaxTotals } from './money';
+import { cents, quantity, type Cents, type MoneyLocale, type TaxTotals } from './money';
 import type { QuoteContent } from './quote';
 import { isPlausibleEuVatId, isPlausibleLeitwegId, normalizeVatId } from './taxIds';
 import { isEuMemberState } from './vat';
@@ -130,6 +131,27 @@ export interface IssuedInfo {
   pdf: { file: string; sha256: string };
 }
 
+/**
+ * The content of the cancellation invoice (Stornorechnung) of an issued invoice. The cancellation gets its own number
+ * and names the invoice it cancels: a correction has to refer specifically and unambiguously to the original invoice
+ * (§ 31 Abs. 5 UStDV). It has the original's lines with the opposite quantity, so every amount and the VAT per rate
+ * are the original's with the opposite sign (the rounding in money.ts is symmetric). The service, the tax treatment
+ * and the references stay; the texts written for the original and its payment term do not apply. It is dated
+ * `today`, but never before the original. Source: https://www.gesetze-im-internet.de/ustdv_1980/__31.html
+ */
+export const cancellationContent = (original: InvoiceContent, today: string): InvoiceContent => ({
+  date: today < original.date ? original.date : today,
+  service: original.service,
+  paymentTermDays: 0,
+  taxTreatment: original.taxTreatment,
+  orderReference: original.orderReference,
+  leitwegId: original.leitwegId,
+  subject: original.subject,
+  introText: '',
+  closingText: '',
+  lines: original.lines.map((l) => ({ ...l, quantity: quantity(-l.quantity) })),
+});
+
 /* ---------- Draft ---------- */
 
 export interface InvoiceDraft {
@@ -214,6 +236,12 @@ export const invoiceDraftFromQuote = (base: InvoiceDraft, quote: QuoteContent, l
   ...base,
   subject: quote.subject,
   lines: quote.lines.map((l) => draftFromLine(newKey(), l, locale)),
+});
+
+/** A new draft with the content of an issued invoice, dated `today`: the corrected invoice after a cancellation starts like this */
+export const invoiceDraftFromCopy = (customerId: string, accountId: string, inv: InvoiceContent, today: string, locale: MoneyLocale, newKey: () => string): InvoiceDraft => ({
+  ...draftFromInvoice(customerId, accountId, inv, locale, newKey),
+  date: today,
 });
 
 /** The due date while the draft is typed, or null as long as the date or the term cannot be read */

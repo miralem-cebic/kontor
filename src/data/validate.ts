@@ -43,6 +43,7 @@ import {
   QUOTE_MERGEABLE_FIELDS,
   type BankAccount,
   type Banking,
+  type CancelledInvoice,
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
@@ -393,7 +394,9 @@ const issued: Check<IssuedInfo> = (v, path) => {
   return info.pdf.file === `${info.number}.pdf` ? info : fail(`${path}.pdf.file`, 'does not match the number');
 };
 
-const invoiceFile = objectOf<InvoiceFile>({
+const cancelledInvoice = objectOf<CancelledInvoice>({ id: documentId, number: documentNumber, date: isoDate });
+
+const invoiceFields = objectOf<InvoiceFile>({
   schemaVersion: num,
   id: documentId,
   kind: exactly('invoice'),
@@ -413,8 +416,15 @@ const invoiceFile = objectOf<InvoiceFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   issued: nullable(issued),
+  cancels: nullable(cancelledInvoice),
   fieldUpdatedAt: fieldTimestamps(INVOICE_MERGEABLE_FIELDS),
 });
+
+/** A cancellation is issued when it is made; a cancellation draft does not come from the app */
+const invoiceFile: Check<InvoiceFile> = (v, path) => {
+  const inv = invoiceFields(v, path);
+  return inv.cancels && !inv.issued ? fail(`${path}.issued`, 'a cancellation is always issued') : inv;
+};
 
 export const validateDocument: Check<DocumentFile> = variant<DocumentFile>({ quote: quoteFile, invoice: invoiceFile });
 

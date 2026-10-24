@@ -1,7 +1,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import type { InvoiceContent } from '../domain/invoice';
+import { cancellationContent, type InvoiceContent, type IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
@@ -26,7 +26,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const nowIso = (): string => stampNow();
 
@@ -71,5 +71,29 @@ export function makeInvoice(customerId: ContactId, accountId: AccountId, content
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<InvoiceMergeableField, string>> = {};
   for (const f of INVOICE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'invoice', customerId, accountId, quoteId, ...content, issued: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'invoice', customerId, accountId, quoteId, ...content, issued: null, cancels: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
+}
+
+/**
+ * The cancellation of an issued invoice, dated `today` (cancellationContent); `id` is its cancellationId. The issue
+ * flow gives it its number at once (app/issue.ts).
+ */
+export function makeCancellation(original: InvoiceFile & { issued: IssuedInfo }, today: string, id: DocumentId): InvoiceFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<InvoiceMergeableField, string>> = {};
+  for (const f of INVOICE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id,
+    kind: 'invoice',
+    customerId: original.customerId,
+    accountId: original.accountId,
+    quoteId: null,
+    ...cancellationContent(original, today),
+    issued: null,
+    cancels: { id: original.id, number: original.issued.number, date: original.date },
+    createdAt: at,
+    deletedAt: null,
+    fieldUpdatedAt,
+  };
 }

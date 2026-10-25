@@ -37,4 +37,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The hint of the footer field says that address, contact details, tax number and bank details are printed in the footer already, so they are not typed a second time.
 - The window showed a second vertical and a horizontal scroll bar: the hidden file field of the logo stuck out of the content area. Now only the content area scrolls.

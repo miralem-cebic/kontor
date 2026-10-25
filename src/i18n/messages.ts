@@ -342,6 +342,11 @@ const MESSAGES_SRC = {
   },
   'contacts.email': { de: 'E-Mail für Rechnungen', en: 'Email for invoices' },
   'contacts.sectionInvoicing': { de: 'Rechnungen und E-Rechnung', en: 'Invoices and e-invoices' },
+  'contacts.sectionPayment': { de: 'Zahlung und Notizen', en: 'Payment and notes' },
+  'contacts.personHint': {
+    de: 'Bei einer Privatperson entfallen Ansprechpartner/in, USt-IdNr., Leitweg-ID und Bestellnummer. Schon eingetragene Werte werden nicht gespeichert.',
+    en: 'A private person has no contact person, VAT ID, Leitweg-ID or order number. Values already typed are not saved.',
+  },
   'contacts.vatId': { de: 'USt-IdNr.', en: 'VAT ID' },
   'contacts.vatIdHint': { de: 'Bei Firmen in der EU, z. B. für Reverse Charge', en: 'For businesses in the EU, e.g. for reverse charge' },
   'contacts.leitwegId': { de: 'Leitweg-ID', en: 'Leitweg-ID' },

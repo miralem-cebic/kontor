@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The contact form for a private person hides the VAT ID, Leitweg-ID and order number (and the contact person), and its last section is called "Zahlung und Notizen". Values typed before switching to a private person are not saved; the form says so.
 - The trade tax multiplier must be at least 280 % from 2027 (§ 16 Abs. 4 Satz 2 GewStG; 200 % up to 2026). The forms check against the minimum of the current year; in 2026 they say that a lower multiplier is replaced by 280 % from 2027. Company folders with a lower multiplier from an earlier year still open.
 - All files of a company folder have schema version 5: invoices are a new kind of document (version 3), can be issued (version 4) and cancelled (version 5). A folder is upgraded when it is read; older versions of kontor then report that the folder was saved by a newer version.
 - `company.json` has schema version 2: the one bank account becomes a list of accounts with a default. A company folder is upgraded when it is read and saved in the new format with the next change; older versions of kontor then report that the folder was saved by a newer version.

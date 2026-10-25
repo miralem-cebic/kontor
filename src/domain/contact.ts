@@ -29,11 +29,11 @@ export interface ContactProfile {
   address: Address | null;
   /** email: where invoices go */
   contact: ContactDetails;
-  /** VAT ID of an EU business (needed for reverse charge and intra-community supplies), normalized; empty when not given */
+  /** VAT ID of an EU business (needed for reverse charge and intra-community supplies), normalized; empty when not given and for a person */
   vatId: string;
-  /** Leitweg-ID of a public buyer (BT-10); empty when not given */
+  /** Leitweg-ID of a public buyer (BT-10); empty when not given and for a person */
   leitwegId: string;
-  /** Default order or PO number (purchase order reference, BT-13); empty when not given */
+  /** Default order or PO number (purchase order reference, BT-13); empty when not given and for a person */
   orderReference: string;
   /** Payment term for this contact; null means the company's default */
   paymentTermDays: number | null;
@@ -132,18 +132,20 @@ export function readContact(d: ContactDraft, isNumberTaken: (customerNumber: str
   if (!d.customer && !d.supplier) c.add('customer', 'roleRequired');
   const name = c.text('name', d.name, CONTACT_LIMITS.name);
   const nameLine2 = c.optionalText('nameLine2', d.nameLine2, CONTACT_LIMITS.nameLine2);
-  const contactPerson = d.kind === 'company' ? c.optionalText('contactPerson', d.contactPerson, CONTACT_LIMITS.contactPerson) : '';
+  const isCompany = d.kind === 'company';
+  const contactPerson = isCompany ? c.optionalText('contactPerson', d.contactPerson, CONTACT_LIMITS.contactPerson) : '';
   const customerNumber = c.optionalText('customerNumber', d.customerNumber, CONTACT_LIMITS.customerNumber);
   if (customerNumber && customerNumber.length <= CONTACT_LIMITS.customerNumber && isNumberTaken(customerNumber)) c.add('customerNumber', 'numberTaken');
   const hasAddress = [d.street, d.postalCode, d.city].some((v) => v.trim() !== '');
   const address = hasAddress ? c.address(ADDRESS_FIELDS, d) : null;
   const email = c.email('email', d.email, false);
   const phone = c.phone('phone', d.phone);
-  const vatId = normalizeVatId(d.vatId);
+  // A private person has no VAT ID, is no public buyer and rarely has an order number: the form hides these fields
+  const vatId = isCompany ? normalizeVatId(d.vatId) : '';
   if (vatId && !isPlausibleEuVatId(vatId)) c.add('vatId', 'euVatId');
-  const leitwegId = d.leitwegId.trim();
+  const leitwegId = isCompany ? d.leitwegId.trim() : '';
   if (leitwegId && !isPlausibleLeitwegId(leitwegId)) c.add('leitwegId', 'leitwegId');
-  const orderReference = c.optionalText('orderReference', d.orderReference, CONTACT_LIMITS.orderReference);
+  const orderReference = isCompany ? c.optionalText('orderReference', d.orderReference, CONTACT_LIMITS.orderReference) : '';
   const paymentTermDays = d.paymentTermDays.trim() === '' ? null : c.paymentTerm('paymentTermDays', d.paymentTermDays);
   const notes = c.optionalText('notes', d.notes, CONTACT_LIMITS.notes);
   return c.done(() => ({

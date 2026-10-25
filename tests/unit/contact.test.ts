@@ -53,6 +53,12 @@ describe('readContact', () => {
     expect(r.ok && r.value.contactPerson).toBe('');
   });
 
+  it('a private person has no VAT ID, Leitweg-ID or order number, and they are not checked', () => {
+    const draft = sampleContactDraft({ kind: 'person', vatId: 'not an id', leitwegId: 'x', orderReference: 'PO-1' });
+    const r = readContact(draft, free);
+    expect(r.ok && [r.value.vatId, r.value.leitwegId, r.value.orderReference]).toEqual(['', '', '']);
+  });
+
   it('a profile survives the round trip through the draft', () => {
     const p = sampleContact();
     expect(readContact(draftFromContact(p), free)).toEqual({ ok: true, value: p });

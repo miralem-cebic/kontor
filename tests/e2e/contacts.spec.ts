@@ -59,6 +59,9 @@ test('customers and suppliers: create with checks, search, edit, delete', async 
   await page.getByRole('button', { name: 'Neuer Kontakt' }).click();
   await page.getByRole('radio', { name: 'Privatperson' }).check();
   await expect(page.getByLabel('Ansprechpartner/in')).toHaveCount(0);
+  for (const label of ['USt-IdNr.', 'Leitweg-ID', 'Bestell- bzw. PO-Nummer']) await expect(page.getByLabel(label)).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Zahlung und Notizen' })).toBeVisible();
+  await expect(page.getByText('Schon eingetragene Werte werden nicht gespeichert.')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Kunde' }).uncheck();
   await page.getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByText('Bitte Kunde, Lieferant oder beides wählen.')).toBeVisible();

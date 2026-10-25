@@ -78,8 +78,13 @@ jobs:
     with:
       version: dev-${{ github.run_number }}
 
+  # Pinned to engineering-baseline v0.1.0. baseline-ref selects the checker the workflow runs; without it
+  # the workflow runs main. baseline-ref is the tag, not the commit: npx (npm 10) cannot fetch a GitHub
+  # package by a full commit SHA ("GitFetcher requires an Arborist constructor"). On an update, change the
+  # commit in uses:, baseline-ref and "baseline" in baseline.json together: Dependabot only updates uses:.
   conformance:
     name: conformance
-    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@main
+    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@06fe6b0e9c71709004e67dd4326acebc950a78c7 # v0.1.0
     with:
       strict: false
+      baseline-ref: v0.1.0

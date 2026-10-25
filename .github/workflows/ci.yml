@@ -77,3 +77,9 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       version: dev-${{ github.run_number }}
+
+  conformance:
+    name: conformance
+    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@main
+    with:
+      strict: false

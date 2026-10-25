@@ -1,0 +1,7 @@
+{
+  "baseline": "0.1.0",
+  "ecosystems": ["typescript", "react"],
+  "topology": "local-only",
+  "repo": "miralem-cebic/kontor",
+  "waivers": []
+}

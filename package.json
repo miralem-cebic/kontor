@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build && npm run check:file",
+    "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "check:file": "node scripts/check-file-protocol.mjs"

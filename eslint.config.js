@@ -29,7 +29,10 @@ export default tseslint.config(
     // Type-aware: a switch over a union must handle every case (or end with a `never` check)
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
-    rules: { '@typescript-eslint/switch-exhaustiveness-check': 'error' },
+    rules: {
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/no-floating-promises': 'error',
+    },
   },
   {
     files: ['scripts/**/*.mjs', '*.config.*', 'tests/**/*.ts'],

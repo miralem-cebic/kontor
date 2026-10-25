@@ -181,7 +181,10 @@ const MESSAGES_SRC = {
   'invoice.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },
   'invoice.paymentTermHint': { de: '0 bedeutet „sofort fällig“', en: '0 means “due immediately”' },
   'invoice.footer': { de: 'Fußzeile', en: 'Footer' },
-  'invoice.footerHint': { de: 'Erscheint unten auf Angeboten und Rechnungen', en: 'Shown at the bottom of quotes and invoices' },
+  'invoice.footerHint': {
+    de: 'Name, Anschrift, Kontakt, Steuernummer und Bankverbindung stehen schon in der Fußzeile. Hier nur Ergänzungen eintragen, z. B. eine Website.',
+    en: 'Name, address, contact details, tax number and bank details are already in the footer. Add only extras here, e.g. a website.',
+  },
 
   'logo.label': { de: 'Logo', en: 'Logo' },
   'logo.preview': { de: 'Vorschau des Logos', en: 'Logo preview' },

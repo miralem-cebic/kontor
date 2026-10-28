@@ -56,19 +56,19 @@ export interface Repository {
   loadDocuments(): Promise<Result<{ documents: DocumentFile[]; issues: LoadIssue[] }, StorageError>>;
   /**
    * Writes documents/<id>.json, with the same conflict check and merge as `saveCompany`; a quote never merges with an
-   * invoice. An issued invoice in the folder is never overwritten: a draft saved over it gets the issued one back, and
-   * an invoice issued with another number stops the save (`conflict`).
+   * invoice. An issued invoice or a finalized quote in the folder is never overwritten: a draft saved over it gets the
+   * issued one back, and one issued with another number stops the save (`conflict`).
    */
   saveDocument(document: DocumentFile): Promise<Result<DocumentFile, StorageError>>;
   /** numbering/<range>.json, or null when no number of that range was given yet */
   readNumbering(range: NumberRange): Promise<Result<NumberingFile | null, StorageError>>;
   /** Writes the range file and reads it back: what holds after the write, in case another device wrote at the same time */
   writeNumbering(file: NumberingFile): Promise<Result<NumberingFile, StorageError>>;
-  /** The names of the files in documents/issued/ */
-  listIssuedFiles(): Promise<Result<string[], StorageError>>;
-  /** Writes documents/issued/<name> once: an existing file of that name is never replaced (`conflict`) */
-  writeIssuedFile(name: string, data: Uint8Array): Promise<Result<void, StorageError>>;
-  readIssuedFile(name: string): Promise<Result<Uint8Array, StorageError>>;
+  /** The names of the PDFs of a range: documents/issued/ for invoices, documents/quotes/ for quotes */
+  listIssuedFiles(range: NumberRange): Promise<Result<string[], StorageError>>;
+  /** Writes the PDF of a range once: an existing file of that name is never replaced (`conflict`) */
+  writeIssuedFile(range: NumberRange, name: string, data: Uint8Array): Promise<Result<void, StorageError>>;
+  readIssuedFile(range: NumberRange, name: string): Promise<Result<Uint8Array, StorageError>>;
   /** Adds a line to audit/<YYYY-MM>.jsonl */
   appendAudit(month: string, entry: AuditEntry): Promise<Result<void, StorageError>>;
   writeBackup(name: string, snapshot: BackupSnapshot): Promise<Result<void, StorageError>>;

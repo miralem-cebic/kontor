@@ -5,21 +5,39 @@ import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import { isoDateOf } from '../../domain/dates';
 import { documentTotals, draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
 import { formatCents } from '../../domain/money';
-import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, QUOTE_LIMITS, quoteMatches, readQuote, type QuoteDraft, type QuoteField, type QuoteFieldError } from '../../domain/quote';
+import {
+  byQuoteDate,
+  draftFromQuote,
+  emptyQuoteDraft,
+  isExpired,
+  QUOTE_LIMITS,
+  quoteDraftFromCopy,
+  quoteMatches,
+  quoteProblems,
+  readQuote,
+  type QuoteDraft,
+  type QuoteField,
+  type QuoteFieldError,
+} from '../../domain/quote';
+import { changeStats, replacedAlready, versionNumber } from '../../domain/quoteVersions';
 import type { DocumentId } from '../../data/ids';
-import { isQuote, type QuoteFile } from '../../data/types';
+import { isQuote, nextVersionOf, type QuoteFile, type RevisedQuote } from '../../data/types';
+import { finalizeQuote } from '../../app/issue';
 import { currentLang, t, type MessageKey } from '../../i18n';
-import { fieldError, problemText } from '../../lib/labels';
+import { fieldError, finalizeFailureText, problemText, quoteProblemText } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
 import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
+import { IssuedQuoteView } from './IssuedQuoteView';
 
 // Quotes: a searchable list and a form for a new or an existing quote. The form edits a draft; only "Save" puts
-// the checked quote into the store (and the persister writes it). Quotes are drafts until numbering and the PDF come;
-// a saved quote can become a new invoice.
+// the checked quote into the store (and the persister writes it). Finalizing ("Angebot abschließen", app/issue.ts)
+// gives a saved quote its number and its PDF and makes it read-only; a change after that is a new version (F22). A saved
+// quote can become a new invoice, and a finalized one can be copied into a new draft.
 
-type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: DocumentId };
+/** A new quote starts empty, as a copy of a finalized quote, or as its next version */
+type Mode = { kind: 'list' } | { kind: 'new'; copyOf: DocumentId | null; versionOf: DocumentId | null } | { kind: 'edit'; id: DocumentId };
 type ValidityFilter = 'all' | 'valid' | 'expired';
 
 const VALIDITY_FILTERS: { value: ValidityFilter; label: MessageKey }[] = [
@@ -32,24 +50,69 @@ const VALIDITY_FILTERS: { value: ValidityFilter; label: MessageKey }[] = [
 export function QuotesView({ onCreateInvoice }: { onCreateInvoice: (quoteId: DocumentId) => void }) {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const back = () => setMode({ kind: 'list' });
+  const open = (id: DocumentId) => setMode({ kind: 'edit', id });
   switch (mode.kind) {
     case 'list':
-      return <QuoteList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} />;
+      return <QuoteList onNew={() => setMode({ kind: 'new', copyOf: null, versionOf: null })} onOpen={open} />;
     case 'new':
-      return <QuoteEditor quote={null} onDone={back} onCreateInvoice={onCreateInvoice} />;
+      return <NewQuote key={mode.versionOf ?? mode.copyOf ?? 'new'} copyOf={mode.copyOf} versionOf={mode.versionOf} onDone={back} onCreateInvoice={onCreateInvoice} />;
     case 'edit':
-      return <EditExisting id={mode.id} onDone={back} onCreateInvoice={onCreateInvoice} />;
+      return (
+        <EditExisting
+          key={mode.id}
+          id={mode.id}
+          onDone={back}
+          onOpen={open}
+          onCreateInvoice={onCreateInvoice}
+          onCopy={(id) => setMode({ kind: 'new', copyOf: id, versionOf: null })}
+          onNewVersion={(id) => setMode({ kind: 'new', copyOf: null, versionOf: id })}
+        />
+      );
   }
 }
 
-function EditExisting({ id, onDone, onCreateInvoice }: { id: DocumentId; onDone: () => void; onCreateInvoice: (quoteId: DocumentId) => void }) {
+interface NewProps {
+  copyOf: DocumentId | null;
+  versionOf: DocumentId | null;
+  onDone: () => void;
+  onCreateInvoice: (quoteId: DocumentId) => void;
+}
+
+/** A new quote: empty, or with everything from a finalized quote dated today, as a copy or as its next version */
+function NewQuote({ copyOf, versionOf, onDone, onCreateInvoice }: NewProps) {
+  const sourceId = versionOf ?? copyOf;
+  const found = useApp((s) => (sourceId ? s.documents.get(sourceId) : undefined));
+  const source = found && isQuote(found) && found.issued ? { ...found, issued: found.issued } : null;
+  const revises = versionOf && source ? nextVersionOf(source) : null;
+  const start = (): QuoteDraft => {
+    const today = isoDateOf(new Date());
+    return source ? quoteDraftFromCopy(source.customerId, source, today, currentLang(), newLineKey) : emptyQuoteDraft(today);
+  };
+  return <QuoteEditor quote={null} copyOf={source && !revises ? source.issued.number : null} revises={revises} start={start} onDone={onDone} onCreateInvoice={onCreateInvoice} />;
+}
+
+interface ExistingProps {
+  id: DocumentId;
+  onDone: () => void;
+  onOpen: (quoteId: DocumentId) => void;
+  onCreateInvoice: (quoteId: DocumentId) => void;
+  onCopy: (quoteId: DocumentId) => void;
+  onNewVersion: (quoteId: DocumentId) => void;
+}
+
+function EditExisting({ id, onDone, onOpen, onCreateInvoice, onCopy, onNewVersion }: ExistingProps) {
   const found = useApp((s) => s.documents.get(id));
   const quote = found && isQuote(found) && !found.deletedAt ? found : null;
   // deleted or gone (for example merged away from another device): back to the list
   useEffect(() => {
     if (!quote) onDone();
   }, [quote, onDone]);
-  return quote ? <QuoteEditor key={id} quote={quote} onDone={onDone} onCreateInvoice={onCreateInvoice} /> : null;
+  if (!quote) return null;
+  if (quote.issued) {
+    return <IssuedQuoteView quote={{ ...quote, issued: quote.issued }} onDone={onDone} onOpen={onOpen} onCreateInvoice={onCreateInvoice} onCopy={onCopy} onNewVersion={onNewVersion} />;
+  }
+  const start = () => draftFromQuote(quote.customerId, quote, currentLang(), newLineKey);
+  return <QuoteEditor quote={quote} copyOf={null} revises={quote.revises} start={start} onDone={onDone} onCreateInvoice={onCreateInvoice} />;
 }
 
 /* ---------- List ---------- */
@@ -62,12 +125,17 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
   const [validity, setValidity] = useState<ValidityFilter>('all');
   const searchId = useId();
   const active = useMemo(() => [...documents.values()].filter(isQuote).filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
-  const customerName = (q: QuoteFile) => contacts.get(q.customerId)?.name ?? '';
+  // a finalized quote keeps the customer and the VAT scheme it was finalized with
+  const customerName = (q: QuoteFile) => q.issued?.snapshot.customer.name ?? contacts.get(q.customerId)?.name ?? '';
+  const gross = (q: QuoteFile) => documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
   const today = isoDateOf(new Date());
   const inFilter = (q: QuoteFile, f: ValidityFilter) => f === 'all' || isExpired(q, today) === (f === 'expired');
-  const matching = active.filter((q) => quoteMatches(q, customerName(q), query));
+  const matching = active.filter((q) => quoteMatches(q, customerName(q), query) || (q.issued?.number.toLowerCase().includes(query.trim().toLowerCase()) ?? false));
   const shown = matching.filter((q) => inFilter(q, validity));
   const lang = currentLang();
+  const stats = changeStats(active);
+  // a quote with a finalized later version is replaced
+  const replaced = new Set(active.flatMap((q) => (q.issued && q.revises ? [q.revises.id] : [])));
 
   return (
     <div className="page wide">
@@ -99,6 +167,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               ))}
             </div>
           </div>
+          {stats.total > 0 && <p className="muted page-note">{t('quotes.changeStats', { ...stats })}</p>}
           {shown.length === 0 ? (
             <p className="empty" role="status">
               {t('quotes.noMatch')}
@@ -108,6 +177,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               <caption className="visually-hidden">{t('quotes.count', { n: shown.length })}</caption>
               <thead>
                 <tr>
+                  <th scope="col">{t('quotes.colNumber')}</th>
                   <th scope="col">{t('documents.colDate')}</th>
                   <th scope="col">{t('documents.colCustomer')}</th>
                   <th scope="col">{t('documents.colSubject')}</th>
@@ -120,6 +190,11 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               <tbody>
                 {shown.map((q) => (
                   <tr key={q.id}>
+                    <td>
+                      {q.issued ? q.issued.number : <span className="badge muted-badge">{t('quotes.draft')}</span>}
+                      {!q.issued && q.revises && <span className="badge muted-badge list-badge">{t('quotes.versionBadge', { version: q.revises.version })}</span>}
+                      {replaced.has(q.id) && <span className="badge muted-badge list-badge">{t('quotes.replaced')}</span>}
+                    </td>
                     <td>{formatDate(q.date)}</td>
                     <td>
                       <button type="button" className="row-link" onClick={() => onOpen(q.id)}>
@@ -130,7 +205,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
                     <td>
                       {formatDate(q.validUntil)} {isExpired(q, today) && <span className="badge muted-badge">{t('quotes.expired')}</span>}
                     </td>
-                    <td className="num">{formatCents(documentTotals(q.lines, smallBusiness).gross, lang)}</td>
+                    <td className="num">{formatCents(gross(q), lang)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -145,16 +220,24 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
 /* ---------- Form ---------- */
 
 interface EditorProps {
+  /** The saved draft, or null for a new quote */
   quote: QuoteFile | null;
+  /** The number of the finalized quote this new one is a copy of, if any */
+  copyOf: string | null;
+  /** For a new version: the finalized quote it replaces */
+  revises: RevisedQuote | null;
+  /** The draft the form starts with */
+  start: () => QuoteDraft;
   onDone: () => void;
   onCreateInvoice: (quoteId: DocumentId) => void;
 }
 
-function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
+function QuoteEditor({ quote, copyOf, revises, start, onDone, onCreateInvoice }: EditorProps) {
   const contacts = useApp((s) => s.contacts);
+  const documents = useApp((s) => s.documents);
   const smallBusiness = useSmallBusiness();
   const lang = currentLang();
-  const [draft, setDraft] = useState<QuoteDraft>(() => (quote ? draftFromQuote(quote.customerId, quote, lang, newLineKey) : emptyQuoteDraft(isoDateOf(new Date()))));
+  const [draft, setDraft] = useState<QuoteDraft>(start);
   const [errors, setErrors] = useState<readonly QuoteFieldError[]>([]);
   const [checked, setChecked] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -178,9 +261,13 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
     { id: 'quote-sec-head', title: t('quotes.sectionQuote'), icon: 'quote' },
     { id: 'quote-sec-lines', title: t('lines.title'), icon: 'invoice' },
     { id: 'quote-sec-closing', title: t('documents.closingText'), icon: 'text' },
+    { id: 'quote-sec-finalize', title: t('quotes.sectionFinalize'), icon: 'check' },
   ];
   const options = customerOptions(contacts, draft.customerId);
-  const customerName = (id: string) => [...contacts.values()].find((c) => c.id === id)?.name ?? '';
+  const findContact = (id: string) => [...contacts.values()].find((c) => c.id === id);
+  const customerName = (id: string) => findContact(id)?.name ?? '';
+  const newerVersion = replacedAlready([...documents.values()].filter(isQuote), { id: quote?.id ?? '', customerId: draft.customerId, deletedAt: null, issued: null, revises });
+  const problems = quoteProblems({ hasCustomer: !!findContact(draft.customerId), lineCount: draft.lines.length, validUntil: draft.validUntil, newerVersion }, isoDateOf(new Date()));
 
   /** Checks the draft and puts it into the store; returns the quote's ID and its customer's name, or null on errors */
   const store = (): { id: DocumentId; customerName: string } | null => {
@@ -193,7 +280,7 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
       return null;
     }
     if (quote) updateQuote(quote.id, customer.id, r.value.content);
-    return { id: quote ? quote.id : addQuote(customer.id, r.value.content), customerName: customer.name };
+    return { id: quote ? quote.id : addQuote(customer.id, r.value.content, revises), customerName: customer.name };
   };
 
   const save = () => {
@@ -216,7 +303,11 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
     onDone();
   };
 
-  const title = quote ? [customerName(quote.customerId), quote.subject].filter(Boolean).join(' · ') : t('quotes.new');
+  const title = quote
+    ? [customerName(quote.customerId), quote.subject].filter(Boolean).join(' · ')
+    : revises
+      ? t('quotes.versionTitle', { version: revises.version, number: revises.firstNumber })
+      : t('quotes.new');
 
   return (
     <div className="page with-panel">
@@ -240,6 +331,18 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
         >
           <section className="card" id="quote-sec-head" aria-labelledby="quote-head">
             <h2 id="quote-head" tabIndex={-1}>{t('quotes.sectionQuote')}</h2>
+            {copyOf && <p className="f-hint">{t('quotes.copyOf', { number: copyOf })}</p>}
+            {revises && (
+              <p className="f-hint">
+                {t('quotes.versionOf', {
+                  version: revises.version,
+                  first: revises.firstNumber,
+                  number: revises.number,
+                  date: formatDate(revises.date),
+                  next: versionNumber(revises.firstNumber, revises.version),
+                })}
+              </p>
+            )}
             <SelectField
               label={t('documents.customer')}
               hint={options.length === 0 ? t('documents.noCustomers') : undefined}
@@ -268,6 +371,38 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
           <section className="card" id="quote-sec-closing" aria-labelledby="quote-closing">
             <h2 id="quote-closing" tabIndex={-1}>{t('documents.closingText')}</h2>
             <TextArea label={t('documents.closingText')} hint={t('documents.closingTextHint')} value={draft.closingText} onChange={(closingText) => set({ closingText })} error={e('closingText')} maxLength={QUOTE_LIMITS.text} />
+          </section>
+
+          <section className="card" id="quote-sec-finalize" aria-labelledby="quote-finalize">
+            <h2 id="quote-finalize" tabIndex={-1}>
+              {t('quotes.sectionFinalize')}
+            </h2>
+            <p className="muted">{t('quotes.finalizeLater')}</p>
+            {problems.length === 0 ? (
+              <>
+                <ul className="checks">
+                  <li className="ok">
+                    <Icon n="check" s={14} />
+                    {t('quotes.ready')}
+                  </li>
+                </ul>
+                {quote ? <FinalizeAction prepare={() => store()?.id ?? null} /> : <p className="f-hint">{t('quotes.finalizeSaveFirst')}</p>}
+              </>
+            ) : (
+              <>
+                <p className="muted" id="quote-missing">
+                  {t('quotes.missing')}
+                </p>
+                <ul className="checks" aria-labelledby="quote-missing">
+                  {problems.map((p) => (
+                    <li key={p} className="bad">
+                      <Icon n="alert" s={14} />
+                      {quoteProblemText(p)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </section>
 
           <div className="card-actions">
@@ -306,6 +441,51 @@ function QuoteEditor({ quote, onDone, onCreateInvoice }: EditorProps) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Finalizing after asking: changes not saved yet are saved first (`prepare`), then the quote gets its number. The view
+ * switches to the finalized quote by itself, because the store then holds it as finalized.
+ */
+function FinalizeAction({ prepare }: { prepare: () => DocumentId | null }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    const id = prepare();
+    if (!id) {
+      setConfirming(false);
+      return;
+    }
+    setBusy(true);
+    const r = await finalizeQuote(id);
+    setBusy(false);
+    if (r.ok) showToast(t(r.auditWritten ? 'quotes.finalizedToast' : 'quotes.finalizedAuditMissing', { number: r.document.issued?.number ?? '' }));
+    else {
+      setConfirming(false);
+      showToast(finalizeFailureText(r.failure));
+    }
+  };
+  if (!confirming) {
+    return (
+      <div className="card-actions">
+        <button type="button" className="btn primary" onClick={() => setConfirming(true)}>
+          <Icon n="check" s={14} />
+          {t('quotes.finalize')}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="confirm" role="group" aria-label={t('quotes.finalizeConfirm')}>
+      <span>{t('quotes.finalizeConfirm')}</span>
+      <button type="button" className="btn primary" onClick={() => void run()} disabled={busy} autoFocus>
+        {busy ? t('quotes.finalizeBusy') : t('quotes.finalizeNow')}
+      </button>
+      <button type="button" className="btn" onClick={() => setConfirming(false)} disabled={busy}>
+        {t('common.cancel')}
+      </button>
     </div>
   );
 }

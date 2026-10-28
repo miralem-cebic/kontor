@@ -76,7 +76,13 @@ test('the setup assistant checks each step and writes the company folder', async
   await expect(page.getByText(`Die erste Rechnung bekäme die Nummer RE-${year}-0001.`)).toBeVisible();
   await page.getByLabel('Rechnungsnummer').fill('{YY}-{NNN}');
   await expect(page.getByText(`Die erste Rechnung bekäme die Nummer ${String(year).slice(2)}-001.`)).toBeVisible();
+  // quotes have a pattern of their own, which must differ from the invoice pattern
+  await expect(page.getByText(`Das erste Angebot bekäme die Nummer AN-${year}-0001.`)).toBeVisible();
+  await page.getByLabel('Angebotsnummer').fill('{YY}-{NNN}');
   await page.getByLabel('Zahlungsziel in Tagen').fill('30');
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await expect(page.getByText('Wähle ein anderes Format als für Rechnungen')).toBeVisible();
+  await page.getByLabel('Angebotsnummer').fill('A{YY}-{NNN}');
   await page.getByRole('button', { name: 'Weiter' }).click();
 
   // summary, with a way back to a step
@@ -99,7 +105,7 @@ test('the setup assistant checks each step and writes the company folder', async
   const files = await readFolders(page);
   const company = await readCompanyFile(page, 'Ordner-1');
   expect(company).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     name: 'Muster Design',
     address: { street: 'Hauptstraße 1', postalCode: '50667', city: 'Köln', country: 'DE' },
     tax: {
@@ -109,7 +115,7 @@ test('the setup assistant checks each step and writes the company folder', async
       business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
     },
     bank: { accounts: [{ kind: 'bank', name: '', holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX', deletedAt: null }] },
-    invoiceDefaults: { numberPattern: '{YY}-{NNN}', paymentTermDays: 30, footer: '' },
+    invoiceDefaults: { numberPattern: '{YY}-{NNN}', quotePattern: 'A{YY}-{NNN}', paymentTermDays: 30, footer: '' },
     logo: { type: 'image/png' },
   });
   const bank = company['bank'] as { defaultAccountId: string; accounts: { id: string }[] };

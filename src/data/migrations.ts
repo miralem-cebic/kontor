@@ -1,3 +1,4 @@
+import { DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
 import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateItem, validateNumbering, type Check } from './validate';
 import type { CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile } from './types';
@@ -61,18 +62,49 @@ const invoicesCancelled: Migration = {
   up: (raw) => (raw['kind'] === 'invoice' && !('cancels' in raw) ? { ...raw, cancels: null } : raw),
 };
 
+/** A company profile of version 5 gets the default quote pattern; anything else stays and is left to the validation */
+function withQuotePattern(profile: unknown): unknown {
+  if (!isRecord(profile)) return profile;
+  const defaults = profile['invoiceDefaults'];
+  if (!isRecord(defaults) || 'quotePattern' in defaults) return profile;
+  return { ...profile, invoiceDefaults: { ...defaults, quotePattern: DEFAULT_QUOTE_PATTERN } };
+}
+
+/** Version 6: quotes get numbers. company.json gets the quote pattern of the settings. */
+const quotePattern: Migration = {
+  from: 5,
+  up: (raw) => withQuotePattern(raw) as Record<string, unknown>,
+};
+
+/**
+ * Version 6 for documents: a quote of version 5 is a draft (`issued: null`) and a first version (`revises: null`). The
+ * company in the snapshot of an issued invoice is a company profile and gets the quote pattern like company.json, so
+ * that it is read with the same checks; nothing else of the issued invoice changes, and its PDF is not touched.
+ */
+const quotesIssued: Migration = {
+  from: 5,
+  up: (raw) => {
+    if (raw['kind'] === 'quote') return { issued: null, revises: null, ...raw };
+    const issued = raw['issued'];
+    if (!isRecord(issued) || !isRecord(issued['snapshot'])) return raw;
+    const snapshot = issued['snapshot'];
+    return { ...raw, issued: { ...issued, snapshot: { ...snapshot, company: withQuotePattern(snapshot['company']) } } };
+  },
+};
+
 /**
  * Version 1 is the first format; contacts were added in it as a new kind of file. Items and documents (quotes) were
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
  * format is the same. Version 3 adds invoices as a kind of document; no existing file changes. Version 4 lets
  * invoices be issued and adds the range files (numbering/), a new kind of file. Version 5 adds cancellation invoices.
+ * Version 6 gives quotes numbers: they can be finalized and get new versions, and the settings have a quote pattern.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5)],
 };
 
 export class NewerSchemaError extends Error {

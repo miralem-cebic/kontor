@@ -340,7 +340,13 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
             <h2 id="invoice-head" tabIndex={-1}>
               {t('invoices.sectionInvoice')}
             </h2>
-            {quote && <p className="f-hint">{t('invoices.fromQuote', { date: formatDate(quote.date), subject: quote.subject || t('documents.noSubject') })}</p>}
+            {quote && (
+              <p className="f-hint">
+                {quote.issued
+                  ? t('invoices.fromQuoteNumber', { number: quote.issued.number, date: formatDate(quote.date), subject: quote.subject || t('documents.noSubject') })
+                  : t('invoices.fromQuote', { date: formatDate(quote.date), subject: quote.subject || t('documents.noSubject') })}
+              </p>
+            )}
             {copyOf && <p className="f-hint">{t('invoices.copyOf', { number: copyOf })}</p>}
             <SelectField
               label={t('documents.customer')}
@@ -532,7 +538,7 @@ function IssueAction({ prepare }: { prepare: () => DocumentId | null }) {
     setBusy(true);
     const r = await issueInvoice(id);
     setBusy(false);
-    if (r.ok) showToast(t(r.auditWritten ? 'invoices.issuedToast' : 'invoices.issuedAuditMissing', { number: r.invoice.issued?.number ?? '' }));
+    if (r.ok) showToast(t(r.auditWritten ? 'invoices.issuedToast' : 'invoices.issuedAuditMissing', { number: r.document.issued?.number ?? '' }));
     else {
       setConfirming(false);
       showToast(issueFailureText(r.failure));

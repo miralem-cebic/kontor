@@ -22,6 +22,7 @@ import type {
   MergeableField,
   QuoteFile,
   QuoteMergeableField,
+  RevisedQuote,
 } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
@@ -246,16 +247,17 @@ function putDocument(document: DocumentFile) {
   set((s) => ({ documents: new Map(s.documents).set(document.id, document) }));
 }
 
-/** A new quote from checked content (the form's draft is never stored). Returns its ID. */
-export function addQuote(customerId: ContactId, content: QuoteContent): DocumentId {
-  const quote = makeQuote(customerId, content);
+/** A new quote from checked content (the form's draft is never stored), or a new version of a finalized one. Returns its ID. */
+export function addQuote(customerId: ContactId, content: QuoteContent, revises: RevisedQuote | null = null): DocumentId {
+  const quote = makeQuote(customerId, content, revises);
   putDocument(quote);
   return quote.id;
 }
 
+/** Only a draft can change; a finalized quote stays as it is, like an issued invoice */
 export function updateQuote(id: DocumentId, customerId: ContactId, content: QuoteContent) {
   const current = get().documents.get(id);
-  if (!current || current.deletedAt || current.kind !== 'quote') return;
+  if (!current || current.deletedAt || current.kind !== 'quote' || current.issued) return;
   const next = withChanges<QuoteMergeableField, QuoteFile>(current, { customerId, ...content });
   if (next !== current) putDocument(next);
 }
@@ -275,16 +277,16 @@ export function updateInvoice(id: DocumentId, customerId: ContactId, accountId: 
   if (next !== current) putDocument(next);
 }
 
-/** Soft delete: the file stays, the quote or the invoice draft is hidden. An issued invoice cannot be deleted. */
+/** Soft delete: the file stays, the draft is hidden. An issued invoice or a finalized quote cannot be deleted. */
 export function deleteDocument(id: DocumentId) {
   const current = get().documents.get(id);
-  if (!current || current.deletedAt || (current.kind === 'invoice' && current.issued)) return;
+  if (!current || current.deletedAt || current.issued) return;
   const at = nowIso();
   putDocument(withChanges<'deletedAt', DocumentFile>(current, { deletedAt: at }, at));
 }
 
-/** An invoice as the issue flow wrote it (app/issue.ts): issued, with its number, snapshot and PDF */
-export function putIssuedInvoice(written: InvoiceFile) {
+/** An invoice or a quote as the issue flow wrote it (app/issue.ts): issued, with its number, snapshot and PDF */
+export function putIssuedDocument(written: DocumentFile) {
   if (!written.issued) return;
   putDocument(written);
 }

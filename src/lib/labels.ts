@@ -6,6 +6,7 @@ import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
 import type { IssueProblem, TaxTreatment, TaxTreatmentHint } from '../domain/invoice';
+import type { QuoteProblem } from '../domain/quote';
 import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import { t, tIn, type Lang, type MessageKey } from '../i18n';
@@ -50,6 +51,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   'pattern.unknownToken': 'problem.patternToken',
   'pattern.noCounter': 'problem.patternNoCounter',
   'pattern.multipleCounters': 'problem.patternCounters',
+  'pattern.sameAsInvoice': 'problem.patternSameAsInvoice',
 };
 
 /** The minimum multiplier is the one of the current year, the year the forms check against */
@@ -140,6 +142,15 @@ const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
 
 export const issueProblemText = (p: IssueProblem): string => t(ISSUE_PROBLEM_KEY[p]);
 
+const QUOTE_PROBLEM_KEY: Record<QuoteProblem, MessageKey> = {
+  noCustomer: 'issue.noCustomer',
+  noLines: 'issue.noLines',
+  expired: 'issue.quoteExpired',
+  newerVersion: 'issue.newerVersion',
+};
+
+export const quoteProblemText = (p: QuoteProblem): string => t(QUOTE_PROBLEM_KEY[p]);
+
 export function issueFailureText(f: IssueFailure): string {
   switch (f) {
     case 'notReady':
@@ -154,6 +165,23 @@ export function issueFailureText(f: IssueFailure): string {
     case 'conflict':
     case 'other':
       return t('invoices.issueFailed', { reason: errorText(f) });
+  }
+}
+
+export function finalizeFailureText(f: IssueFailure): string {
+  switch (f) {
+    case 'notReady':
+      return t('quotes.finalizeNotReady');
+    case 'numberTaken':
+      return t('quotes.finalizeNumberTaken');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('quotes.finalizeFailed', { reason: errorText(f) });
   }
 }
 

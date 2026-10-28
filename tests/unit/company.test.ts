@@ -95,6 +95,15 @@ describe('readSection', () => {
     expect(problems(readSection('invoice', sampleDraft({ numberPattern: 'RE/{NNNN}', paymentTermDays: '366' }), YEAR))).toEqual(['numberPattern:pattern.invalidCharacter', 'paymentTermDays:paymentTerm']);
     expect(problems(readSection('invoice', sampleDraft({ paymentTermDays: '-1' }), YEAR))).toEqual(['paymentTermDays:paymentTerm']);
   });
+
+  it('checks the quote number pattern, which must differ from the invoice pattern', () => {
+    expect(emptyDraft().quotePattern).toBe('AN-{YYYY}-{NNNN}');
+    const r = readSection('invoice', sampleDraft({ quotePattern: ' A-{YY}-{NNN} ' }), YEAR);
+    expect(r.ok && r.value.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A-{YY}-{NNN}', paymentTermDays: 14, footer: '' });
+    expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'AN {NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.invalidCharacter']);
+    expect(problems(readSection('invoice', sampleDraft({ quotePattern: '' }), YEAR))).toEqual(['quotePattern:pattern.empty']);
+    expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'RE-{YYYY}-{NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.sameAsInvoice']);
+  });
 });
 
 describe('draft ↔ profile', () => {

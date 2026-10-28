@@ -291,13 +291,43 @@ describe('issued invoices in the folder', () => {
   });
 
   it('an issued file is written once and never replaced', async () => {
-    must(await repo.writeIssuedFile('RE-2026-0001.pdf', new Uint8Array([37, 80, 68, 70])));
-    const again = await repo.writeIssuedFile('RE-2026-0001.pdf', new Uint8Array([1, 2, 3]));
+    must(await repo.writeIssuedFile('invoice', 'RE-2026-0001.pdf', new Uint8Array([37, 80, 68, 70])));
+    const again = await repo.writeIssuedFile('invoice', 'RE-2026-0001.pdf', new Uint8Array([1, 2, 3]));
     expect(!again.ok && again.error.kind).toBe('conflict');
-    expect([...must(await repo.readIssuedFile('RE-2026-0001.pdf'))]).toEqual([37, 80, 68, 70]);
-    expect(must(await repo.listIssuedFiles())).toEqual(['RE-2026-0001.pdf']);
-    expect((await repo.writeIssuedFile('../company.json', new Uint8Array([1]))).ok).toBe(false);
-    expect((await repo.readIssuedFile('../company.json')).ok).toBe(false);
+    expect([...must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'))]).toEqual([37, 80, 68, 70]);
+    expect(must(await repo.listIssuedFiles('invoice'))).toEqual(['RE-2026-0001.pdf']);
+    expect((await repo.writeIssuedFile('invoice', '../company.json', new Uint8Array([1]))).ok).toBe(false);
+    expect((await repo.readIssuedFile('invoice', '../company.json')).ok).toBe(false);
+  });
+
+  it('the PDFs of finalized quotes are kept in documents/quotes/, apart from the invoices', async () => {
+    must(await repo.writeIssuedFile('quote', 'AN-2026-0001.pdf', new Uint8Array([37, 80, 68, 70])));
+    // the same name in the other range is another file: the numbers of the two ranges never block each other
+    must(await repo.writeIssuedFile('invoice', 'AN-2026-0001.pdf', new Uint8Array([1])));
+    const documents = await root.getDirectoryHandle('documents');
+    expect([...must(await repo.readIssuedFile('quote', 'AN-2026-0001.pdf'))]).toEqual([37, 80, 68, 70]);
+    expect(await text(await documents.getDirectoryHandle('quotes'), 'AN-2026-0001.pdf')).toBe('%PDF');
+    expect(must(await repo.listIssuedFiles('quote'))).toEqual(['AN-2026-0001.pdf']);
+    const again = await repo.writeIssuedFile('quote', 'AN-2026-0001.pdf', new Uint8Array([1, 2, 3]));
+    expect(!again.ok && again.error.kind).toBe('conflict');
+    expect((await repo.writeIssuedFile('quote', '../company.json', new Uint8Array([1]))).ok).toBe(false);
+  });
+
+  it('a draft of a quote saved on another device never overwrites the finalized quote', async () => {
+    const quote = makeQuote(customer, sampleQuote());
+    must(await repo.saveDocument(quote));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadDocuments()).documents;
+    must(await repo.saveDocument({ ...quote, issued: sampleIssued('AN-2026-0001') }));
+    const dir = await root.getDirectoryHandle('documents');
+    const before = await text(dir, `${quote.id}.json`);
+    const edited = { ...theirs!, subject: 'Geändert', fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, subject: nowIso() } } as typeof quote;
+    const written = must(await other.saveDocument(edited));
+    expect(written).toMatchObject({ subject: 'Website-Relaunch', issued: { number: 'AN-2026-0001' } });
+    expect(await text(dir, `${quote.id}.json`)).toBe(before);
+    // finalized with another number elsewhere: the save stops
+    const r = await new FsRepository(root.asHandle()).saveDocument({ ...quote, issued: sampleIssued('AN-2026-0002') });
+    expect(!r.ok && r.error.kind).toBe('conflict');
   });
 
   it('the range file is read back after it is written', async () => {

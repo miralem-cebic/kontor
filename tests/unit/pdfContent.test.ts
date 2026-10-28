@@ -5,7 +5,7 @@ import type { BankAccount } from '../../src/data/types';
 import { documentContent as contentOf, pdfFileName, recipientLines, type DocumentContent, type PdfSource } from '../../src/pdf/content';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleQuote } from './fixtures';
 
-const company = sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', paymentTermDays: 14, footer: 'Amtsgericht Köln' } });
+const company = sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: 'Amtsgericht Köln' } });
 const customer = makeContact(sampleContact());
 const account = company.bank.accounts[0] as BankAccount;
 const inAustria = makeContact(sampleContact({ nameLine2: '', contactPerson: '', address: { street: 'Ring 1', postalCode: '1010', city: 'Wien', country: 'AT' }, vatId: 'ATU12345678' }));
@@ -136,6 +136,24 @@ describe('the content of a quote', () => {
     expect(c.totals).toEqual([{ label: 'Gesamtbetrag', value: '1.362,50 €', grand: true }]);
     expect(c.notes).toEqual(['Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', 'Dieses Angebot ist gültig bis zum 21.11.2026.']);
     expect(c.footer.columns[2]).toEqual(['Steuernummer 12/345/67890']);
+  });
+
+  it('a finalized quote has its number and no draft marks', () => {
+    const quote = makeQuote(customer.id, sampleQuote());
+    const c = documentContent({ company, document: quote, customer, account, lang: 'de', number: 'AN-2026-0001' });
+    expect(c.watermark).toBeNull();
+    expect(c.title).toBe('Angebot');
+    expect(c.info[0]).toEqual({ label: 'Angebotsnummer', value: 'AN-2026-0001' });
+    expect(c.runningHead).toBe('Angebot · Kunde GmbH');
+    expect(c.meta).toMatchObject({ title: 'Angebot – AN-2026-0001 – Kunde GmbH – 22.10.2026', fileName: 'Angebot_AN-2026-0001_Kunde-GmbH.pdf' });
+    expect(documentContent({ company, document: quote, customer, account, lang: 'en', number: 'AN-2026-0001' }).title).toBe('Quote');
+  });
+
+  it('a new version names the quote it replaces', () => {
+    const version = makeQuote(customer.id, sampleQuote(), { id: newDocumentId(), number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 });
+    const c = documentContent({ company, document: version, customer, account, lang: 'de', number: 'AN-2026-0001-2' });
+    expect(c.info[0]).toEqual({ label: 'Angebotsnummer', value: 'AN-2026-0001-2' });
+    expect(c.notes).toEqual(['Dieses Angebot ersetzt unser Angebot AN-2026-0001 vom 22.10.2026.', 'Dieses Angebot ist gültig bis zum 21.11.2026.']);
   });
 });
 

@@ -86,7 +86,7 @@ test('the catalogue: create with checks, search, edit, delete, reload and Englis
   expect(files).toHaveLength(2);
   expect(files.find((f) => f['name'] === 'Buchsatz')).toMatchObject({ deletedAt: expect.any(String), unit: 'LS', netPrice: 125000, vatRate: 700 });
   expect(files.find((f) => f['name'] === 'Webdesign')).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
     number: 'L-100',
     description: 'Gestaltung und Umsetzung\nnach Aufwand',
     unit: 'HUR',

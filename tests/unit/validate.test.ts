@@ -50,8 +50,11 @@ describe('company.json validation', () => {
     ['bank', banking([bankAccount({ deletedAt: '2026-10-21T10:00:00.000Z' })])],
     ['bank', banking([bankAccount(), paypal({ id: 'a1' })])],
     ['bank', banking(Array.from({ length: 51 }, (_, i) => bankAccount({ id: `a${i + 1}` })))],
-    ['invoiceDefaults', { numberPattern: '../{NNNN}', paymentTermDays: 14, footer: '' }],
-    ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', paymentTermDays: 14.5, footer: '' }],
+    ['invoiceDefaults', { numberPattern: '../{NNNN}', quotePattern: 'AN-{NNNN}', paymentTermDays: 14, footer: '' }],
+    ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', quotePattern: 'AN-{NNNN}', paymentTermDays: 14.5, footer: '' }],
+    ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', quotePattern: '../{NNNN}', paymentTermDays: 14, footer: '' }],
+    // a file of the current version has a quote pattern
+    ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', paymentTermDays: 14, footer: '' }],
     ['fieldUpdatedAt', { name: 'not a date' }],
     ['fieldUpdatedAt', []],
   ])('rejects %s = %j', (field, value) => {
@@ -177,6 +180,14 @@ describe('document file validation', () => {
     ['lines', {}],
     ['lines', Array.from({ length: 201 }, () => sampleLine())],
     ['fieldUpdatedAt', { lines: 'now' }],
+    // a quote of the current version is a draft (null) or finalized, and a first version (null) or a later one
+    ['issued', undefined],
+    ['issued', 'AN-2026-0001'],
+    ['revises', undefined],
+    ['revises', { id: '__proto__', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 }],
+    ['revises', { id: 'q1', number: '../AN', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 }],
+    ['revises', { id: 'q1', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 1 }],
+    ['revises', { id: 'q1', number: 'AN-2026-0001', firstNumber: 'AN-2026-0001', version: 2 }],
   ])('rejects %s = %j', (field, value) => {
     expect(() => readDocument(quoteFile({ [field]: value }))).toThrow(InvalidFileError);
   });
@@ -276,6 +287,37 @@ describe('issued invoice validation', () => {
   });
 });
 
+describe('finalized quote validation', () => {
+  const finalizedFile = (issued: Record<string, unknown> = {}) =>
+    ({
+      ...JSON.parse(JSON.stringify(makeQuote(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), sampleQuote()))),
+      issued: { ...JSON.parse(JSON.stringify(sampleIssued('AN-2026-0001'))), ...issued },
+    }) as Record<string, unknown>;
+  const readDocument = (raw: unknown) => migrate('document', raw);
+
+  it('accepts a quote finalized by the app', () => {
+    const raw = finalizedFile();
+    expect(readDocument(raw)).toEqual(raw);
+  });
+
+  it('a version has the first number with its version as a suffix, as a draft and once finalized', () => {
+    const revises = { id: 'q1', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 };
+    const draft = { ...finalizedFile(), issued: null, revises };
+    expect(readDocument(draft)).toEqual(draft);
+    const finalized = { ...finalizedFile({ number: 'AN-2026-0001-2', pdf: { file: 'AN-2026-0001-2.pdf', sha256: 'a'.repeat(64) } }), revises };
+    expect(readDocument(finalized)).toEqual(finalized);
+    expect(() => readDocument({ ...finalizedFile(), revises })).toThrow(InvalidFileError);
+  });
+
+  it.each([
+    ['number', 'AN 2026 1'],
+    ['pdf', { file: '../company.json', sha256: 'a'.repeat(64) }],
+    ['pdf', { file: 'AN-2026-0002.pdf', sha256: 'a'.repeat(64) }],
+  ])('rejects issued.%s = %j', (field, value) => {
+    expect(() => readDocument(finalizedFile({ [field]: value }))).toThrow(InvalidFileError);
+  });
+});
+
 describe('cancellation invoice validation', () => {
   const original = () => ({
     ...makeInvoice(brandId<'ContactId'>('0f8fad5b-d9cb-469f-a165-70867728950e'), brandId<'AccountId'>('account-1'), sampleInvoice(), null),
@@ -309,12 +351,14 @@ describe('range file validation', () => {
     ...over,
   });
 
-  it('accepts a range file', () => {
+  it('accepts a range file of invoices and one of quotes', () => {
     expect(migrate('numbering', file())).toEqual(file());
+    const quotes = file({ range: 'quote', reservations: [] });
+    expect(migrate('numbering', quotes)).toEqual(quotes);
   });
 
   it.each([
-    ['range', 'quote'],
+    ['range', 'offer'],
     ['counters', [{ key: '2026', last: 1 }, { key: '2026', last: 2 }]],
     ['counters', [{ key: '__proto__', last: 1 }]],
     ['counters', [{ key: '2026', last: -1 }]],

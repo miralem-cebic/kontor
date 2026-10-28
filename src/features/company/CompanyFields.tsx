@@ -144,11 +144,17 @@ export function BankFields({ draft, set, errors }: FieldsProps) {
   );
 }
 
+/** The first number of a pattern in the current year, or null while the pattern cannot be used */
+function firstNumber(pattern: string): string | null {
+  const now = new Date();
+  const p = pattern.trim();
+  return patternProblem(p) === null ? formatNumber(p, { year: now.getFullYear(), month: now.getMonth() + 1, counter: 1 }) : null;
+}
+
 export function InvoiceFields({ draft, set, errors }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
-  const now = new Date();
-  const pattern = draft.numberPattern.trim();
-  const preview = patternProblem(pattern) === null ? formatNumber(pattern, { year: now.getFullYear(), month: now.getMonth() + 1, counter: 1 }) : null;
+  const preview = firstNumber(draft.numberPattern);
+  const quotePreview = firstNumber(draft.quotePattern);
   return (
     <>
       <TextField
@@ -157,6 +163,15 @@ export function InvoiceFields({ draft, set, errors }: FieldsProps) {
         value={draft.numberPattern}
         onChange={(numberPattern) => set({ numberPattern })}
         error={e('numberPattern')}
+        required
+        maxLength={60}
+      />
+      <TextField
+        label={t('invoice.quotePattern')}
+        hint={quotePreview ? `${t('invoice.quotePatternPreview', { number: quotePreview })} ${t('invoice.quotePatternHint')}` : t('invoice.quotePatternHint')}
+        value={draft.quotePattern}
+        onChange={(quotePattern) => set({ quotePattern })}
+        error={e('quotePattern')}
         required
         maxLength={60}
       />

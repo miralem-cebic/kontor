@@ -35,7 +35,9 @@ export type FieldProblem =
   | 'validUntil'
   | 'periodEnd'
   | `iban.${IbanProblem}`
-  | `pattern.${PatternProblem}`;
+  | `pattern.${PatternProblem}`
+  /** The quote pattern is the invoice pattern: a quote and an invoice would get the same numbers */
+  | 'pattern.sameAsInvoice';
 
 export interface FieldError<F extends string> {
   field: F;

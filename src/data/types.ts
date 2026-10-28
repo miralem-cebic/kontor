@@ -118,15 +118,38 @@ const QUOTE_MERGEABLE: Record<QuoteMergeableField, true> = {
 export const QUOTE_MERGEABLE_FIELDS = keysOf(QUOTE_MERGEABLE);
 export type QuoteMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
 
-/** documents/<id>.json with `kind: 'quote'`: a quote, a draft for now */
+/**
+ * The finalized quote a new version replaces (F22), with its number and date, so that the version says by itself what
+ * it replaces. A version is numbered with the first number of the quote and its version: versionNumber(firstNumber,
+ * version), for example "AN-2026-0012-2".
+ */
+export interface RevisedQuote {
+  id: DocumentId;
+  number: string;
+  /** The date of the replaced quote */
+  date: string;
+  /** The number of the first version of the quote */
+  firstNumber: string;
+  /** 2 for the first change */
+  version: number;
+}
+
+/** documents/<id>.json with `kind: 'quote'`: a quote, a draft until it is finalized ("Angebot abschließen") */
 export interface QuoteFile extends QuoteContent {
   schemaVersion: number;
   id: DocumentId;
   kind: 'quote';
-  /** The customer; the quote shows the contact's current data until it is issued (later: a snapshot) */
+  /** The customer; the draft shows the contact's current data, a finalized quote its snapshot */
   customerId: ContactId;
+  /**
+   * null for a draft. Finalizing gives the quote its number from the quote range, a snapshot of the master data and
+   * its PDF in documents/quotes/; like an issued invoice it never changes again (ADR 0004). Not a mergeable field.
+   */
+  issued: IssuedInfo | null;
+  /** For a new version: the finalized quote it replaces; null for a first version. Not a mergeable field: it never changes. */
+  revises: RevisedQuote | null;
   createdAt: string;
-  /** Soft delete: a deleted quote stays in its file and is hidden in the app */
+  /** Soft delete: a deleted draft stays in its file and is hidden in the app */
   deletedAt: string | null;
   fieldUpdatedAt: Partial<Record<QuoteMergeableField, string>>;
 }
@@ -191,14 +214,27 @@ export type DocumentFile = QuoteFile | InvoiceFile;
 export const isQuote = (d: DocumentFile): d is QuoteFile => d.kind === 'quote';
 export const isInvoice = (d: DocumentFile): d is InvoiceFile => d.kind === 'invoice';
 
+/** What a new version of a finalized quote replaces: that quote, and the next version of the same first number */
+export const nextVersionOf = (q: QuoteFile & { issued: IssuedInfo }): RevisedQuote => ({
+  id: q.id,
+  number: q.issued.number,
+  date: q.date,
+  firstNumber: q.revises?.firstNumber ?? q.issued.number,
+  version: (q.revises?.version ?? 1) + 1,
+});
+
 /** The cancellation of an invoice, if it has one */
 export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId): InvoiceFile | undefined {
   for (const d of documents) if (d.kind === 'invoice' && d.cancels?.id === id) return d;
   return undefined;
 }
 
-/** The number ranges; only invoices have numbers so far */
-export type NumberRange = 'invoice';
+/**
+ * The number ranges: invoices (with their cancellations) and quotes. Each range has its own counters
+ * (numbering/<range>.json) and its own folder of PDFs, so the numbers of one range never block the other.
+ */
+export type NumberRange = 'invoice' | 'quote';
+export const NUMBER_RANGES: readonly NumberRange[] = ['invoice', 'quote'];
 
 /** A number given to a document, written before its PDF so that a second writer is noticed (ADR 0004) */
 export interface Reservation {
@@ -232,9 +268,13 @@ interface AuditBase {
 
 /**
  * A line of audit/<YYYY-MM>.jsonl: what happened to a document, appended and never changed. `issue`: an invoice was
- * issued; `cancel`: a cancellation invoice was issued, `cancels` names the invoice it cancels.
+ * issued; `cancel`: a cancellation invoice was issued, `cancels` names the invoice it cancels; `issueQuote`: a quote was
+ * finalized.
  */
-export type AuditEntry = (AuditBase & { action: 'issue' }) | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } });
+export type AuditEntry =
+  | (AuditBase & { action: 'issue' })
+  | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } })
+  | (AuditBase & { action: 'issueQuote' });
 
 /** What a backup holds */
 export interface BackupSnapshot {

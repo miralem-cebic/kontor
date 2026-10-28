@@ -133,18 +133,22 @@ describe('copy', () => {
 });
 
 describe('ready to finalize', () => {
-  const facts = { hasCustomer: true, lineCount: 2, validUntil: '2026-11-21' };
+  const facts = { hasCustomer: true, lineCount: 2, validUntil: '2026-11-21', newerVersion: false };
 
   it('a quote with a customer, lines and a validity that has not run out yet', () => {
     expect(quoteProblems(facts, '2026-11-21')).toEqual([]);
   });
 
   it('lists what is missing, in the order of the form', () => {
-    expect(quoteProblems({ hasCustomer: false, lineCount: 0, validUntil: '2026-11-21' }, '2026-10-22')).toEqual(['noCustomer', 'noLines']);
+    expect(quoteProblems({ hasCustomer: false, lineCount: 0, validUntil: '2026-11-21', newerVersion: false }, '2026-10-22')).toEqual(['noCustomer', 'noLines']);
   });
 
   it('a quote that has run out is not sent', () => {
     expect(quoteProblems(facts, '2026-11-22')).toEqual(['expired']);
+  });
+
+  it('a version is not finalized when the quote it replaces has a newer version already', () => {
+    expect(quoteProblems({ ...facts, newerVersion: true }, '2026-11-21')).toEqual(['newerVersion']);
   });
 });
 

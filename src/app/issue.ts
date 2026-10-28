@@ -5,11 +5,13 @@ import { invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } fro
 import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
 import { quoteProblems } from '../domain/quote';
+import { replacedAlready, versionNumber } from '../domain/quoteVersions';
 import { cancellationId, type DocumentId } from '../data/ids';
 import type { Repository, StorageErrorKind } from '../data/repository';
 import { makeCancellation, SCHEMA_VERSION } from '../data/schema';
 import {
   cancellationOf,
+  isQuote,
   type AuditEntry,
   type BankAccount,
   type CompanyFile,
@@ -111,9 +113,37 @@ function patternOf(company: CompanyFile, range: NumberRange): string {
   }
 }
 
+/** A number with the counter behind it and the counter's key */
+interface Slot {
+  number: string;
+  counter: number;
+  key: string;
+}
+
 /**
- * The number of the document: its reservation from an earlier attempt, or the next number of its counter in the range
- * of its kind, reserved and read back. Every number known in the range (issued, reserved or as a file) is taken.
+ * The number a document gets: the next counter of its key in the range of its kind; or, for a new version of a quote,
+ * the first number with the version as a suffix and the counter of the first version, because a version is no new
+ * quote. null when the quote a version replaces is not there as a finalized quote.
+ */
+function slotFor(doc: DocumentFile, ctx: IssueContext, numbering: NumberingFile, issued: readonly IssuedInfo[]): Slot | null {
+  if (doc.kind === 'quote' && doc.revises) {
+    const previous = ctx.documents.get(doc.revises.id);
+    if (previous?.kind !== 'quote' || !previous.issued) return null;
+    return { number: versionNumber(doc.revises.firstNumber, doc.revises.version), counter: previous.issued.counter, key: previous.issued.counterKey };
+  }
+  const pattern = patternOf(ctx.company, doc.kind);
+  const key = counterKey(pattern, doc.date);
+  const counter = nextCounter([
+    ...numbering.counters.filter((c) => c.key === key).map((c) => c.last),
+    ...numbering.reservations.filter((r) => r.counterKey === key).map((r) => r.counter),
+    ...issued.filter((i) => i.counterKey === key).map((i) => i.counter),
+  ]);
+  return { number: numberFor(pattern, doc.date, counter), counter, key };
+}
+
+/**
+ * The number of the document: its reservation from an earlier attempt, or its next number (slotFor), reserved and read
+ * back. Every number known in the range (issued, reserved or as a file) is taken.
  */
 async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true; reservation: Reservation; files: string[] } | Failed> {
   const range: NumberRange = doc.kind;
@@ -125,22 +155,18 @@ async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true
   const own = numbering.reservations.find((r) => r.documentId === doc.id);
   if (own) return { ok: true, reservation: own, files: listed.value };
 
-  const pattern = patternOf(ctx.company, range);
-  const key = counterKey(pattern, doc.date);
   const issued = issuedIn(ctx.documents, range);
-  const counter = nextCounter([
-    ...numbering.counters.filter((c) => c.key === key).map((c) => c.last),
-    ...numbering.reservations.filter((r) => r.counterKey === key).map((r) => r.counter),
-    ...issued.filter((i) => i.counterKey === key).map((i) => i.counter),
-  ]);
-  const number = numberFor(pattern, doc.date, counter);
+  const slot = slotFor(doc, ctx, numbering, issued);
+  if (!slot) return fail('notReady');
+  const { number, counter, key } = slot;
   const taken = new Set([...issued.map((i) => i.number), ...numbering.reservations.map((r) => r.number), ...listed.value.map((f) => f.replace(/\.pdf$/, ''))]);
   if (taken.has(number)) return fail('numberTaken');
 
   const reservation: Reservation = { number, counterKey: key, counter, documentId: doc.id, device: ctx.device, at: ctx.now.toISOString() };
   const next: NumberingFile = {
     ...numbering,
-    counters: [...numbering.counters.filter((c) => c.key !== key), { key, last: counter }],
+    // a version keeps the counter of its first number: the highest counter stays
+    counters: [...numbering.counters.filter((c) => c.key !== key), { key, last: Math.max(counter, ...numbering.counters.filter((c) => c.key === key).map((c) => c.last)) }],
     reservations: [...numbering.reservations, reservation].slice(-KEEP_RESERVATIONS),
   };
   const written = await ctx.repo.writeNumbering(next);
@@ -188,9 +214,9 @@ export async function cancel(id: DocumentId, ctx: IssueContext): Promise<IssueRe
 }
 
 /**
- * Finalizes a saved quote ("Angebot abschließen"): it gets the next number of the quote range, a snapshot of the master
- * data with the default account (the one its footer shows) and its PDF in documents/quotes/, and stays as it is from
- * then on. Calling it again for a finalized quote returns it unchanged.
+ * Finalizes a saved quote ("Angebot abschließen"): it gets the next number of the quote range (a new version: the first
+ * number with its version), a snapshot of the master data with the default account (the one its footer shows) and its
+ * PDF in documents/quotes/, and stays as it is from then on. Calling it again for a finalized quote returns it unchanged.
  */
 export async function issueQuote(id: DocumentId, ctx: IssueContext): Promise<IssueResult<QuoteFile>> {
   const quote = ctx.documents.get(id);
@@ -199,7 +225,8 @@ export async function issueQuote(id: DocumentId, ctx: IssueContext): Promise<Iss
   const { company } = ctx;
   const customer = ctx.contacts.get(quote.customerId);
   const account = company.bank.accounts.find((a) => a.id === company.bank.defaultAccountId);
-  const problems = quoteProblems({ hasCustomer: !!customer, lineCount: quote.lines.length, validUntil: quote.validUntil }, isoDateOf(ctx.now));
+  const newerVersion = replacedAlready([...ctx.documents.values()].filter(isQuote), quote);
+  const problems = quoteProblems({ hasCustomer: !!customer, lineCount: quote.lines.length, validUntil: quote.validUntil, newerVersion }, isoDateOf(ctx.now));
   if (problems.length > 0 || !customer || !account) return fail('notReady');
   return finalize(quote, { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) }, ctx);
 }

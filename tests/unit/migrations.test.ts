@@ -175,7 +175,7 @@ describe('version 5 → 6: quote numbers', () => {
     return { ...raw, invoiceDefaults: withoutQuotePattern(raw['invoiceDefaults']) };
   };
   const quoteV5 = () => {
-    const { issued: _i, ...raw } = asV5(makeQuote(makeContact(sampleContact()).id, sampleQuote()));
+    const { issued: _i, revises: _r, ...raw } = asV5(makeQuote(makeContact(sampleContact()).id, sampleQuote()));
     return raw;
   };
 
@@ -191,9 +191,9 @@ describe('version 5 → 6: quote numbers', () => {
     expect(migrate('company', raw).invoiceDefaults.quotePattern).toBe('A{NNN}');
   });
 
-  it('a quote of version 5 is a draft', () => {
+  it('a quote of version 5 is a draft and the first version of itself', () => {
     const raw = quoteV5();
-    expect(migrate('document', raw)).toEqual({ ...raw, issued: null, schemaVersion: SCHEMA_VERSION });
+    expect(migrate('document', raw)).toEqual({ ...raw, issued: null, revises: null, schemaVersion: SCHEMA_VERSION });
   });
 
   it('the company in the snapshot of an issued invoice gets the quote pattern as well, so that it is read like company.json', () => {
@@ -221,7 +221,7 @@ describe('version 5 → 6: quote numbers', () => {
   });
 
   it('an app that knows only version 5 refuses a file of version 6, so it never edits a finalized quote', () => {
-    expect(() => upgrade('document', { ...quoteV5(), issued: null, schemaVersion: 6 }, MIGRATIONS.document, 5)).toThrow(NewerSchemaError);
+    expect(() => upgrade('document', { ...quoteV5(), issued: null, revises: null, schemaVersion: 6 }, MIGRATIONS.document, 5)).toThrow(NewerSchemaError);
   });
 });
 

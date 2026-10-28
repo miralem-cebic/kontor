@@ -6,7 +6,7 @@ import { MemDir } from '../../src/data/fs/memoryFs';
 import { cancellationId, type DocumentId } from '../../src/data/ids';
 import { err, must } from '../../src/data/result';
 import { makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
-import type { CompanyFile, ContactFile, DocumentFile, InvoiceFile, QuoteFile } from '../../src/data/types';
+import { nextVersionOf, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type QuoteFile } from '../../src/data/types';
 import { invoiceTotals } from '../../src/domain/invoice';
 import { sha256Hex } from '../../src/lib/sha256';
 import { sampleCompany, sampleContact, sampleInvoice, sampleQuote } from './fixtures';
@@ -325,5 +325,44 @@ describe('issueQuote', () => {
     expect(done.issued?.number).toBe('AN-2026-0001');
     expect(must(await repo.listIssuedFiles('quote'))).toEqual(['AN-2026-0001.pdf']);
     expect((await finalizeOk((await quote()).id)).issued?.number).toBe('AN-2026-0002');
+  });
+
+  /** A saved new version of a finalized quote, as the form saves it */
+  async function version(of: QuoteFile, over: Parameters<typeof sampleQuote>[0] = {}): Promise<QuoteFile> {
+    if (!of.issued) throw new Error('only a finalized quote gets a new version');
+    const v = makeQuote(customer.id, sampleQuote(over), nextVersionOf({ ...of, issued: of.issued }));
+    must(await repo.saveDocument(v));
+    documents.set(v.id, v);
+    return v;
+  }
+
+  it('a new version gets the first number with its version, keeps the counter of the first, and names what it replaces', async () => {
+    const first = await finalizeOk((await quote()).id);
+    const other = await finalizeOk((await quote()).id);
+    const draft2 = await version(first, { subject: 'Website-Relaunch, geändert' });
+    expect(draft2.revises).toEqual({ id: first.id, number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 });
+    const v2 = await finalizeOk(draft2.id);
+    expect(v2.issued).toMatchObject({ number: 'AN-2026-0001-2', counter: 1, counterKey: '2026', pdf: { file: 'AN-2026-0001-2.pdf' } });
+    const bytes = must(await repo.readIssuedFile('quote', 'AN-2026-0001-2.pdf'));
+    expect((await PDFDocument.load(bytes, { updateMetadata: false })).getTitle()).toBe('Angebot – AN-2026-0001-2 – Kunde GmbH – 22.10.2026');
+
+    // the version of a version
+    const v3 = await finalizeOk((await version(v2)).id);
+    expect(v3.revises).toEqual({ id: v2.id, number: 'AN-2026-0001-2', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 3 });
+    expect(v3.issued?.number).toBe('AN-2026-0001-3');
+
+    // versions do not move the counter back; a new quote goes on after the last one
+    expect(other.issued?.number).toBe('AN-2026-0002');
+    expect(must(await repo.readNumbering('quote'))?.counters).toEqual([{ key: '2026', last: 2 }]);
+    expect((await finalizeOk((await quote()).id)).issued?.number).toBe('AN-2026-0003');
+  });
+
+  it('refuses a version when the quote it replaces has another finalized version already', async () => {
+    const first = await finalizeOk((await quote()).id);
+    const a = await version(first);
+    const b = await version(first);
+    expect((await finalizeOk(a.id)).issued?.number).toBe('AN-2026-0001-2');
+    expect(await issueQuote(b.id, ctx())).toEqual({ ok: false, failure: 'notReady' });
+    expect(must(await repo.listIssuedFiles('quote'))).toEqual(['AN-2026-0001.pdf', 'AN-2026-0001-2.pdf']);
   });
 });

@@ -1,7 +1,8 @@
 // Quotes (Angebote): to whom, when, how long they are valid, texts around the lines, and the lines. A quote is a
 // draft until it is finalized ("Angebot abschließen"): that gives it its number, writes its PDF and makes it read-only,
-// like issuing an invoice (ADR 0004). The quote form edits a draft of plain strings; `readQuote` checks it, and
-// `quoteProblems` lists what still keeps a saved quote from being finalized.
+// like issuing an invoice (ADR 0004); a change after that is a new version (quoteVersions.ts). The quote form edits a
+// draft of plain strings; `readQuote` checks it, and `quoteProblems` lists what still keeps a saved quote from being
+// finalized.
 
 import type { Result } from '../data/result';
 import { Checker, type FieldError } from './check';
@@ -95,14 +96,17 @@ export function readQuote(d: QuoteDraft, locale: MoneyLocale, smallBusiness: boo
  * - `noCustomer`: no customer is chosen, or the contact is gone.
  * - `noLines`: a quote offers at least one line.
  * - `expired`: the last valid day has passed; a quote is not sent when it has run out already.
+ * - `newerVersion`: the quote is a new version, but the quote it replaces has another finalized version already.
  * A quote is no invoice (§ 14 UStG), so it needs neither the customer's address nor a gapless number.
  */
-export type QuoteProblem = 'noCustomer' | 'noLines' | 'expired';
+export type QuoteProblem = 'noCustomer' | 'noLines' | 'expired' | 'newerVersion';
 
 export interface QuoteFacts {
   hasCustomer: boolean;
   lineCount: number;
   validUntil: string;
+  /** The quote this version replaces has another finalized version already (quoteVersions.ts) */
+  newerVersion: boolean;
 }
 
 /** The problems in the order of the form; none means the quote can be finalized. `today` is an ISO date. */
@@ -111,6 +115,7 @@ export function quoteProblems(f: QuoteFacts, today: string): QuoteProblem[] {
   if (!f.hasCustomer) problems.push('noCustomer');
   if (f.lineCount === 0) problems.push('noLines');
   if (f.validUntil < today) problems.push('expired');
+  if (f.newerVersion) problems.push('newerVersion');
   return problems;
 }
 

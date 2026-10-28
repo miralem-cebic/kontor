@@ -77,14 +77,14 @@ const quotePattern: Migration = {
 };
 
 /**
- * Version 6 for documents: a quote of version 5 is a draft (`issued: null`). The company in the snapshot of an issued
- * invoice is a company profile and gets the quote pattern like company.json, so that it is read with the same checks;
- * nothing else of the issued invoice changes, and its PDF is not touched.
+ * Version 6 for documents: a quote of version 5 is a draft (`issued: null`) and a first version (`revises: null`). The
+ * company in the snapshot of an issued invoice is a company profile and gets the quote pattern like company.json, so
+ * that it is read with the same checks; nothing else of the issued invoice changes, and its PDF is not touched.
  */
 const quotesIssued: Migration = {
   from: 5,
   up: (raw) => {
-    if (raw['kind'] === 'quote') return 'issued' in raw ? raw : { ...raw, issued: null };
+    if (raw['kind'] === 'quote') return { issued: null, revises: null, ...raw };
     const issued = raw['issued'];
     if (!isRecord(issued) || !isRecord(issued['snapshot'])) return raw;
     const snapshot = issued['snapshot'];
@@ -97,7 +97,7 @@ const quotesIssued: Migration = {
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
  * format is the same. Version 3 adds invoices as a kind of document; no existing file changes. Version 4 lets
  * invoices be issued and adds the range files (numbering/), a new kind of file. Version 5 adds cancellation invoices.
- * Version 6 gives quotes numbers: they can be finalized, and the settings have a quote pattern.
+ * Version 6 gives quotes numbers: they can be finalized and get new versions, and the settings have a quote pattern.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
   company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern],

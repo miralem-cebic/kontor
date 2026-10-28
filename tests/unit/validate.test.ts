@@ -180,9 +180,14 @@ describe('document file validation', () => {
     ['lines', {}],
     ['lines', Array.from({ length: 201 }, () => sampleLine())],
     ['fieldUpdatedAt', { lines: 'now' }],
-    // a quote of the current version is a draft (null) or finalized
+    // a quote of the current version is a draft (null) or finalized, and a first version (null) or a later one
     ['issued', undefined],
     ['issued', 'AN-2026-0001'],
+    ['revises', undefined],
+    ['revises', { id: '__proto__', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 }],
+    ['revises', { id: 'q1', number: '../AN', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 }],
+    ['revises', { id: 'q1', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 1 }],
+    ['revises', { id: 'q1', number: 'AN-2026-0001', firstNumber: 'AN-2026-0001', version: 2 }],
   ])('rejects %s = %j', (field, value) => {
     expect(() => readDocument(quoteFile({ [field]: value }))).toThrow(InvalidFileError);
   });
@@ -293,6 +298,15 @@ describe('finalized quote validation', () => {
   it('accepts a quote finalized by the app', () => {
     const raw = finalizedFile();
     expect(readDocument(raw)).toEqual(raw);
+  });
+
+  it('a version has the first number with its version as a suffix, as a draft and once finalized', () => {
+    const revises = { id: 'q1', number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 };
+    const draft = { ...finalizedFile(), issued: null, revises };
+    expect(readDocument(draft)).toEqual(draft);
+    const finalized = { ...finalizedFile({ number: 'AN-2026-0001-2', pdf: { file: 'AN-2026-0001-2.pdf', sha256: 'a'.repeat(64) } }), revises };
+    expect(readDocument(finalized)).toEqual(finalized);
+    expect(() => readDocument({ ...finalizedFile(), revises })).toThrow(InvalidFileError);
   });
 
   it.each([

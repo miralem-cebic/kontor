@@ -29,6 +29,7 @@ import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, ty
 import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { QUOTE_LIMITS } from '../domain/quote';
+import { versionNumber } from '../domain/quoteVersions';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { LOWEST_MIN_MULTIPLIER_PERCENT } from '../domain/tax/tradeTax';
 import { UNITS, type UnitCode } from '../domain/units';
@@ -53,6 +54,7 @@ import {
   type NumberingFile,
   type QuoteFile,
   type Reservation,
+  type RevisedQuote,
 } from './types';
 
 export class InvalidRecordError extends Error {
@@ -379,7 +381,9 @@ const issued: Check<IssuedInfo> = (v, path) => {
   return info.pdf.file === `${info.number}.pdf` ? info : fail(`${path}.pdf.file`, 'does not match the number');
 };
 
-const quoteFile = objectOf<QuoteFile>({
+const revisedQuote = objectOf<RevisedQuote>({ id: documentId, number: documentNumber, date: isoDate, firstNumber: documentNumber, version: int(2, 999) });
+
+const quoteFields = objectOf<QuoteFile>({
   schemaVersion: num,
   id: documentId,
   kind: exactly('quote'),
@@ -391,10 +395,17 @@ const quoteFile = objectOf<QuoteFile>({
   closingText: text(QUOTE_LIMITS.text),
   lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
   issued: nullable(issued),
+  revises: nullable(revisedQuote),
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(QUOTE_MERGEABLE_FIELDS),
 });
+
+/** A finalized version has the first number of the quote with its version as a suffix */
+const quoteFile: Check<QuoteFile> = (v, path) => {
+  const q = quoteFields(v, path);
+  return q.revises && q.issued && q.issued.number !== versionNumber(q.revises.firstNumber, q.revises.version) ? fail(`${path}.issued.number`, 'does not match the version') : q;
+};
 
 const cancelledInvoice = objectOf<CancelledInvoice>({ id: documentId, number: documentNumber, date: isoDate });
 

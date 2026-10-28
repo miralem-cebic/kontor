@@ -74,7 +74,7 @@ export interface DocumentContent {
     rows: TableRow[];
   };
   totals: TotalRow[];
-  /** Paragraphs after the totals: the note on VAT, payment, the cancelled invoice or validity */
+  /** Paragraphs after the totals: the note on VAT, payment, the cancelled invoice, the replaced quote or validity */
   notes: string[];
   closing: string;
   footer: { text: string; columns: string[][] };
@@ -196,7 +196,10 @@ export function documentContent(src: PdfSource): DocumentContent {
   else if (isInvoice) {
     const payment = paymentNote(doc, totals.gross, account, number, lang);
     if (payment) notes.push(payment);
-  } else notes.push(tIn(lang, 'pdf.quoteValid', { date: formatDate(doc.validUntil, lang) }));
+  } else {
+    if (doc.revises) notes.push(tIn(lang, 'pdf.quoteReplaces', { number: doc.revises.number, date: formatDate(doc.revises.date, lang) }));
+    notes.push(tIn(lang, 'pdf.quoteValid', { date: formatDate(doc.validUntil, lang) }));
+  }
 
   return {
     lang,

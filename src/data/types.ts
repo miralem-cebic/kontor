@@ -118,6 +118,22 @@ const QUOTE_MERGEABLE: Record<QuoteMergeableField, true> = {
 export const QUOTE_MERGEABLE_FIELDS = keysOf(QUOTE_MERGEABLE);
 export type QuoteMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
 
+/**
+ * The finalized quote a new version replaces (F22), with its number and date, so that the version says by itself what
+ * it replaces. A version is numbered with the first number of the quote and its version: versionNumber(firstNumber,
+ * version), for example "AN-2026-0012-2".
+ */
+export interface RevisedQuote {
+  id: DocumentId;
+  number: string;
+  /** The date of the replaced quote */
+  date: string;
+  /** The number of the first version of the quote */
+  firstNumber: string;
+  /** 2 for the first change */
+  version: number;
+}
+
 /** documents/<id>.json with `kind: 'quote'`: a quote, a draft until it is finalized ("Angebot abschließen") */
 export interface QuoteFile extends QuoteContent {
   schemaVersion: number;
@@ -130,6 +146,8 @@ export interface QuoteFile extends QuoteContent {
    * its PDF in documents/quotes/; like an issued invoice it never changes again (ADR 0004). Not a mergeable field.
    */
   issued: IssuedInfo | null;
+  /** For a new version: the finalized quote it replaces; null for a first version. Not a mergeable field: it never changes. */
+  revises: RevisedQuote | null;
   createdAt: string;
   /** Soft delete: a deleted draft stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -195,6 +213,15 @@ export type DocumentFile = QuoteFile | InvoiceFile;
 
 export const isQuote = (d: DocumentFile): d is QuoteFile => d.kind === 'quote';
 export const isInvoice = (d: DocumentFile): d is InvoiceFile => d.kind === 'invoice';
+
+/** What a new version of a finalized quote replaces: that quote, and the next version of the same first number */
+export const nextVersionOf = (q: QuoteFile & { issued: IssuedInfo }): RevisedQuote => ({
+  id: q.id,
+  number: q.issued.number,
+  date: q.date,
+  firstNumber: q.revises?.firstNumber ?? q.issued.number,
+  version: (q.revises?.version ?? 1) + 1,
+});
 
 /** The cancellation of an invoice, if it has one */
 export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId): InvoiceFile | undefined {

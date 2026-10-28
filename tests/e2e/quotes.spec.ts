@@ -326,3 +326,85 @@ test('finalizing a quote: the next quote number, the final PDF in the folder, no
   await expect(rows.filter({ hasText: 'Entwurf' })).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test('quote versions: a change of a finalized quote is a new version with a suffix, and the history shows what changed', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+  await addContact(page, 'Kunde GmbH', { customer: true, supplier: false });
+  const year = isoToday().slice(0, 4);
+  const today = german(isoToday());
+  const [first, second] = [`AN-${year}-0001`, `AN-${year}-0001-2`];
+  const rows = page.getByRole('table').getByRole('row');
+  const finalize = async () => {
+    await page.getByRole('button', { name: 'Angebot abschließen' }).click();
+    await page.getByRole('group', { name: /^Angebot jetzt abschließen\?/ }).getByRole('button', { name: 'Jetzt abschließen' }).click();
+  };
+
+  await nav(page, 'Angebote');
+  await page.getByRole('button', { name: 'Neues Angebot' }).click();
+  await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
+  await page.getByLabel('Betreff').fill('Website-Relaunch');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 1).getByLabel('Bezeichnung').fill('Konzept');
+  await line(page, 1).getByLabel('Einzelpreis netto €').fill('1000');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 2).getByLabel('Bezeichnung').fill('Umsetzung');
+  await line(page, 2).getByLabel('Menge').fill('10');
+  await line(page, 2).getByLabel('Einzelpreis netto €').fill('85');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await rows.nth(1).getByRole('button', { name: 'Kunde GmbH' }).click();
+  await finalize();
+  await expect(page.getByRole('heading', { name: `Angebot ${first}` })).toBeVisible();
+  const history = page.getByRole('region', { name: 'Versionen' });
+  await expect(history).toContainText('Noch keine weitere Version.');
+
+  // a change is a new version: a draft with everything from the quote, which gets the number with a suffix
+  await page.getByRole('button', { name: 'Neue Version' }).click();
+  await expect(page.getByRole('heading', { name: `Version 2 von ${first}` })).toBeVisible();
+  await expect(page.getByText(`Version 2 des Angebots ${first}: ersetzt ${first} vom ${today} und bekommt beim Abschließen die Nummer ${second}.`)).toBeVisible();
+  await expect(page.getByLabel('Betreff')).toHaveValue('Website-Relaunch');
+  await page.getByRole('button', { name: 'Position 1 entfernen' }).click();
+  await line(page, 1).getByLabel('Menge').fill('12');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 2).getByLabel('Bezeichnung').fill('Hosting');
+  await line(page, 2).getByLabel('Einzelpreis netto €').fill('120');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(rows.filter({ hasText: 'Version 2' })).toContainText('Entwurf');
+
+  // the finalized quote offers no second version while one exists
+  await rows.filter({ hasText: first }).getByRole('button', { name: 'Kunde GmbH' }).click();
+  await expect(page.getByRole('button', { name: 'Neue Version' })).toHaveCount(0);
+  await expect(page.locator('dl.facts')).toContainText('Ersetzt durchEntwurf der Version 2');
+  await page.locator('dl.facts').getByRole('button', { name: 'Entwurf der Version 2' }).click();
+  await finalize();
+  await expect(page.getByRole('status').filter({ hasText: `Angebot ${second} abgeschlossen` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Angebot ${second}` })).toBeVisible();
+  await expect(page.locator('dl.facts')).toContainText(`Ersetzt das Angebot${first} vom ${today}`);
+
+  // the history: the versions and what changed, and how often the customer's quotes were changed
+  await expect(history).toContainText('Entfernt: Konzept');
+  await expect(history).toContainText('Umsetzung: Menge 10 → 12');
+  await expect(history).toContainText(/Neu: Hosting \(1 Stück × 120,00\s€\)/);
+  await expect(history).toContainText(/Gesamtbetrag 2\.201,50\s€ → 1\.356,60\s€/);
+  await expect(history).toContainText('Bei Kunde GmbH: abgeschlossene Angebote: 1 · davon geändert: 1 · Änderungen insgesamt: 1');
+
+  // the PDF names the quote it replaces; the files are in the folder
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF herunterladen' }).click();
+  expect((await downloading).suggestedFilename()).toBe(`Angebot_${second}_Kunde-GmbH.pdf`);
+  const files = await readFolders(page);
+  expect(Object.keys(files)).toEqual(expect.arrayContaining([`Ordner-1/documents/quotes/${first}.pdf`, `Ordner-1/documents/quotes/${second}.pdf`]));
+  const version = (await readDocuments(page)).find((d) => d['revises'] !== null);
+  expect(version).toMatchObject({ revises: { number: first, firstNumber: first, version: 2 }, issued: { number: second } });
+
+  // the replaced quote stays as it was and is marked; the list counts the changes
+  await history.getByRole('button', { name: `${first} vom ${today}` }).click();
+  await expect(page.getByRole('heading', { name: `Angebot ${first}` })).toBeVisible();
+  await expect(page.getByText('Ersetzt', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Neue Version' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Zurück zur Liste' }).first().click();
+  await expect(rows.filter({ hasText: 'Ersetzt' })).toHaveCount(1);
+  await expect(page.getByText('Abgeschlossene Angebote: 1 · davon geändert: 1 · Änderungen insgesamt: 1')).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -146,6 +146,7 @@ const QUOTE_PROBLEM_KEY: Record<QuoteProblem, MessageKey> = {
   noCustomer: 'issue.noCustomer',
   noLines: 'issue.noLines',
   expired: 'issue.quoteExpired',
+  newerVersion: 'issue.newerVersion',
 };
 
 export const quoteProblemText = (p: QuoteProblem): string => t(QUOTE_PROBLEM_KEY[p]);

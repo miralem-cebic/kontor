@@ -22,6 +22,7 @@ import type {
   MergeableField,
   QuoteFile,
   QuoteMergeableField,
+  RevisedQuote,
 } from '../data/types';
 
 // Central app state. Every change goes through the actions below: they change the state immediately,
@@ -246,9 +247,9 @@ function putDocument(document: DocumentFile) {
   set((s) => ({ documents: new Map(s.documents).set(document.id, document) }));
 }
 
-/** A new quote from checked content (the form's draft is never stored). Returns its ID. */
-export function addQuote(customerId: ContactId, content: QuoteContent): DocumentId {
-  const quote = makeQuote(customerId, content);
+/** A new quote from checked content (the form's draft is never stored), or a new version of a finalized one. Returns its ID. */
+export function addQuote(customerId: ContactId, content: QuoteContent, revises: RevisedQuote | null = null): DocumentId {
+  const quote = makeQuote(customerId, content, revises);
   putDocument(quote);
   return quote.id;
 }

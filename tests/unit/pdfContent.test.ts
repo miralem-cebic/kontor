@@ -148,6 +148,13 @@ describe('the content of a quote', () => {
     expect(c.meta).toMatchObject({ title: 'Angebot – AN-2026-0001 – Kunde GmbH – 22.10.2026', fileName: 'Angebot_AN-2026-0001_Kunde-GmbH.pdf' });
     expect(documentContent({ company, document: quote, customer, account, lang: 'en', number: 'AN-2026-0001' }).title).toBe('Quote');
   });
+
+  it('a new version names the quote it replaces', () => {
+    const version = makeQuote(customer.id, sampleQuote(), { id: newDocumentId(), number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 });
+    const c = documentContent({ company, document: version, customer, account, lang: 'de', number: 'AN-2026-0001-2' });
+    expect(c.info[0]).toEqual({ label: 'Angebotsnummer', value: 'AN-2026-0001-2' });
+    expect(c.notes).toEqual(['Dieses Angebot ersetzt unser Angebot AN-2026-0001 vom 22.10.2026.', 'Dieses Angebot ist gültig bis zum 21.11.2026.']);
+  });
 });
 
 describe('helpers', () => {

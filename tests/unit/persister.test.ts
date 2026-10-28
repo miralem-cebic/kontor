@@ -3,6 +3,7 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { emergencyKey, Persister } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
+import { brandId } from '../../src/data/ids';
 import { nowIso } from '../../src/data/schema';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
@@ -319,5 +320,13 @@ describe('issued invoices in the store', () => {
     A.deleteDocument(id);
     expect(A.useApp.getState().documents.get(id)).toBe(finalized);
     expect(finalized?.issued?.number).toBe('AN-2026-0001');
+  });
+
+  it('a new version knows the quote it replaces, also after a change', () => {
+    const customer = A.addContact(sampleContact());
+    const revises = { id: brandId<'DocumentId'>('q1'), number: 'AN-2026-0001', date: '2026-10-22', firstNumber: 'AN-2026-0001', version: 2 };
+    const id = A.addQuote(customer, sampleQuote(), revises);
+    A.updateQuote(id, customer, sampleQuote({ subject: 'Geändert' }));
+    expect(A.useApp.getState().documents.get(id)).toMatchObject({ subject: 'Geändert', issued: null, revises });
   });
 });

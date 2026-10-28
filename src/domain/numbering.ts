@@ -1,10 +1,11 @@
-// Number patterns for invoices, for example "RE-{YYYY}-{NNNN}" → "RE-2026-0001".
+// Number patterns for invoices and quotes, for example "RE-{YYYY}-{NNNN}" → "RE-2026-0001".
 // The number is used as a file name (documents/issued/<number>.pdf), so only characters that are safe in
 // file names on every system are allowed. The rules for the counter (one more than the highest known, restarting
 // every year when the pattern contains {YYYY} or {YY}) are here; reserving a number in the folder is app/issue.ts
 // (ADR 0004).
 
 export const DEFAULT_INVOICE_PATTERN = 'RE-{YYYY}-{NNNN}';
+export const DEFAULT_QUOTE_PATTERN = 'AN-{YYYY}-{NNNN}';
 export const MAX_PATTERN_LENGTH = 40;
 
 export type PatternProblem = 'empty' | 'tooLong' | 'invalidCharacter' | 'unknownToken' | 'noCounter' | 'multipleCounters';

@@ -1,16 +1,17 @@
 import type { DocumentId } from '../data/ids';
-import type { BankAccount, InvoiceFile } from '../data/types';
-import { tIn } from '../i18n';
+import type { BankAccount, DocumentFile } from '../data/types';
+import type { IssuedInfo } from '../domain/invoice';
+import { tIn, type MessageKey } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, pdfFileName, type LogoImage } from '../pdf/documentPdf';
 import { useApp } from '../store/appStore';
 import { openRepository, readLogo } from './session';
 
 // A quote or an invoice as PDF, saved through the browser's download. A draft is made anew each time; an issued
-// invoice is the file written when it was issued, checked against its SHA-256. Documents are German for now; a
+// invoice or a finalized quote is the file written then, checked against its SHA-256. Documents are German for now; a
 // language per customer follows with F05.
 
-/** `changed`: the file of an issued invoice no longer matches the SHA-256 it was issued with */
+/** `changed`: the stored file of an issued invoice or a finalized quote no longer matches the SHA-256 it was written with */
 export type PdfResult = { ok: true; fileName: string; missing: string[]; changed: boolean } | { ok: false };
 
 /** The largest size an SVG logo is drawn at, in pixels: the logo box of the PDF (55 × 24 mm) at about 600 dpi */
@@ -67,27 +68,33 @@ function download(bytes: Uint8Array, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-/** The file written when the invoice was issued; it is downloaded even when it changed since, and the result says so */
-async function downloadIssued(inv: InvoiceFile & { issued: NonNullable<InvoiceFile['issued']> }): Promise<PdfResult> {
+/** The title the stored PDF of a document is named after */
+const issuedTitle = (doc: DocumentFile): MessageKey => (doc.kind === 'quote' ? 'pdf.quote' : doc.cancels ? 'pdf.cancellation' : 'pdf.invoice');
+
+/**
+ * The file written when the invoice was issued or the quote finalized; it is downloaded even when it changed since,
+ * and the result says so
+ */
+async function downloadIssued(doc: DocumentFile, issued: IssuedInfo): Promise<PdfResult> {
   const repo = openRepository();
   if (!repo) return { ok: false };
-  const read = await repo.readIssuedFile(inv.issued.pdf.file);
+  const read = await repo.readIssuedFile(doc.kind, issued.pdf.file);
   if (!read.ok) {
     console.error('Could not read the issued PDF', read.error.cause);
     return { ok: false };
   }
-  const changed = (await sha256Hex(read.value.slice())) !== inv.issued.pdf.sha256;
-  const fileName = pdfFileName([tIn('de', inv.cancels ? 'pdf.cancellation' : 'pdf.invoice'), inv.issued.number, inv.issued.snapshot.customer.name]);
+  const changed = (await sha256Hex(read.value.slice())) !== issued.pdf.sha256;
+  const fileName = pdfFileName([tIn('de', issuedTitle(doc)), issued.number, issued.snapshot.customer.name]);
   download(read.value, fileName);
   return { ok: true, fileName, missing: [], changed };
 }
 
-/** Makes the PDF of a saved quote or invoice draft, or reads the one of an issued invoice, and downloads it */
+/** Makes the PDF of a saved quote or invoice draft, or reads the stored one of an issued document, and downloads it */
 export async function downloadDocumentPdf(id: DocumentId): Promise<PdfResult> {
   const { company, documents, contacts } = useApp.getState();
   const doc = documents.get(id);
   if (!company || !doc || doc.deletedAt) return { ok: false };
-  if (doc.kind === 'invoice' && doc.issued) return downloadIssued({ ...doc, issued: doc.issued });
+  if (doc.issued) return downloadIssued(doc, doc.issued);
   const accountId = doc.kind === 'invoice' ? doc.accountId : company.bank.defaultAccountId;
   const account: BankAccount | null = company.bank.accounts.find((a) => a.id === accountId) ?? null;
   try {

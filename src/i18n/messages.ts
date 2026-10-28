@@ -178,6 +178,12 @@ const MESSAGES_SRC = {
     en: 'Placeholders: {YYYY} year, {YY} two-digit year, {MM} month, {NNNN} running number. With a year in the format, the number starts again at 1 every year. Letters, digits, - and _ are allowed.',
   },
   'invoice.patternPreview': { de: 'Die erste Rechnung bekäme die Nummer {number}.', en: 'The first invoice would get the number {number}.' },
+  'invoice.quotePattern': { de: 'Angebotsnummer', en: 'Quote number' },
+  'invoice.quotePatternHint': {
+    de: 'Platzhalter wie bei der Rechnungsnummer. Angebote werden für sich gezählt; ihre Nummern müssen nicht lückenlos sein.',
+    en: 'Placeholders as for the invoice number. Quotes are counted on their own; their numbers need not be gapless.',
+  },
+  'invoice.quotePatternPreview': { de: 'Das erste Angebot bekäme die Nummer {number}.', en: 'The first quote would get the number {number}.' },
   'invoice.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },
   'invoice.paymentTermHint': { de: '0 bedeutet „sofort fällig“', en: '0 means “due immediately”' },
   'invoice.footer': { de: 'Fußzeile', en: 'Footer' },
@@ -245,6 +251,10 @@ const MESSAGES_SRC = {
   'problem.patternToken': { de: 'Unbekannter Platzhalter. Erlaubt sind {YYYY}, {YY}, {MM} und {N…}.', en: 'Unknown placeholder. Allowed are {YYYY}, {YY}, {MM} and {N…}.' },
   'problem.patternNoCounter': { de: 'Das Format braucht eine laufende Nummer, z. B. {NNNN}.', en: 'The format needs a running number, e.g. {NNNN}.' },
   'problem.patternCounters': { de: 'Das Format darf nur eine laufende Nummer enthalten.', en: 'The format may contain only one running number.' },
+  'problem.patternSameAsInvoice': {
+    de: 'Wähle ein anderes Format als für Rechnungen, z. B. mit „AN-“ vorne, damit Angebots- und Rechnungsnummern sich unterscheiden.',
+    en: 'Choose another format than for invoices, e.g. starting with “AN-”, so that quote and invoice numbers differ.',
+  },
 
   'error.permission': { de: 'Kein Zugriff auf den Ordner. Bitte Zugriff erlauben oder den Ordner neu wählen.', en: 'No access to the folder. Please allow access or choose the folder again.' },
   'error.notFound': { de: 'Der Ordner oder eine Datei darin wurde nicht gefunden.', en: 'The folder or a file in it was not found.' },
@@ -431,15 +441,15 @@ const MESSAGES_SRC = {
   },
   'documents.pdfFailed': { de: 'Das PDF konnte nicht erstellt werden.', en: 'The PDF could not be made.' },
   'documents.pdfChanged': {
-    de: 'Achtung: „{name}“ wurde nach dem Ausstellen verändert, die Datei stimmt nicht mehr mit ihrer Prüfsumme (SHA-256) überein.',
-    en: 'Warning: “{name}” was changed after it was issued; the file no longer matches its checksum (SHA-256).',
+    de: 'Achtung: „{name}“ wurde verändert, nachdem es im Ordner abgelegt wurde; die Datei stimmt nicht mehr mit ihrer Prüfsumme (SHA-256) überein.',
+    en: 'Warning: “{name}” was changed after it was stored in the folder; the file no longer matches its checksum (SHA-256).',
   },
 
   'quotes.title': { de: 'Angebote', en: 'Quotes' },
   'quotes.new': { de: 'Neues Angebot', en: 'New quote' },
   'quotes.draftNote': {
-    de: 'Angebote sind vorerst Entwürfe. Angebotsnummer und PDF folgen in einer der nächsten Versionen. Aus einem gespeicherten Angebot wird mit „Rechnung erstellen“ ein Rechnungsentwurf.',
-    en: 'Quotes are drafts for now. Quote numbers and the PDF follow in one of the next versions. “Create invoice” turns a saved quote into a draft invoice.',
+    de: 'Entwürfe lassen sich ändern und löschen. Beim Abschließen bekommt ein Angebot seine Nummer, sein PDF wird im Unternehmensordner abgelegt, und es lässt sich nicht mehr ändern. Aus einem gespeicherten Angebot wird mit „Rechnung erstellen“ ein Rechnungsentwurf.',
+    en: 'Drafts can be changed and deleted. Finalizing gives a quote its number and stores its PDF in the company folder; after that it cannot be changed. “Create invoice” turns a saved quote into a draft invoice.',
   },
   'quotes.empty': {
     de: 'Noch keine Angebote. Die Positionen übernimmst du aus „Artikel & Leistungen“ oder schreibst sie frei.',
@@ -454,6 +464,7 @@ const MESSAGES_SRC = {
   'quotes.filterValid': { de: 'Gültig', en: 'Valid' },
   'quotes.filterExpired': { de: 'Abgelaufen', en: 'Expired' },
   'quotes.count': { de: '{n} Angebote', en: '{n} quotes' },
+  'quotes.colNumber': { de: 'Nummer', en: 'Number' },
   'quotes.colValidUntil': { de: 'Gültig bis', en: 'Valid until' },
   'quotes.expired': { de: 'abgelaufen', en: 'expired' },
   'quotes.sectionQuote': { de: 'Angebot', en: 'Quote' },
@@ -463,6 +474,46 @@ const MESSAGES_SRC = {
   'quotes.saved': { de: 'Angebot für „{name}“ gespeichert', en: 'Quote for “{name}” saved' },
   'quotes.deleted': { de: 'Angebot für „{name}“ gelöscht', en: 'Quote for “{name}” deleted' },
   'quotes.createInvoice': { de: 'Rechnung erstellen', en: 'Create invoice' },
+  'quotes.draft': { de: 'Entwurf', en: 'Draft' },
+  'quotes.finalized': { de: 'Abgeschlossen', en: 'Finalized' },
+  'quotes.finalizedTitle': { de: 'Angebot {number}', en: 'Quote {number}' },
+  'quotes.finalizedAt': { de: 'Abgeschlossen am', en: 'Finalized on' },
+  'quotes.file': { de: 'PDF im Ordner', en: 'PDF in the folder' },
+  'quotes.finalizedNote': {
+    de: 'Abgeschlossene Angebote lassen sich weder ändern noch löschen: Das PDF im Ordner ist das, was der Kunde bekommt. Die Angaben zu Unternehmen und Kunde sind die vom Zeitpunkt des Abschließens. Für ein geändertes Angebot kopiere es als neues Angebot.',
+    en: 'Finalized quotes can be neither changed nor deleted: the PDF in the folder is what the customer gets. The company and customer details are those at the time of finalizing. For a changed quote, copy it as a new quote.',
+  },
+  'quotes.copy': { de: 'Als neues Angebot kopieren', en: 'Copy as new quote' },
+  'quotes.copyOf': {
+    de: 'Kopie des Angebots {number}. Datum und Gültigkeit beginnen heute, alles andere wie im Angebot.',
+    en: 'Copy of quote {number}. Date and validity start today, everything else as in the quote.',
+  },
+  'quotes.sectionFinalize': { de: 'Abschließen', en: 'Finalize' },
+  'quotes.finalizeLater': {
+    de: 'Beim Abschließen bekommt das Angebot seine Nummer, und sein PDF ohne Entwurfsvermerk wird im Ordner abgelegt (documents/quotes/). Danach lässt es sich weder ändern noch löschen. Schließe es ab, bevor du es an den Kunden schickst.',
+    en: 'Finalizing gives the quote its number and stores its PDF without the draft marks in the folder (documents/quotes/). After that it can be neither changed nor deleted. Finalize it before you send it to the customer.',
+  },
+  'quotes.ready': { de: 'Alle Angaben für das Abschließen sind da.', en: 'Everything needed for finalizing is there.' },
+  'quotes.missing': { de: 'Vor dem Abschließen noch zu tun:', en: 'To do before finalizing:' },
+  'quotes.finalizeSaveFirst': { de: 'Speichere das Angebot, um es abzuschließen.', en: 'Save the quote to finalize it.' },
+  'quotes.finalize': { de: 'Angebot abschließen', en: 'Finalize quote' },
+  'quotes.finalizeNow': { de: 'Jetzt abschließen', en: 'Finalize now' },
+  'quotes.finalizeConfirm': {
+    de: 'Angebot jetzt abschließen? Es bekommt die nächste Angebotsnummer und lässt sich danach weder ändern noch löschen.',
+    en: 'Finalize the quote now? It gets the next quote number and can be neither changed nor deleted afterwards.',
+  },
+  'quotes.finalizeBusy': { de: 'Wird abgeschlossen …', en: 'Finalizing …' },
+  'quotes.finalizedToast': { de: 'Angebot {number} abgeschlossen', en: 'Quote {number} finalized' },
+  'quotes.finalizedAuditMissing': {
+    de: 'Angebot {number} abgeschlossen, aber der Eintrag im Protokoll (audit/) konnte nicht geschrieben werden.',
+    en: 'Quote {number} finalized, but the entry in the log (audit/) could not be written.',
+  },
+  'quotes.finalizeNotReady': { de: 'Das Angebot ist noch nicht vollständig und wurde nicht abgeschlossen.', en: 'The quote is not complete yet and was not finalized.' },
+  'quotes.finalizeNumberTaken': {
+    de: 'Die nächste Angebotsnummer ist im Ordner schon vergeben, der Nummernkreis (numbering/quote.json) ist nicht aktuell. Es wurde nichts abgeschlossen.',
+    en: 'The next quote number is already taken in the folder; the number range (numbering/quote.json) is out of date. Nothing was finalized.',
+  },
+  'quotes.finalizeFailed': { de: 'Das Angebot wurde nicht abgeschlossen: {reason}', en: 'The quote was not finalized: {reason}' },
 
   'invoices.title': { de: 'Rechnungen', en: 'Invoices' },
   'invoices.new': { de: 'Neue Rechnung', en: 'New invoice' },
@@ -550,6 +601,7 @@ const MESSAGES_SRC = {
   'invoices.draft': { de: 'Entwurf', en: 'Draft' },
   'invoices.sectionInvoice': { de: 'Rechnung', en: 'Invoice' },
   'invoices.fromQuote': { de: 'Erstellt aus dem Angebot vom {date} ({subject}).', en: 'Created from the quote of {date} ({subject}).' },
+  'invoices.fromQuoteNumber': { de: 'Erstellt aus dem Angebot {number} vom {date} ({subject}).', en: 'Created from quote {number} of {date} ({subject}).' },
   'invoices.date': { de: 'Rechnungsdatum', en: 'Invoice date' },
   'invoices.service': { de: 'Leistung erbracht', en: 'Service rendered' },
   'invoices.serviceHint': {
@@ -623,6 +675,7 @@ const MESSAGES_SRC = {
   'issue.customerVatId': { de: 'Trage beim Kunden seine USt-IdNr. aus dem anderen EU-Staat ein (§ 14a UStG).', en: 'Add the VAT ID of the customer from the other EU state (§ 14a UStG).' },
   'issue.ownVatId': { de: 'Trage in den Einstellungen deine eigene USt-IdNr. ein (§ 14a UStG).', en: 'Add your own VAT ID in the settings (§ 14a UStG).' },
   'issue.accountRemoved': { de: 'Das gewählte Konto wurde entfernt. Wähle ein anderes.', en: 'The chosen account was removed. Choose another one.' },
+  'issue.quoteExpired': { de: 'Das Angebot ist abgelaufen. Setze „Gültig bis“ auf heute oder später.', en: 'The quote has run out. Set “Valid until” to today or later.' },
 
   'lines.title': { de: 'Positionen', en: 'Line items' },
   'lines.empty': { de: 'Noch keine Positionen.', en: 'No line items yet.' },
@@ -676,6 +729,7 @@ const MESSAGES_SRC = {
   'pdf.cancels': { de: 'Storno zu', en: 'Cancels' },
   'pdf.cancellationNote': { de: 'Diese Stornorechnung hebt die Rechnung {number} vom {date} vollständig auf.', en: 'This cancellation invoice fully reverses invoice {number} of {date}.' },
   'pdf.payReference': { de: 'Verwendungszweck: {number}', en: 'Payment reference: {number}' },
+  'pdf.quote': { de: 'Angebot', en: 'Quote' },
   'pdf.quoteDraft': { de: 'Angebotsentwurf', en: 'Draft quote' },
   'pdf.invoiceNumber': { de: 'Rechnungsnummer', en: 'Invoice number' },
   'pdf.quoteNumber': { de: 'Angebotsnummer', en: 'Quote number' },

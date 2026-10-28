@@ -300,10 +300,24 @@ describe('issued invoices in the store', () => {
     const id = A.addInvoice(customer, account, sampleInvoice(), null);
     const draft = A.useApp.getState().documents.get(id);
     if (draft?.kind !== 'invoice') throw new Error('expected an invoice');
-    A.putIssuedInvoice({ ...draft, issued: sampleIssued() });
+    A.putIssuedDocument({ ...draft, issued: sampleIssued() });
     const issued = A.useApp.getState().documents.get(id);
     A.updateInvoice(id, customer, account, sampleInvoice({ subject: 'X' }));
     A.deleteDocument(id);
     expect(A.useApp.getState().documents.get(id)).toBe(issued);
+  });
+
+  it('neither can a finalized quote', () => {
+    const customer = A.addContact(sampleContact());
+    const id = A.addQuote(customer, sampleQuote());
+    const draft = A.useApp.getState().documents.get(id);
+    if (draft?.kind !== 'quote') throw new Error('expected a quote');
+    expect(draft.issued).toBeNull();
+    A.putIssuedDocument({ ...draft, issued: sampleIssued('AN-2026-0001') });
+    const finalized = A.useApp.getState().documents.get(id);
+    A.updateQuote(id, customer, sampleQuote({ subject: 'X' }));
+    A.deleteDocument(id);
+    expect(A.useApp.getState().documents.get(id)).toBe(finalized);
+    expect(finalized?.issued?.number).toBe('AN-2026-0001');
   });
 });

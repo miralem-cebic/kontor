@@ -139,7 +139,9 @@ test('a company folder of version 1 opens; its bank account becomes the default 
 
   const saved = await readCompanyFile(page, 'Alt');
   expect(saved).toMatchObject({
-    schemaVersion: 5,
+    schemaVersion: 6,
+    // the quote pattern of version 6 is added on the way
+    invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: '' },
     bank: {
       defaultAccountId: 'account-1',
       accounts: [

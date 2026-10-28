@@ -4,14 +4,27 @@ import type { ContactProfile } from '../domain/contact';
 import { invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
 import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
+import { quoteProblems } from '../domain/quote';
 import { cancellationId, type DocumentId } from '../data/ids';
 import type { Repository, StorageErrorKind } from '../data/repository';
 import { makeCancellation, SCHEMA_VERSION } from '../data/schema';
-import { cancellationOf, type BankAccount, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type NumberingFile, type Reservation } from '../data/types';
+import {
+  cancellationOf,
+  type AuditEntry,
+  type BankAccount,
+  type CompanyFile,
+  type ContactFile,
+  type DocumentFile,
+  type InvoiceFile,
+  type NumberingFile,
+  type NumberRange,
+  type QuoteFile,
+  type Reservation,
+} from '../data/types';
 import { isValidId } from '../data/validate';
 import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, type LogoImage } from '../pdf/documentPdf';
-import { putIssuedInvoice, useApp } from '../store/appStore';
+import { putIssuedDocument, useApp } from '../store/appStore';
 import { logoImage } from './documentPdf';
 import { flushWrites, openRepository } from './session';
 
@@ -19,15 +32,19 @@ import { flushWrites, openRepository } from './session';
 // once to documents/issued/<number>.pdf, the invoice gets its number, the snapshot of the master data and the PDF's
 // SHA-256, and an entry is appended to audit/<YYYY-MM>.jsonl. A second attempt after a failure in the middle finds its
 // own reservation and file and goes on with them, so a number is never given twice and never lost to this invoice.
-// Cancelling an issued invoice issues its cancellation invoice the same way.
+// Cancelling an issued invoice issues its cancellation invoice the same way. Finalizing a quote ("Angebot
+// abschließen") does the same in the quote range: numbering/quote.json and documents/quotes/<number>.pdf.
 
 /**
- * `notReady`: the draft is incomplete (issueProblems), or the invoice cannot be cancelled (not issued, or a
- * cancellation itself); `numberTaken`: the next number exists already, the range file fell behind
+ * `notReady`: the draft is incomplete (issueProblems, quoteProblems), or the invoice cannot be cancelled (not issued,
+ * or a cancellation itself); `numberTaken`: the next number exists already, the range file fell behind
  */
 export type IssueFailure = 'notReady' | 'numberTaken' | StorageErrorKind;
 
-export type IssueResult = { ok: true; invoice: InvoiceFile; auditWritten: boolean } | { ok: false; failure: IssueFailure };
+type Failed = { ok: false; failure: IssueFailure };
+
+/** The document as written: an issued invoice or cancellation, or a finalized quote */
+export type IssueResult<D extends DocumentFile = InvoiceFile> = { ok: true; document: D; auditWritten: boolean } | Failed;
 
 export interface IssueContext {
   repo: Repository;
@@ -43,7 +60,7 @@ export interface IssueContext {
 /** Reservations the range file keeps; the audit log keeps every one */
 const KEEP_RESERVATIONS = 50;
 
-const fail = (failure: IssueFailure): IssueResult => ({ ok: false, failure });
+const fail = (failure: IssueFailure): Failed => ({ ok: false, failure });
 
 const companyProfile = (c: CompanyFile): CompanyProfile => ({
   name: c.name,
@@ -80,45 +97,57 @@ function accountDetails(a: BankAccount): AccountDetails {
   }
 }
 
-const issuedInvoices = (documents: ReadonlyMap<string, DocumentFile>): IssuedInfo[] =>
-  [...documents.values()].flatMap((d) => (d.kind === 'invoice' && d.issued ? [d.issued] : []));
+/** The issued documents of a range: invoices (with their cancellations) or quotes */
+const issuedIn = (documents: ReadonlyMap<string, DocumentFile>, range: NumberRange): IssuedInfo[] =>
+  [...documents.values()].flatMap((d) => (d.kind === range && d.issued ? [d.issued] : []));
+
+/** The number pattern of a range, from the settings */
+function patternOf(company: CompanyFile, range: NumberRange): string {
+  switch (range) {
+    case 'invoice':
+      return company.invoiceDefaults.numberPattern;
+    case 'quote':
+      return company.invoiceDefaults.quotePattern;
+  }
+}
 
 /**
- * The number of the invoice: its reservation from an earlier attempt, or the next number of its counter, reserved and
- * read back. Every number known (issued, reserved or as a file) is taken.
+ * The number of the document: its reservation from an earlier attempt, or the next number of its counter in the range
+ * of its kind, reserved and read back. Every number known in the range (issued, reserved or as a file) is taken.
  */
-async function reserve(inv: InvoiceFile, ctx: IssueContext): Promise<{ ok: true; reservation: Reservation; files: string[] } | { ok: false; failure: IssueFailure }> {
-  const read = await ctx.repo.readNumbering('invoice');
-  if (!read.ok) return { ok: false, failure: read.error.kind };
-  const listed = await ctx.repo.listIssuedFiles();
-  if (!listed.ok) return { ok: false, failure: listed.error.kind };
-  const range: NumberingFile = read.value ?? { schemaVersion: SCHEMA_VERSION, range: 'invoice', counters: [], reservations: [] };
-  const own = range.reservations.find((r) => r.documentId === inv.id);
+async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true; reservation: Reservation; files: string[] } | Failed> {
+  const range: NumberRange = doc.kind;
+  const read = await ctx.repo.readNumbering(range);
+  if (!read.ok) return fail(read.error.kind);
+  const listed = await ctx.repo.listIssuedFiles(range);
+  if (!listed.ok) return fail(listed.error.kind);
+  const numbering: NumberingFile = read.value ?? { schemaVersion: SCHEMA_VERSION, range, counters: [], reservations: [] };
+  const own = numbering.reservations.find((r) => r.documentId === doc.id);
   if (own) return { ok: true, reservation: own, files: listed.value };
 
-  const pattern = ctx.company.invoiceDefaults.numberPattern;
-  const key = counterKey(pattern, inv.date);
-  const issued = issuedInvoices(ctx.documents);
+  const pattern = patternOf(ctx.company, range);
+  const key = counterKey(pattern, doc.date);
+  const issued = issuedIn(ctx.documents, range);
   const counter = nextCounter([
-    ...range.counters.filter((c) => c.key === key).map((c) => c.last),
-    ...range.reservations.filter((r) => r.counterKey === key).map((r) => r.counter),
+    ...numbering.counters.filter((c) => c.key === key).map((c) => c.last),
+    ...numbering.reservations.filter((r) => r.counterKey === key).map((r) => r.counter),
     ...issued.filter((i) => i.counterKey === key).map((i) => i.counter),
   ]);
-  const number = numberFor(pattern, inv.date, counter);
-  const taken = new Set([...issued.map((i) => i.number), ...range.reservations.map((r) => r.number), ...listed.value.map((f) => f.replace(/\.pdf$/, ''))]);
-  if (taken.has(number)) return { ok: false, failure: 'numberTaken' };
+  const number = numberFor(pattern, doc.date, counter);
+  const taken = new Set([...issued.map((i) => i.number), ...numbering.reservations.map((r) => r.number), ...listed.value.map((f) => f.replace(/\.pdf$/, ''))]);
+  if (taken.has(number)) return fail('numberTaken');
 
-  const reservation: Reservation = { number, counterKey: key, counter, documentId: inv.id, device: ctx.device, at: ctx.now.toISOString() };
+  const reservation: Reservation = { number, counterKey: key, counter, documentId: doc.id, device: ctx.device, at: ctx.now.toISOString() };
   const next: NumberingFile = {
-    ...range,
-    counters: [...range.counters.filter((c) => c.key !== key), { key, last: counter }],
-    reservations: [...range.reservations, reservation].slice(-KEEP_RESERVATIONS),
+    ...numbering,
+    counters: [...numbering.counters.filter((c) => c.key !== key), { key, last: counter }],
+    reservations: [...numbering.reservations, reservation].slice(-KEEP_RESERVATIONS),
   };
   const written = await ctx.repo.writeNumbering(next);
-  if (!written.ok) return { ok: false, failure: written.error.kind };
+  if (!written.ok) return fail(written.error.kind);
   // the reservation holds when it is in the file as read back, and no other document holds the same number
   const holders = written.value.reservations.filter((r) => r.number === number);
-  if (holders.length !== 1 || holders[0]?.documentId !== inv.id) return { ok: false, failure: 'conflict' };
+  if (holders.length !== 1 || holders[0]?.documentId !== doc.id) return fail('conflict');
   return { ok: true, reservation, files: listed.value };
 }
 
@@ -126,7 +155,7 @@ async function reserve(inv: InvoiceFile, ctx: IssueContext): Promise<{ ok: true;
 export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueResult> {
   const inv = ctx.documents.get(id);
   if (!inv || inv.kind !== 'invoice' || inv.deletedAt) return fail('notReady');
-  if (inv.issued) return { ok: true, invoice: inv, auditWritten: true };
+  if (inv.issued) return { ok: true, document: inv, auditWritten: true };
   const { company } = ctx;
   const customer = ctx.contacts.get(inv.customerId);
   const account = company.bank.accounts.find((a) => a.id === inv.accountId);
@@ -153,43 +182,69 @@ export async function cancel(id: DocumentId, ctx: IssueContext): Promise<IssueRe
   const original = ctx.documents.get(id);
   if (!original || original.kind !== 'invoice' || !original.issued || original.cancels) return fail('notReady');
   const done = cancellationOf(ctx.documents.values(), original.id);
-  if (done) return { ok: true, invoice: done, auditWritten: true };
+  if (done) return { ok: true, document: done, auditWritten: true };
   const cancellation = makeCancellation({ ...original, issued: original.issued }, isoDateOf(ctx.now), await cancellationId(original.id));
   return finalize(cancellation, original.issued.snapshot, ctx);
 }
 
-/** Reserves the number, writes the PDF, saves the invoice as issued and appends the audit entry */
-async function finalize(inv: InvoiceFile, snapshot: IssueSnapshot, ctx: IssueContext): Promise<IssueResult> {
-  const reserved = await reserve(inv, ctx);
-  if (!reserved.ok) return fail(reserved.failure);
+/**
+ * Finalizes a saved quote ("Angebot abschließen"): it gets the next number of the quote range, a snapshot of the master
+ * data with the default account (the one its footer shows) and its PDF in documents/quotes/, and stays as it is from
+ * then on. Calling it again for a finalized quote returns it unchanged.
+ */
+export async function issueQuote(id: DocumentId, ctx: IssueContext): Promise<IssueResult<QuoteFile>> {
+  const quote = ctx.documents.get(id);
+  if (!quote || quote.kind !== 'quote' || quote.deletedAt) return fail('notReady');
+  if (quote.issued) return { ok: true, document: quote, auditWritten: true };
+  const { company } = ctx;
+  const customer = ctx.contacts.get(quote.customerId);
+  const account = company.bank.accounts.find((a) => a.id === company.bank.defaultAccountId);
+  const problems = quoteProblems({ hasCustomer: !!customer, lineCount: quote.lines.length, validUntil: quote.validUntil }, isoDateOf(ctx.now));
+  if (problems.length > 0 || !customer || !account) return fail('notReady');
+  return finalize(quote, { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) }, ctx);
+}
+
+/** What the audit log says about the document: issued, a cancellation, or a finalized quote */
+function auditEntry(doc: DocumentFile, base: Omit<AuditEntry, 'action' | 'cancels'>): AuditEntry {
+  switch (doc.kind) {
+    case 'quote':
+      return { ...base, action: 'issueQuote' };
+    case 'invoice':
+      return doc.cancels ? { ...base, action: 'cancel', cancels: { documentId: doc.cancels.id, number: doc.cancels.number } } : { ...base, action: 'issue' };
+  }
+}
+
+/** Reserves the number, writes the PDF, saves the document as issued and appends the audit entry */
+async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot, ctx: IssueContext): Promise<IssueResult<D>> {
+  const range: NumberRange = doc.kind;
+  const reserved = await reserve(doc, ctx);
+  if (!reserved.ok) return reserved;
   const { number, counter, counterKey: key } = reserved.reservation;
 
-  // the PDF is written once; a file of this number from an earlier attempt of this invoice is kept
+  // the PDF is written once; a file of this number from an earlier attempt of this document is kept
   const file = `${number}.pdf`;
   let bytes: Uint8Array;
   if (reserved.files.includes(file)) {
-    const existing = await ctx.repo.readIssuedFile(file);
+    const existing = await ctx.repo.readIssuedFile(range, file);
     if (!existing.ok) return fail(existing.error.kind);
     bytes = existing.value;
   } else {
-    const pdf = await makeDocumentPdf({ company: snapshot.company, document: inv, customer: snapshot.customer, account: snapshot.account, lang: 'de', number }, ctx.logo, ctx.now);
-    const written = await ctx.repo.writeIssuedFile(file, pdf.bytes);
+    const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: 'de', number }, ctx.logo, ctx.now);
+    const written = await ctx.repo.writeIssuedFile(range, file, pdf.bytes);
     if (!written.ok) return fail(written.error.kind);
     bytes = pdf.bytes;
   }
   const sha256 = await sha256Hex(bytes.slice());
 
   const issued: IssuedInfo = { number, counter, counterKey: key, issuedAt: ctx.now.toISOString(), snapshot, pdf: { file, sha256 } };
-  const saved = await ctx.repo.saveDocument({ ...inv, issued });
+  const saved = await ctx.repo.saveDocument({ ...doc, issued });
   if (!saved.ok) return fail(saved.error.kind);
-  if (saved.value.kind !== 'invoice' || saved.value.issued?.number !== number) return fail('conflict');
+  if (saved.value.kind !== doc.kind || saved.value.issued?.number !== number) return fail('conflict');
 
-  const entry = { at: ctx.now.toISOString(), documentId: inv.id, number, files: [{ file, sha256 }], device: ctx.device };
-  const audit = await ctx.repo.appendAudit(
-    entry.at.slice(0, 7),
-    inv.cancels ? { ...entry, action: 'cancel', cancels: { documentId: inv.cancels.id, number: inv.cancels.number } } : { ...entry, action: 'issue' },
-  );
-  return { ok: true, invoice: saved.value, auditWritten: audit.ok };
+  const at = ctx.now.toISOString();
+  const audit = await ctx.repo.appendAudit(at.slice(0, 7), auditEntry(doc, { at, documentId: doc.id, number, files: [{ file, sha256 }], device: ctx.device }));
+  // the kind was checked above: the saved document is the issued `doc`
+  return { ok: true, document: saved.value as D, auditWritten: audit.ok };
 }
 
 const DEVICE_KEY = 'kontor.device.v1';
@@ -208,22 +263,22 @@ export function deviceId(): string {
   }
 }
 
-/** Runs `step` on the open company: what is pending is written first; the issued invoice goes into the store */
-async function inOpenCompany(step: (ctx: IssueContext) => Promise<IssueResult>): Promise<IssueResult> {
+/** Runs `step` on the open company: what is pending is written first; the issued document goes into the store */
+async function inOpenCompany<D extends DocumentFile>(step: (ctx: IssueContext) => Promise<IssueResult<D>>): Promise<IssueResult<D>> {
   const repo = openRepository();
   if (!repo) return fail('notFound');
   if (!(await flushWrites())) return fail('other');
   const { company, contacts, documents } = useApp.getState();
   if (!company) return fail('notFound');
-  let result: IssueResult;
+  let result: IssueResult<D>;
   try {
     result = await step({ repo, company, contacts, documents, logo: await logoImage(), device: deviceId(), now: new Date() });
   } catch (e) {
     // for example the PDF could not be made; a reservation already written is used again by the next attempt
-    console.error('Could not issue the invoice', e);
+    console.error('Could not issue the document', e);
     return fail('other');
   }
-  if (result.ok) putIssuedInvoice(result.invoice);
+  if (result.ok) putIssuedDocument(result.document);
   return result;
 }
 
@@ -232,3 +287,6 @@ export const issueInvoice = (id: DocumentId): Promise<IssueResult> => inOpenComp
 
 /** Cancels an issued invoice of the open company; the result is its cancellation */
 export const cancelInvoice = (id: DocumentId): Promise<IssueResult> => inOpenCompany((ctx) => cancel(id, ctx));
+
+/** Finalizes a quote of the open company ("Angebot abschließen") */
+export const finalizeQuote = (id: DocumentId): Promise<IssueResult<QuoteFile>> => inOpenCompany((ctx) => issueQuote(id, ctx));

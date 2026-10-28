@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { lineTotal } from '../../domain/document';
 import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../../domain/invoice';
-import { formatCents, formatQuantity } from '../../domain/money';
 import type { DocumentId } from '../../data/ids';
 import { cancellationOf, type InvoiceFile } from '../../data/types';
 import { cancelInvoice } from '../../app/issue';
-import { currentLang, fmt, t } from '../../i18n';
-import { accountDetail, accountName, cancelFailureText, unitText } from '../../lib/labels';
+import { fmt, t } from '../../i18n';
+import { accountDetail, accountName, cancelFailureText } from '../../lib/labels';
 import { showToast, useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
-import { Totals } from '../documents/LinesEditor';
+import { Fact, IssuedLines } from '../documents/IssuedParts';
 import { PdfButton } from '../documents/PdfButton';
 
 // An issued invoice: what it says, with the master data it was issued with, and its PDF in the folder. Nothing can be
@@ -18,13 +16,6 @@ import { PdfButton } from '../documents/PdfButton';
 // every amount, and a copy of the invoice is the start of the corrected one. A cancellation is shown here as well.
 
 type IssuedInvoice = InvoiceFile & { issued: IssuedInfo };
-
-const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
-  <>
-    <dt>{label}</dt>
-    <dd>{children}</dd>
-  </>
-);
 
 /** Number and date of another invoice; a link to it while it is there */
 function InvoiceRef({ id, number, date, onOpen }: { id: DocumentId; number: string; date: string; onOpen: (id: DocumentId) => void }) {
@@ -53,7 +44,6 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
   const { snapshot } = issued;
   const documents = useApp((s) => s.documents);
   const cancellation = useMemo(() => cancellationOf(documents.values(), invoice.id), [documents, invoice.id]);
-  const lang = currentLang();
   const smallBusiness = snapshot.company.tax.vat.kind === 'smallBusiness';
   const totals = invoiceTotals(invoice, smallBusiness);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -111,41 +101,7 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
           </p>
         </section>
 
-        <section className="card" aria-labelledby="issued-lines">
-          <h2 id="issued-lines">{t('lines.title')}</h2>
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">{t('lines.name')}</th>
-                <th scope="col" className="num">
-                  {t('lines.quantity')}
-                </th>
-                <th scope="col">{t('lines.unit')}</th>
-                <th scope="col" className="num">
-                  {t('pdf.colPrice')}
-                </th>
-                <th scope="col" className="num">
-                  {t('pdf.colTotal')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lines.map((l, i) => (
-                <tr key={i}>
-                  <td>
-                    {l.name}
-                    {l.description && <small className="f-hint issued-desc">{l.description}</small>}
-                  </td>
-                  <td className="num">{formatQuantity(l.quantity, lang)}</td>
-                  <td>{unitText(l.unit)}</td>
-                  <td className="num">{formatCents(l.unitPrice, lang)}</td>
-                  <td className="num">{formatCents(lineTotal(l), lang)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <Totals totals={totals} note={vatNote(invoice.taxTreatment, smallBusiness)} />
-        </section>
+        <IssuedLines id="issued-lines" lines={invoice.lines} totals={totals} note={vatNote(invoice.taxTreatment, smallBusiness)} />
 
         <div className="card-actions">
           <PdfButton prepare={() => invoice.id} />
@@ -183,8 +139,8 @@ function CancelConfirm({ invoice, onClose, onCancelled }: { invoice: IssuedInvoi
       showToast(cancelFailureText(r.failure));
       return;
     }
-    showToast(t(r.auditWritten ? 'invoices.cancelledToast' : 'invoices.cancelledAuditMissing', { number, cancellation: r.invoice.issued?.number ?? '' }));
-    onCancelled(r.invoice.id);
+    showToast(t(r.auditWritten ? 'invoices.cancelledToast' : 'invoices.cancelledAuditMissing', { number, cancellation: r.document.issued?.number ?? '' }));
+    onCancelled(r.document.id);
   };
   return (
     <div className="confirm" role="group" aria-label={t('invoices.cancelConfirm', { number })}>

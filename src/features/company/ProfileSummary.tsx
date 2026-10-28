@@ -68,6 +68,9 @@ export function ProfileSummary({ profile: p, hasLogo, onEdit }: { profile: NewCo
         <Item label={t('invoice.pattern')}>
           {p.invoiceDefaults.numberPattern} ({t('summary.firstNumber', { number: formatNumber(p.invoiceDefaults.numberPattern, { year: now.getFullYear(), month: now.getMonth() + 1, counter: 1 }) })})
         </Item>
+        <Item label={t('invoice.quotePattern')}>
+          {p.invoiceDefaults.quotePattern} ({t('summary.firstNumber', { number: formatNumber(p.invoiceDefaults.quotePattern, { year: now.getFullYear(), month: now.getMonth() + 1, counter: 1 }) })})
+        </Item>
         <Item label={t('invoice.paymentTerm')}>{t('summary.days', { n: p.invoiceDefaults.paymentTermDays })}</Item>
         <Item label={t('invoice.footer')}>{p.invoiceDefaults.footer || none}</Item>
       </Group>

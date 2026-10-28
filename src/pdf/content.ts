@@ -23,7 +23,7 @@ export interface PdfSource {
   account: AccountDetails | null;
   /** The language of the document */
   lang: Lang;
-  /** The number of an issued invoice; null for a draft, which is marked as such */
+  /** The number of an issued invoice or a finalized quote; null for a draft, which is marked as such */
   number: string | null;
 }
 
@@ -172,7 +172,7 @@ export function documentContent(src: PdfSource): DocumentContent {
   const note = isInvoice ? vatNote(doc.taxTreatment, smallBusiness) : smallBusiness ? 'smallBusiness' : null;
   const totals = isInvoice ? invoiceTotals(doc, smallBusiness) : documentTotals(doc.lines, smallBusiness);
   const cancels = isInvoice ? doc.cancels : null;
-  const title = tIn(lang, cancels ? 'pdf.cancellation' : isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : 'pdf.quoteDraft');
+  const title = tIn(lang, cancels ? 'pdf.cancellation' : isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : number ? 'pdf.quote' : 'pdf.quoteDraft');
   const date = formatDate(doc.date, lang);
   const customerName = customer?.name ?? '';
 
@@ -204,7 +204,7 @@ export function documentContent(src: PdfSource): DocumentContent {
     letterhead: company.name,
     senderLine: [company.name, company.address.street, `${company.address.postalCode} ${company.address.city}`].join(' · '),
     recipient: recipientLines(customer, lang),
-    info: isInvoice ? invoiceInfo(doc, customer, number, lang) : quoteInfo(doc, customer, lang),
+    info: isInvoice ? invoiceInfo(doc, customer, number, lang) : quoteInfo(doc, customer, number, lang),
     title,
     subject: doc.subject,
     intro: doc.introText,
@@ -236,9 +236,9 @@ export function documentContent(src: PdfSource): DocumentContent {
   };
 }
 
-function quoteInfo(q: QuoteFile, customer: ContactProfile | null, lang: Lang): InfoRow[] {
+function quoteInfo(q: QuoteFile, customer: ContactProfile | null, number: string | null, lang: Lang): InfoRow[] {
   return [
-    { label: tIn(lang, 'pdf.quoteNumber'), value: tIn(lang, 'pdf.draftNumber') },
+    { label: tIn(lang, 'pdf.quoteNumber'), value: number ?? tIn(lang, 'pdf.draftNumber') },
     { label: tIn(lang, 'pdf.quoteDate'), value: formatDate(q.date, lang) },
     { label: tIn(lang, 'pdf.validUntil'), value: formatDate(q.validUntil, lang) },
     ...(customer?.customerNumber ? [{ label: tIn(lang, 'pdf.customerNumber'), value: customer.customerNumber }] : []),

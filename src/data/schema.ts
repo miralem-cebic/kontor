@@ -26,7 +26,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const nowIso = (): string => stampNow();
 
@@ -58,12 +58,12 @@ export function makeItem(profile: ItemProfile): ItemFile {
   return { schemaVersion: SCHEMA_VERSION, id: newItemId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }
 
-/** A new quote. Every field counts as changed at creation time. */
+/** A new quote, a draft. Every field counts as changed at creation time. */
 export function makeQuote(customerId: ContactId, content: QuoteContent): QuoteFile {
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<QuoteMergeableField, string>> = {};
   for (const f of QUOTE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'quote', customerId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newDocumentId(), kind: 'quote', customerId, ...content, issued: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }
 
 /** A new invoice draft, made from a quote or not. Every field counts as changed at creation time. */

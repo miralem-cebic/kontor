@@ -3,7 +3,7 @@
 // Hand-written on purpose: the app has no runtime dependencies beyond the UI stack.
 //
 // The checks are structural (types, known values, lengths) plus what other code relies on for safety:
-// names that become file names (logo, invoice number pattern) and IDs that become keys. A semantically wrong
+// names that become file names (logo, number patterns) and IDs that become keys. A semantically wrong
 // value that is still safe (an IBAN with a wrong check digit) is accepted here and reported by the forms.
 
 import {
@@ -49,8 +49,8 @@ import {
   type DocumentFile,
   type InvoiceFile,
   type ItemFile,
+  NUMBER_RANGES,
   type NumberingFile,
-  type NumberRange,
   type QuoteFile,
   type Reservation,
 } from './types';
@@ -252,6 +252,7 @@ const numberPattern: Check<string> = (v, path) =>
 
 const invoiceDefaults = objectOf<InvoiceDefaults>({
   numberPattern,
+  quotePattern: numberPattern,
   paymentTermDays: int(0, LIMITS.maxPaymentTermDays),
   footer: text(LIMITS.footer),
 });
@@ -351,29 +352,13 @@ const documentLine: Check<DocumentLine> = (v, path) => {
   return lineNetInRange(line.unitPrice, line.quantity) ? line : fail(path, 'the line amount is too large');
 };
 
-const quoteFile = objectOf<QuoteFile>({
-  schemaVersion: num,
-  id: documentId,
-  kind: exactly('quote'),
-  customerId: contactId,
-  date: isoDate,
-  validUntil: isoDate,
-  subject: text(QUOTE_LIMITS.subject),
-  introText: text(QUOTE_LIMITS.text),
-  closingText: text(QUOTE_LIMITS.text),
-  lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
-  createdAt: dateTime,
-  deletedAt: nullable(dateTime),
-  fieldUpdatedAt: fieldTimestamps(QUOTE_MERGEABLE_FIELDS),
-});
-
 /** The order of the dates is checked by the form; any two valid dates are safe */
 const service = variant<ServicePeriod>({
   date: objectOf({ kind: exactly('date'), date: isoDate }),
   period: objectOf({ kind: exactly('period'), start: isoDate, end: isoDate }),
 });
 
-/** A document number becomes a file name (documents/issued/<number>.pdf): only the characters a pattern can produce */
+/** A document number becomes a file name (documents/issued/<number>.pdf, documents/quotes/<number>.pdf): only the characters a pattern can produce */
 const documentNumber: Check<string> = (v, path) => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(v) ? v : fail(path, `expected a document number, got ${describe(v)}`));
 const counterKey: Check<string> = (v, path) => (typeof v === 'string' && /^(\d{4}|all)$/.test(v) ? v : fail(path, `expected a year or "all", got ${describe(v)}`));
 const counter = int(1, 999_999_999);
@@ -381,7 +366,7 @@ const sha256: Check<string> = (v, path) => (typeof v === 'string' && SHA256.test
 
 const snapshot = objectOf<IssueSnapshot>({ company: objectOf(companyProfileShape), customer: objectOf(contactProfileShape), account: accountDetails });
 
-/** The PDF of an issued invoice is named after its number, so a file name from another device cannot point elsewhere */
+/** The PDF of an issued invoice or a finalized quote is named after its number, so a file name from another device cannot point elsewhere */
 const issued: Check<IssuedInfo> = (v, path) => {
   const info = objectOf<IssuedInfo>({
     number: documentNumber,
@@ -393,6 +378,23 @@ const issued: Check<IssuedInfo> = (v, path) => {
   })(v, path);
   return info.pdf.file === `${info.number}.pdf` ? info : fail(`${path}.pdf.file`, 'does not match the number');
 };
+
+const quoteFile = objectOf<QuoteFile>({
+  schemaVersion: num,
+  id: documentId,
+  kind: exactly('quote'),
+  customerId: contactId,
+  date: isoDate,
+  validUntil: isoDate,
+  subject: text(QUOTE_LIMITS.subject),
+  introText: text(QUOTE_LIMITS.text),
+  closingText: text(QUOTE_LIMITS.text),
+  lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
+  issued: nullable(issued),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(QUOTE_MERGEABLE_FIELDS),
+});
 
 const cancelledInvoice = objectOf<CancelledInvoice>({ id: documentId, number: documentNumber, date: isoDate });
 
@@ -453,7 +455,7 @@ const counters: Check<NumberingFile['counters']> = (v, path) => {
 
 export const validateNumbering: Check<NumberingFile> = objectOf<NumberingFile>({
   schemaVersion: num,
-  range: oneOf<NumberRange>(['invoice']),
+  range: oneOf(NUMBER_RANGES),
   counters,
   reservations: listOf(reservation, MAX_RESERVATIONS),
 });

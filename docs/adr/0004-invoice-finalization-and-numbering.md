@@ -1,6 +1,6 @@
 # 0004: Invoice finalization and numbering
 
-- Status: Accepted; issuing and cancelling implemented on 24 October 2026 (`src/app/issue.ts`), correction invoices open
+- Status: Accepted; issuing and cancelling implemented on 24 October 2026 (`src/app/issue.ts`), finalizing quotes on 28 October 2026, correction invoices open
 - Date: 2026-10-21
 
 ## Context
@@ -35,6 +35,13 @@ German law and the GoBD (principles for proper bookkeeping in electronic form) e
 - The cancelled invoice does not change. It counts as cancelled because a cancellation refers to it. The cancellation's ID is derived from the invoice's ID, so an invoice has at most one cancellation, and a second attempt finishes the first one.
 - The corrected invoice is a new invoice: "Copy as new invoice" starts a draft with everything from the cancelled one.
 - A correction of a part of an invoice (a correction invoice with only the difference) is not covered yet.
+
+### Quotes (added 28 October 2026)
+
+- A quote is a draft until it is finalized ("Angebot abschließen", the status "sent" of F21 in the roadmap). Finalizing works like issuing an invoice: the number is reserved and read back, a snapshot of the master data is taken (with the company's default account, which the footer of the quote shows), the PDF is written once without the draft marks with its SHA-256, and the audit log gets an entry (`issueQuote`). From then on the quote never changes, also not by the merge. A changed offer will be a new version (F22); until then it starts as a copy.
+- Quotes have a number range of their own: `numbering/quote.json` with the pattern `invoiceDefaults.quotePattern` (default `AN-{YYYY}-{NNNN}`), restarting every year by the date of the quote like invoices, and a folder of their own for the PDFs, `documents/quotes/`. The two ranges never block each other, also when two patterns produce the same text; the settings still require a quote pattern other than the invoice pattern, so that a quote number is not mistaken for an invoice number.
+- Quote numbers need no gapless sequence (§ 14 Abs. 4 Nr. 4 UStG is about invoices), but they are unique and never given twice, with the same reservation as invoices.
+- A quote needs a customer, at least one line and a validity that has not run out. It needs no address: it is no invoice.
 
 ## Consequences
 

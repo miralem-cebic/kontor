@@ -118,15 +118,20 @@ const QUOTE_MERGEABLE: Record<QuoteMergeableField, true> = {
 export const QUOTE_MERGEABLE_FIELDS = keysOf(QUOTE_MERGEABLE);
 export type QuoteMergeableField = keyof QuoteContent | 'customerId' | 'deletedAt';
 
-/** documents/<id>.json with `kind: 'quote'`: a quote, a draft for now */
+/** documents/<id>.json with `kind: 'quote'`: a quote, a draft until it is finalized ("Angebot abschließen") */
 export interface QuoteFile extends QuoteContent {
   schemaVersion: number;
   id: DocumentId;
   kind: 'quote';
-  /** The customer; the quote shows the contact's current data until it is issued (later: a snapshot) */
+  /** The customer; the draft shows the contact's current data, a finalized quote its snapshot */
   customerId: ContactId;
+  /**
+   * null for a draft. Finalizing gives the quote its number from the quote range, a snapshot of the master data and
+   * its PDF in documents/quotes/; like an issued invoice it never changes again (ADR 0004). Not a mergeable field.
+   */
+  issued: IssuedInfo | null;
   createdAt: string;
-  /** Soft delete: a deleted quote stays in its file and is hidden in the app */
+  /** Soft delete: a deleted draft stays in its file and is hidden in the app */
   deletedAt: string | null;
   fieldUpdatedAt: Partial<Record<QuoteMergeableField, string>>;
 }
@@ -197,8 +202,12 @@ export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId
   return undefined;
 }
 
-/** The number ranges; only invoices have numbers so far */
-export type NumberRange = 'invoice';
+/**
+ * The number ranges: invoices (with their cancellations) and quotes. Each range has its own counters
+ * (numbering/<range>.json) and its own folder of PDFs, so the numbers of one range never block the other.
+ */
+export type NumberRange = 'invoice' | 'quote';
+export const NUMBER_RANGES: readonly NumberRange[] = ['invoice', 'quote'];
 
 /** A number given to a document, written before its PDF so that a second writer is noticed (ADR 0004) */
 export interface Reservation {
@@ -232,9 +241,13 @@ interface AuditBase {
 
 /**
  * A line of audit/<YYYY-MM>.jsonl: what happened to a document, appended and never changed. `issue`: an invoice was
- * issued; `cancel`: a cancellation invoice was issued, `cancels` names the invoice it cancels.
+ * issued; `cancel`: a cancellation invoice was issued, `cancels` names the invoice it cancels; `issueQuote`: a quote was
+ * finalized.
  */
-export type AuditEntry = (AuditBase & { action: 'issue' }) | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } });
+export type AuditEntry =
+  | (AuditBase & { action: 'issue' })
+  | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } })
+  | (AuditBase & { action: 'issueQuote' });
 
 /** What a backup holds */
 export interface BackupSnapshot {

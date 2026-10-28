@@ -13,13 +13,17 @@ import { writeFile, writeJson } from './jsonFile';
 //   items/<id>.json            one file per item or service of the catalogue
 //   documents/<id>.json        one file per quote or invoice
 //   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
+//   documents/quotes/<file>    the PDF of a finalized quote, the same way
 //   numbering/<range>.json     the counters and reservations of a number range
 //   audit/<YYYY-MM>.jsonl      what happened to documents, one JSON line each, only appended
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', issued: 'issued', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+
+/** The folder in documents/ with the PDFs of each number range */
+const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
 
 const AUDIT_MONTH = /^\d{4}-\d{2}$/;
 
@@ -140,14 +144,14 @@ export class FsRepository implements Repository {
 
   /**
    * A file of the same ID but another kind (a quote where an invoice is saved) is not merged: the save stops. Neither
-   * is an invoice issued with another number. An issued invoice in the folder wins over a draft (see mergeDocument),
-   * and since the merge then leaves the file as it is, nothing is written.
+   * is a document issued with another number. An issued invoice or a finalized quote in the folder wins over a draft
+   * (see mergeDocument), and since the merge then leaves the file as it is, nothing is written.
    */
   saveDocument(document: DocumentFile) {
     const read = (raw: unknown) => {
       const remote = migrate('document', raw);
       if (remote.kind !== document.kind) throw new InvalidFileError(`documents/${document.id}.json holds a ${remote.kind}, not a ${document.kind}`);
-      if (remote.kind === 'invoice' && document.kind === 'invoice' && remote.issued && document.issued && remote.issued.number !== document.issued.number) {
+      if (remote.issued && document.issued && remote.issued.number !== document.issued.number) {
         throw new ConflictError(`documents/${document.id}.json was issued as ${remote.issued.number}, not ${document.issued.number}`);
       }
       return remote;
@@ -181,24 +185,24 @@ export class FsRepository implements Repository {
     });
   }
 
-  listIssuedFiles() {
-    return attempt(async () => [...(await listFiles(await this.issuedDir())).keys()]);
+  listIssuedFiles(range: NumberRange) {
+    return attempt(async () => [...(await listFiles(await this.issuedDir(range))).keys()]);
   }
 
-  writeIssuedFile(name: string, data: Uint8Array) {
+  writeIssuedFile(range: NumberRange, name: string, data: Uint8Array) {
     return attempt(async () => {
       checkName(name);
-      const dir = await this.issuedDir();
-      if (await fileExists(dir, name)) throw new ConflictError(`documents/issued/${name} exists already`);
+      const dir = await this.issuedDir(range);
+      if (await fileExists(dir, name)) throw new ConflictError(`documents/${ISSUED_DIRS[range]}/${name} exists already`);
       await writeFile(dir, name, new Blob([data.slice()], { type: 'application/pdf' }));
     });
   }
 
-  readIssuedFile(name: string) {
+  readIssuedFile(range: NumberRange, name: string) {
     return attempt(async () => {
       // the name comes from a document file, which other devices may have written: never use it unchecked
       checkName(name);
-      const file = await (await (await this.issuedDir()).getFileHandle(name)).getFile();
+      const file = await (await (await this.issuedDir(range)).getFileHandle(name)).getFile();
       return new Uint8Array(await file.arrayBuffer());
     });
   }
@@ -221,9 +225,9 @@ export class FsRepository implements Repository {
     });
   }
 
-  private async issuedDir() {
+  private async issuedDir(range: NumberRange) {
     const documents = await this.root.getDirectoryHandle(DIRS.documents, { create: true });
-    return documents.getDirectoryHandle(DIRS.issued, { create: true });
+    return documents.getDirectoryHandle(ISSUED_DIRS[range], { create: true });
   }
 
   /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */

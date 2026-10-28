@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
 import { makeContact, makeInvoice, makeItem, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import type { IssuedInfo } from '../../src/domain/invoice';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
 
 const company = () => JSON.parse(JSON.stringify(sampleCompany())) as Record<string, unknown>;
@@ -24,8 +25,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(migrate('company', company()).schemaVersion).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
+    expect(migrate('company', company()).schemaVersion).toBe(6);
   });
 
   it('a file without version counts as version 1', () => {
@@ -139,7 +140,7 @@ describe('version 4 → 5: cancellation invoices', () => {
 
   it('a draft and an issued invoice of version 4 cancel nothing', () => {
     for (const raw of [invoiceV4(), invoiceV4(JSON.parse(JSON.stringify(sampleIssued())))]) {
-      expect(migrate('document', raw)).toEqual({ ...raw, cancels: null, schemaVersion: 5 });
+      expect(migrate('document', raw)).toEqual({ ...raw, cancels: null, schemaVersion: SCHEMA_VERSION });
     }
   });
 
@@ -153,7 +154,7 @@ describe('version 4 → 5: cancellation invoices', () => {
       numbering: asV4({ schemaVersion: 4, range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
     };
     for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
-      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: 5 });
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
     }
   });
 
@@ -162,38 +163,101 @@ describe('version 4 → 5: cancellation invoices', () => {
   });
 });
 
+describe('version 5 → 6: quote numbers', () => {
+  const asV5 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 5 }) as Record<string, unknown>;
+  /** invoiceDefaults as version 5 wrote them: without a quote pattern */
+  const withoutQuotePattern = (defaults: unknown) => {
+    const { quotePattern: _q, ...rest } = defaults as Record<string, unknown>;
+    return rest;
+  };
+  const companyV5 = () => {
+    const raw = asV5(sampleCompany());
+    return { ...raw, invoiceDefaults: withoutQuotePattern(raw['invoiceDefaults']) };
+  };
+  const quoteV5 = () => {
+    const { issued: _i, ...raw } = asV5(makeQuote(makeContact(sampleContact()).id, sampleQuote()));
+    return raw;
+  };
+
+  it('company.json gets the default quote pattern; the change time of the field stays', () => {
+    const before = companyV5();
+    const after = migrate('company', before);
+    expect(after.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: '' });
+    expect(after.fieldUpdatedAt).toEqual(before['fieldUpdatedAt']);
+  });
+
+  it('a quote pattern that is there already stays', () => {
+    const raw = asV5(sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A{NNN}', paymentTermDays: 14, footer: '' } }));
+    expect(migrate('company', raw).invoiceDefaults.quotePattern).toBe('A{NNN}');
+  });
+
+  it('a quote of version 5 is a draft', () => {
+    const raw = quoteV5();
+    expect(migrate('document', raw)).toEqual({ ...raw, issued: null, schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('the company in the snapshot of an issued invoice gets the quote pattern as well, so that it is read like company.json', () => {
+    const issued = JSON.parse(JSON.stringify(sampleIssued())) as IssuedInfo;
+    const snapshotV5 = { ...issued.snapshot, company: { ...issued.snapshot.company, invoiceDefaults: withoutQuotePattern(issued.snapshot.company.invoiceDefaults) } };
+    const raw = asV5({ ...makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null), issued: { ...issued, snapshot: snapshotV5 } });
+    const after = migrate('document', raw);
+    expect(after.issued?.snapshot.company.invoiceDefaults.quotePattern).toBe('AN-{YYYY}-{NNNN}');
+    // everything else of the issued invoice stays as it was
+    expect({ ...after.issued, snapshot: snapshotV5 }).toEqual(raw['issued']);
+    // a draft invoice has no snapshot
+    const draft = asV5(makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null));
+    expect(migrate('document', draft)).toEqual({ ...draft, schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('contacts, items and range files of version 5 stay as they are', () => {
+    const files = {
+      contact: asV5(makeContact(sampleContact())),
+      item: asV5(makeItem(sampleItem())),
+      numbering: asV5({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 5 refuses a file of version 6, so it never edits a finalized quote', () => {
+    expect(() => upgrade('document', { ...quoteV5(), issued: null, schemaVersion: 6 }, MIGRATIONS.document, 5)).toThrow(NewerSchemaError);
+  });
+});
+
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 5 → 6, not in use)', () => {
+describe('migration template (version 6 → 7, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 5,
+      from: 6,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
-        return { ...raw, invoiceDefaults: { ...defaults, quotePattern: 'AN-{YYYY}-{NNNN}' } };
+        return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
       },
     },
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 6);
-    expect(doc['schemaVersion']).toBe(6);
-    expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
+    const doc = upgrade('company', company(), steps, 7);
+    expect(doc['schemaVersion']).toBe(7);
+    expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 6);
+    const doc = upgrade('company', companyV1(), steps, 7);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
+    expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(5)], 6)).toEqual({ ...raw, schemaVersion: 6 });
+    expect(upgrade('company', raw, [unchanged(6)], 7)).toEqual({ ...raw, schemaVersion: 7 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 6)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 7)).toThrow(InvalidFileError);
   });
 });

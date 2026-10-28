@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { documentTotals, draftLineNet, draftTotals, emptyLineDraft, hasNegativeRate, lineDraftFromItem, lineNetInRange, type LineDraft } from '../../src/domain/document';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
-import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, quoteMatches, readQuote, type QuoteDraft } from '../../src/domain/quote';
+import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, quoteDraftFromCopy, quoteMatches, quoteProblems, readQuote, type QuoteDraft } from '../../src/domain/quote';
 import { UNITS } from '../../src/domain/units';
 import { VAT_RATES } from '../../src/domain/vat';
 import { fcParams, sampleItem, sampleLine, sampleQuote } from './fixtures';
@@ -119,6 +119,33 @@ describe('draft ↔ quote', () => {
       }),
       fcParams,
     ));
+});
+
+describe('copy', () => {
+  it('a copy is dated today and valid for the usual days; everything else is as in the quote', () => {
+    const d = quoteDraftFromCopy('c1', sampleQuote(), '2026-12-01', 'de', key);
+    expect(d).toMatchObject({ customerId: 'c1', date: '2026-12-01', validUntil: '2026-12-31', subject: 'Website-Relaunch', introText: 'Sehr geehrte Damen und Herren,', closingText: '' });
+    expect(d.lines.map((l) => [l.name, l.quantity, l.unitPrice])).toEqual([
+      ['Webdesign', '12,5', '85,00'],
+      ['Lektorat', '1', '300,00'],
+    ]);
+  });
+});
+
+describe('ready to finalize', () => {
+  const facts = { hasCustomer: true, lineCount: 2, validUntil: '2026-11-21' };
+
+  it('a quote with a customer, lines and a validity that has not run out yet', () => {
+    expect(quoteProblems(facts, '2026-11-21')).toEqual([]);
+  });
+
+  it('lists what is missing, in the order of the form', () => {
+    expect(quoteProblems({ hasCustomer: false, lineCount: 0, validUntil: '2026-11-21' }, '2026-10-22')).toEqual(['noCustomer', 'noLines']);
+  });
+
+  it('a quote that has run out is not sent', () => {
+    expect(quoteProblems(facts, '2026-11-22')).toEqual(['expired']);
+  });
 });
 
 describe('lists', () => {

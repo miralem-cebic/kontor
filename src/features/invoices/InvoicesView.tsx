@@ -27,9 +27,10 @@ import {
   type ServicePeriod,
   type TaxTreatment,
 } from '../../domain/invoice';
-import { formatCents } from '../../domain/money';
+import { formatCents, type Cents } from '../../domain/money';
+import { isOverdue, paidAmount, paymentStateOf, type PaymentState } from '../../domain/payment';
 import type { DocumentId } from '../../data/ids';
-import { isInvoice, isQuote, type CompanyFile, type InvoiceFile, type QuoteFile } from '../../data/types';
+import { isInvoice, isQuote, type CompanyFile, type InvoiceFile, type PaymentFile, type QuoteFile } from '../../data/types';
 import { issueInvoice } from '../../app/issue';
 import { currentLang, t, type MessageKey } from '../../i18n';
 import { accountDetail, accountName, fieldError, issueFailureText, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
@@ -45,13 +46,36 @@ import { IssuedInvoiceView } from './IssuedInvoiceView';
 
 /** A new invoice starts empty, from a quote, or as a copy of an issued invoice */
 type Mode = { kind: 'list' } | { kind: 'new'; fromQuote: DocumentId | null; copyOf: DocumentId | null } | { kind: 'edit'; id: DocumentId };
-type StatusFilter = 'all' | 'drafts' | 'issued';
+type StatusFilter = 'all' | 'drafts' | 'issued' | 'open' | 'overdue';
 
 const STATUS_FILTERS: { value: StatusFilter; label: MessageKey }[] = [
   { value: 'all', label: 'invoices.filterAll' },
   { value: 'drafts', label: 'invoices.filterDrafts' },
   { value: 'issued', label: 'invoices.filterIssued' },
+  { value: 'open', label: 'invoices.filterOpen' },
+  { value: 'overdue', label: 'invoices.filterOverdue' },
 ];
+
+/** The payment state of an issued invoice and whether it is overdue; null for drafts and for cancellation invoices */
+interface PaymentStatus {
+  state: PaymentState;
+  overdue: boolean;
+}
+
+function paymentStatusOf(inv: InvoiceFile, gross: Cents, payments: readonly PaymentFile[], cancelled: boolean, today: string): PaymentStatus | null {
+  if (!inv.issued || inv.cancels) return null;
+  const paid = paidAmount(payments);
+  return { state: paymentStateOf({ gross, paid, cancelled }), overdue: isOverdue({ gross, paid, due: dueDate(inv), today, cancelled }) };
+}
+
+/** The badge of an issued invoice in the list: overdue, or what has been paid so far */
+function paymentBadge(status: PaymentStatus | null) {
+  if (!status) return null;
+  if (status.overdue) return <span className="badge danger-badge list-badge">{t('payments.overdue')}</span>;
+  if (status.state === 'paid') return <span className="badge muted-badge list-badge">{t('payments.statusPaid')}</span>;
+  if (status.state === 'partlyPaid') return <span className="badge muted-badge list-badge">{t('payments.statusPartly')}</span>;
+  return null;
+}
 
 /** `fromQuote` opens a new invoice for that quote right away */
 export function InvoicesView({ fromQuote }: { fromQuote: DocumentId | null }) {
@@ -121,7 +145,30 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
   // an issued invoice keeps the customer and the VAT scheme it was issued with
   const customerName = (inv: InvoiceFile) => inv.issued?.snapshot.customer.name ?? contacts.get(inv.customerId)?.name ?? '';
   const gross = (inv: InvoiceFile) => invoiceTotals(inv, inv.issued ? inv.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
-  const inFilter = (inv: InvoiceFile, f: StatusFilter) => f === 'all' || (f === 'issued') === (inv.issued !== null);
+  const payments = useApp((s) => s.payments);
+  const today = isoDateOf(new Date());
+  const paymentsByInvoice = useMemo(() => {
+    const groups = new Map<string, PaymentFile[]>();
+    for (const p of payments.values()) groups.set(p.invoiceId, [...(groups.get(p.invoiceId) ?? []), p]);
+    return groups;
+  }, [payments]);
+  const statusOf = (inv: InvoiceFile) => paymentStatusOf(inv, gross(inv), paymentsByInvoice.get(inv.id) ?? [], cancelled.has(inv.id), today);
+  const inFilter = (inv: InvoiceFile, f: StatusFilter): boolean => {
+    switch (f) {
+      case 'all':
+        return true;
+      case 'drafts':
+        return !inv.issued;
+      case 'issued':
+        return inv.issued !== null;
+      case 'open': {
+        const status = statusOf(inv);
+        return status !== null && (status.state === 'open' || status.state === 'partlyPaid');
+      }
+      case 'overdue':
+        return statusOf(inv)?.overdue === true;
+    }
+  };
   const matching = active.filter((inv) => invoiceMatches(inv, customerName(inv), query) || (inv.issued?.number.toLowerCase().includes(query.trim().toLowerCase()) ?? false));
   const shown = matching.filter((inv) => inFilter(inv, status));
   const lang = currentLang();
@@ -182,6 +229,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
                       {inv.issued ? inv.issued.number : <span className="badge muted-badge">{t('invoices.draft')}</span>}
                       {inv.cancels && <span className="badge muted-badge list-badge">{t('invoices.cancellationShort')}</span>}
                       {cancelled.has(inv.id) && <span className="badge muted-badge list-badge">{t('invoices.cancelled')}</span>}
+                      {paymentBadge(statusOf(inv))}
                     </td>
                     <td>{formatDate(inv.date)}</td>
                     <td>

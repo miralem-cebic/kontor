@@ -242,6 +242,7 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .page-note{margin:0 0 12px}
 .f-row>.w-date{flex:0 1 180px}
 .muted-badge{color:var(--text-2);background:var(--muted-soft)}
+.badge.danger-badge{color:var(--danger);background:transparent;box-shadow:inset 0 0 0 1px var(--danger)}
 .list-badge{margin-left:6px}
 .versions{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:12px}
 .version-head{display:flex;align-items:baseline;gap:8px}

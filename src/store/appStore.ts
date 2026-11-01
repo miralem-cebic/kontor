@@ -4,8 +4,8 @@ import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type ItemId } from '../data/ids';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../data/merge';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type ItemId, type PaymentId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
 import { makeAccount, makeContact, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
 import type {
@@ -20,6 +20,7 @@ import type {
   ItemFile,
   ItemMergeableField,
   MergeableField,
+  PaymentFile,
   QuoteFile,
   QuoteMergeableField,
   RevisedQuote,
@@ -44,13 +45,15 @@ export interface AppState {
   items: ReadonlyMap<ItemId, ItemFile>;
   /** Quotes and invoices by ID, deleted ones included (they are hidden in the UI) */
   documents: ReadonlyMap<DocumentId, DocumentFile>;
+  /** Payments of issued invoices by ID, deleted ones included (they count as no payment) */
+  payments: ReadonlyMap<PaymentId, PaymentFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -69,21 +72,23 @@ export interface CompanyRecords {
   contacts: readonly ContactFile[];
   items: readonly ItemFile[];
   documents: readonly DocumentFile[];
+  payments: readonly PaymentFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items, documents }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents, payments }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items, documents }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
     contacts: contacts.length ? new Map([...s.contacts, ...byId(contacts)]) : s.contacts,
     items: items.length ? new Map([...s.items, ...byId(items)]) : s.items,
     documents: documents.length ? new Map([...s.documents, ...byId(documents)]) : s.documents,
+    payments: payments.length ? new Map([...s.payments, ...byId(payments)]) : s.payments,
   }));
 }
 
@@ -283,6 +288,24 @@ export function deleteDocument(id: DocumentId) {
   if (!current || current.deletedAt || current.issued) return;
   const at = nowIso();
   putDocument(withChanges<'deletedAt', DocumentFile>(current, { deletedAt: at }, at));
+}
+
+/* ---------- Payments ---------- */
+
+function putPayment(payment: PaymentFile) {
+  set((s) => ({ payments: new Map(s.payments).set(payment.id, payment) }));
+}
+
+/** A payment as the payment flow wrote it (app/payments.ts): recorded, or deleted; the file is written first */
+export function putWrittenPayment(payment: PaymentFile) {
+  putPayment(payment);
+}
+
+/** Like `integrateWrittenCompany`, for one payment */
+export function integrateWrittenPayment(sent: PaymentFile, written: PaymentFile) {
+  const current = get().payments.get(written.id);
+  if (!current) return;
+  putPayment(current === sent ? written : mergePayment(current, written));
 }
 
 /** An invoice or a quote as the issue flow wrote it (app/issue.ts): issued, with its number, snapshot and PDF */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeCancellation, makeContact, makeInvoice, makeItem, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import { cents } from '../../src/domain/money';
 import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleLine, sampleProfile, sampleQuote } from './fixtures';
@@ -366,5 +367,37 @@ describe('range file validation', () => {
     ['reservations', [{ number: 'RE-1', counterKey: '2026', counter: 1, documentId: 'constructor', device: 'dev-1', at: '2026-10-31T10:00:00.000Z' }]],
   ])('rejects %s = %j', (field, value) => {
     expect(() => migrate('numbering', file({ [field]: value }))).toThrow(InvalidFileError);
+  });
+});
+
+describe('payment file validation', () => {
+  const invoice = makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null);
+  const account = sampleCompany().bank.defaultAccountId;
+  const payment = makePayment(invoice.id, { date: '2026-10-31', amount: cents(11_900), accountId: account, note: 'Ref 4711' });
+  const written = () => JSON.parse(JSON.stringify(payment)) as Record<string, unknown>;
+
+  it('accepts a payment written by the app', () => {
+    expect(migrate('payment', written())).toEqual(payment);
+  });
+
+  it.each([
+    ['id', '__proto__'],
+    ['id', '../x'],
+    ['invoiceId', ''],
+    ['date', '31.10.2026'],
+    ['amount', 0],
+    ['amount', -100],
+    ['amount', 1.5],
+    ['amount', '119,00'],
+    ['amount', 100_000_000_000],
+    ['accountId', 'a b'],
+    ['note', 'x'.repeat(4001)],
+    ['deletedAt', 'not a time'],
+  ])('refuses a payment whose %s is %j', (field, value) => {
+    expect(() => migrate('payment', { ...written(), [field]: value })).toThrow(InvalidFileError);
+  });
+
+  it('a deleted payment is still read, so that the deletion survives', () => {
+    expect(migrate('payment', { ...written(), deletedAt: '2026-11-02T08:00:00.000Z' }).deletedAt).toBe('2026-11-02T08:00:00.000Z');
   });
 });

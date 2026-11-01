@@ -1,5 +1,7 @@
 import type { IssueFailure } from '../app/issue';
 import type { PaymentFailure } from '../app/payments';
+import type { StorageErrorKind } from '../data/repository';
+import type { DunningProblem } from '../domain/dunning';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
@@ -45,6 +47,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   amountNotPositive: 'problem.amountNotPositive',
   amountTooHigh: 'problem.amountTooHigh',
   accountRemoved: 'problem.accountRemoved',
+  feeNegative: 'problem.feeNegative',
   validUntil: 'problem.validUntil',
   periodEnd: 'problem.periodEnd',
   'iban.format': 'problem.ibanFormat',
@@ -237,5 +240,39 @@ export function paymentFailureText(f: PaymentFailure): string {
     case 'conflict':
     case 'other':
       return t('payments.failed', { reason: errorText(f) });
+  }
+}
+
+const DUNNING_PROBLEM_KEY: Record<DunningProblem, MessageKey> = {
+  cancelled: 'dunning.problem.cancelled',
+  notOpen: 'dunning.problem.notOpen',
+  notOverdue: 'dunning.problem.notOverdue',
+  dateInFuture: 'dunning.problem.dateInFuture',
+  dateBeforePrevious: 'dunning.problem.dateBeforePrevious',
+  noNextLevel: 'dunning.problem.noNextLevel',
+  rateUnknown: 'dunning.problem.rateUnknown',
+};
+
+/** Why a dunning cannot be planned, as the form tells it */
+export const dunningProblemText = (p: DunningProblem): string => t(DUNNING_PROBLEM_KEY[p]);
+
+/** The kind of a dunning failure, for the message */
+export type DunningFailureKind = 'notReady' | 'planning' | StorageErrorKind;
+
+/** Why a dunning was not created: the storage failures say what went wrong in the folder */
+export function dunningFailureText(f: DunningFailureKind): string {
+  switch (f) {
+    case 'notReady':
+      return t('dunning.notReady');
+    case 'planning':
+      return t('dunning.planning');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('dunning.failed', { reason: errorText(f) });
   }
 }

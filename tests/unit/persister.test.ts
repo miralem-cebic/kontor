@@ -24,7 +24,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [] });
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [] });
   persister = new Persister(repo);
   persister.start();
 });

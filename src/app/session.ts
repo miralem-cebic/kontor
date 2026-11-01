@@ -169,11 +169,14 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   if (!loadedDocuments.ok) return set({ phase: 'failed', error: loadedDocuments.error.kind, currentId: company.id });
   const loadedPayments = await r.loadPayments();
   if (!loadedPayments.ok) return set({ phase: 'failed', error: loadedPayments.error.kind, currentId: company.id });
+  const loadedDunnings = await r.loadDunnings();
+  if (!loadedDunnings.ok) return set({ phase: 'failed', error: loadedDunnings.error.kind, currentId: company.id });
   const records: CompanyRecords = {
     contacts: loadedContacts.value.contacts,
     items: loadedItems.value.items,
     documents: loadedDocuments.value.documents,
     payments: loadedPayments.value.payments,
+    dunnings: loadedDunnings.value.dunnings,
   };
   repo = r;
   loadCompany(company, records);
@@ -187,6 +190,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     { issues: loadedItems.value.issues, toast: 'toast.unreadableItems' },
     { issues: loadedDocuments.value.issues, toast: 'toast.unreadableDocuments' },
     { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
+    { issues: loadedDunnings.value.issues, toast: 'toast.unreadableDunnings' },
   ] as const;
   for (const { issues, toast } of unreadable) {
     if (!issues.length) continue;
@@ -248,14 +252,16 @@ function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ 
   const items = recoverRecords(copy['items'], loaded.items, (raw) => migrate('item', raw), mergeItem);
   const documents = recoverRecords(copy['documents'], loaded.documents, (raw) => migrate('document', raw), mergeDocument);
   const payments = recoverRecords(copy['payments'], loaded.payments, (raw) => migrate('payment', raw), mergePayment);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length) return null;
+  // a dunning is never changed: the copy's version of one that the folder holds is not used
+  const dunnings = recoverRecords(copy['dunnings'], loaded.dunnings, (raw) => migrate('dunning', raw), (local) => local);
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length) return null;
   showToast(t('toast.recovered'));
-  return { company: nextCompany, contacts, items, documents, payments };
+  return { company: nextCompany, contacts, items, documents, payments, dunnings };
 }
 
 /** Daily backup of the state in the store. Errors here must not disturb the work. */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents, payments } = useApp.getState();
+  const { company, contacts, items, documents, payments, dunnings } = useApp.getState();
   if (!company) return;
   const res = await dailyBackup(r, {
     company,
@@ -263,6 +269,7 @@ async function maintenance(r: FsRepository) {
     items: [...items.values()],
     documents: [...documents.values()],
     payments: [...payments.values()],
+    dunnings: [...dunnings.values()],
   });
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }

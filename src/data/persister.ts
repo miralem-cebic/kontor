@@ -1,8 +1,8 @@
-import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenItem, integrateWrittenPayment, setSaveStatus, useApp, type AppState } from '../store/appStore';
+import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenItem, integrateWrittenPayment, setSaveStatus, useApp, type AppState } from '../store/appStore';
 import type { CompanyId } from './ids';
 import { classifyError, type Repository, type StorageError } from './repository';
 import { err, ok, type Result } from './result';
-import type { CompanyFile, ContactFile, DocumentFile, ItemFile, PaymentFile } from './types';
+import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, PaymentFile } from './types';
 
 // Watches the app state and writes what changed, debounced. Objects that come from the folder or were already
 // written are kept in `clean` and do not trigger another write. When a write fails, the change stays in the queue
@@ -25,12 +25,13 @@ export class Persister {
 
   /** Starts watching; the state at this moment counts as saved */
   start() {
-    const { company, contacts, items, documents, payments } = useApp.getState();
+    const { company, contacts, items, documents, payments, dunnings } = useApp.getState();
     if (company) this.clean.add(company);
     for (const c of contacts.values()) this.clean.add(c);
     for (const i of items.values()) this.clean.add(i);
     for (const d of documents.values()) this.clean.add(d);
     for (const p of payments.values()) this.clean.add(p);
+    for (const d of dunnings.values()) this.clean.add(d);
     this.unsubscribe = useApp.subscribe((next, prev) => this.diff(next, prev));
     window.addEventListener('beforeunload', this.onUnload);
   }
@@ -58,6 +59,7 @@ export class Persister {
     this.diffRecords(next.items, prev.items, (i) => this.enqueueItem(i));
     this.diffRecords(next.documents, prev.documents, (d) => this.enqueueDocument(d));
     this.diffRecords(next.payments, prev.payments, (p) => this.enqueuePayment(p));
+    this.diffRecords(next.dunnings, prev.dunnings, (d) => this.enqueueDunning(d));
     const company = next.company;
     if (!company || company === prev.company || this.clean.has(company)) return;
     this.enqueue('company', async () => {
@@ -98,6 +100,16 @@ export class Persister {
       if (!r.ok) return r;
       this.clean.add(r.value);
       if (r.value !== document) integrateWrittenDocument(document, r.value);
+      return ok(undefined);
+    });
+  }
+
+  private enqueueDunning(dunning: DunningFile) {
+    this.enqueue(`dunning:${dunning.id}`, async () => {
+      const r = await this.repo.saveDunning(dunning);
+      if (!r.ok) return r;
+      this.clean.add(r.value);
+      if (r.value !== dunning) integrateWrittenDunning(dunning, r.value);
       return ok(undefined);
     });
   }
@@ -173,7 +185,7 @@ export class Persister {
 
   /** Copy of the unsaved company and records in the browser, in case the folder cannot be reached (also after a crash) */
   writeEmergencyCopy() {
-    const { company, contacts, items, documents, payments } = useApp.getState();
+    const { company, contacts, items, documents, payments, dunnings } = useApp.getState();
     if (!company) return;
     const dirty = <T extends object>(records: ReadonlyMap<unknown, T>) => [...records.values()].filter((r) => !this.clean.has(r));
     const copy: EmergencyCopy = {
@@ -183,8 +195,9 @@ export class Persister {
       items: dirty(items),
       documents: dirty(documents),
       payments: dirty(payments),
+      dunnings: dirty(dunnings),
     };
-    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length) return;
+    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length) return;
     try {
       localStorage.setItem(emergencyKey(company.id), JSON.stringify(copy));
     } catch {
@@ -212,4 +225,5 @@ export interface EmergencyCopy {
   items: ItemFile[];
   documents: DocumentFile[];
   payments: PaymentFile[];
+  dunnings: DunningFile[];
 }

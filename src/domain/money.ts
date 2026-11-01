@@ -43,6 +43,9 @@ export function basisPoints(value: number): BasisPoints {
 
 export const ZERO: Cents = cents(0);
 
+/** The largest dunning fee: 999,999.99 € */
+export const MAX_FEE: Cents = cents(99_999_999);
+
 const fromBig = (value: bigint): Cents => cents(Number(value));
 
 /** n / d rounded to the nearest integer; a half is rounded away from zero. d must be positive. */

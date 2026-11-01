@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeContact, makeInvoice, makeItem, makePayment, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import type { CompanyFile } from '../../src/data/types';
 import { cents } from '../../src/domain/money';
@@ -112,15 +112,15 @@ describe('FsRepository', () => {
   });
 
   it('writes, lists and removes backups', async () => {
-    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [] }));
-    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [] }));
+    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [] }));
+    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [] }));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21', '2026-10-20']);
     const backups = await root.getDirectoryHandle('backups');
     const backup = JSON.parse(await text(backups, '2026-10-21.json'));
     expect(backup).toMatchObject({ schemaVersion: SCHEMA_VERSION, company: { id: company.id } });
     must(await repo.removeBackup('2026-10-20'));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21']);
-    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [] })).ok).toBe(false);
+    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [] })).ok).toBe(false);
   });
 });
 
@@ -398,5 +398,29 @@ describe('payments in the folder', () => {
     must(await repo.writeBackup('2026-10-31', { company, contacts: [], items: [], documents: [], payments: [p] }));
     const backup = JSON.parse(await text(await root.getDirectoryHandle('backups'), '2026-10-31.json'));
     expect(backup.payments).toEqual([JSON.parse(JSON.stringify(p))]);
+  });
+});
+
+describe('dunnings in the folder', () => {
+  const invoiceId = brandId<'DocumentId'>('1b4e28ba-2fa1-41d2-883f-0016d3cca427');
+  const dunning = (level: 'reminder' | 'level1' = 'reminder') =>
+    makeDunning(invoiceId, { level, date: '2026-10-20', debtor: 'business', open: cents(100_000), interestFrom: '2026-10-16', interest: cents(144), flatFee: cents(4_000), fee: cents(0), payBy: '2026-11-03' });
+
+  it('saves and loads dunnings in dunnings/, and a broken one is reported', async () => {
+    const a = dunning();
+    must(await repo.saveDunning(a));
+    const broken = dunning('level1');
+    ((await (await root.getDirectoryHandle('dunnings', { create: true })).getFileHandle(`${broken.id}.json`, { create: true })) as MemFile).content = new Blob(['{ "id": 1 }']);
+    const { dunnings, issues } = must(await new FsRepository(root.asHandle()).loadDunnings());
+    expect(dunnings).toEqual([a]);
+    expect(issues.map((i) => i.file)).toEqual([`dunnings/${broken.id}.json`]);
+    expect(JSON.parse(await text(await root.getDirectoryHandle('dunnings'), `${a.id}.json`)).schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it('the daily backup holds the dunnings as well', async () => {
+    const a = dunning();
+    must(await repo.writeBackup('2026-10-31', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [a] }));
+    const backup = JSON.parse(await text(await root.getDirectoryHandle('backups'), '2026-10-31.json'));
+    expect(backup.dunnings).toEqual([JSON.parse(JSON.stringify(a))]);
   });
 });

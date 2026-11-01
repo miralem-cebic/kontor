@@ -6,7 +6,7 @@ import type { ItemProfile } from '../domain/item';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newItemId, newPaymentId, type AccountId, type ContactId, type DocumentId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newItemId, newPaymentId, type AccountId, type ContactId, type DocumentId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
   INVOICE_MERGEABLE_FIELDS,
@@ -22,6 +22,7 @@ import {
   type InvoiceMergeableField,
   type ItemFile,
   type ItemMergeableField,
+  type DunningFile,
   type MergeableField,
   type PaymentFile,
   type PaymentMergeableField,
@@ -31,7 +32,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const nowIso = (): string => stampNow();
 
@@ -112,4 +113,9 @@ export function makePayment(invoiceId: DocumentId, content: Omit<PaymentContent,
   const fieldUpdatedAt: Partial<Record<PaymentMergeableField, string>> = {};
   for (const f of PAYMENT_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
   return { schemaVersion: SCHEMA_VERSION, id: newPaymentId(), invoiceId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
+}
+
+/** A new dunning of an issued invoice, from what its plan claims (domain/dunning.ts). A dunning is never changed afterwards. */
+export function makeDunning(invoiceId: DocumentId, content: Omit<DunningFile, 'schemaVersion' | 'id' | 'invoiceId' | 'createdAt'>): DunningFile {
+  return { schemaVersion: SCHEMA_VERSION, id: newDunningId(), invoiceId, ...content, createdAt: nowIso() };
 }

@@ -28,6 +28,7 @@ import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/do
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
+import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunning';
 import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { versionNumber } from '../domain/quoteVersions';
@@ -49,6 +50,7 @@ import {
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
+  type DunningFile,
   type InvoiceFile,
   type ItemFile,
   NUMBER_RANGES,
@@ -109,6 +111,7 @@ const accountId = idOf<'AccountId'>();
 const itemId = idOf<'ItemId'>();
 const documentId = idOf<'DocumentId'>();
 const paymentId = idOf<'PaymentId'>();
+const dunningId = idOf<'DunningId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -489,4 +492,23 @@ export const validatePayment: Check<PaymentFile> = objectOf<PaymentFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(PAYMENT_MERGEABLE_FIELDS),
+});
+
+/** A dunning claims an amount in cents: not negative, at most the largest amount a file may hold */
+const claimAmount: Check<Cents> = (v, path) => cents(int(0, MAX_PAYMENT_AMOUNT)(v, path));
+
+export const validateDunning: Check<DunningFile> = objectOf<DunningFile>({
+  schemaVersion: num,
+  id: dunningId,
+  invoiceId: documentId,
+  level: oneOf<DunningLevel>(DUNNING_LEVELS),
+  date: isoDate,
+  debtor: oneOf<Debtor>(['business', 'consumer']),
+  open: paymentAmount,
+  interestFrom: isoDate,
+  interest: claimAmount,
+  flatFee: claimAmount,
+  fee: claimAmount,
+  payBy: isoDate,
+  createdAt: dateTime,
 });

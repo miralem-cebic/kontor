@@ -6,9 +6,10 @@ import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { Cents } from '../domain/money';
+import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId, type PaymentId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -233,6 +234,35 @@ export interface PaymentFile extends Omit<PaymentContent, 'accountId'> {
   fieldUpdatedAt: Partial<Record<PaymentMergeableField, string>>;
 }
 
+/**
+ * dunnings/<id>.json: a dunning (Mahnung) of an issued invoice, as it was issued: its level, its date, the open amount it
+ * was made on, and the interest, the flat fee and the fee it claims. A dunning is a letter that went out, so it never
+ * changes and is never deleted; the claim of the invoice is its open amount plus what all its dunnings claim.
+ */
+export interface DunningFile {
+  schemaVersion: number;
+  id: DunningId;
+  /** The issued invoice the dunning is about */
+  invoiceId: DocumentId;
+  level: DunningLevel;
+  /** The date of the dunning (YYYY-MM-DD) */
+  date: string;
+  /** Decides the interest rate and the flat fee: a business customer or a consumer */
+  debtor: Debtor;
+  /** The amount open on the invoice on that date */
+  open: Cents;
+  /** The first day of the interest this dunning claims */
+  interestFrom: string;
+  interest: Cents;
+  /** The flat fee (40 €) of a business customer, charged once for the claim; 0 otherwise */
+  flatFee: Cents;
+  /** The dunning fee typed in; 0 when none */
+  fee: Cents;
+  /** The day by which the debtor is asked to pay (YYYY-MM-DD) */
+  payBy: string;
+  createdAt: string;
+}
+
 /** documents/<id>.json: quotes and invoices, told apart by `kind` */
 export type DocumentFile = QuoteFile | InvoiceFile;
 
@@ -301,7 +331,16 @@ export type AuditEntry =
   | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } })
   | (AuditBase & { action: 'issueQuote' })
   | (AuditBase & { action: 'recordPayment'; payment: AuditPayment })
-  | (AuditBase & { action: 'deletePayment'; payment: AuditPayment });
+  | (AuditBase & { action: 'deletePayment'; payment: AuditPayment })
+  | (AuditBase & { action: 'dunning'; dunning: AuditDunning });
+
+/** The dunning a line of the audit log is about; `amount` is what it adds to the claim */
+export interface AuditDunning {
+  id: DunningId;
+  level: DunningLevel;
+  date: string;
+  amount: Cents;
+}
 
 /** The payment a line of the audit log is about; `documentId` and `number` of the line are its invoice */
 export interface AuditPayment {
@@ -317,6 +356,7 @@ export interface BackupSnapshot {
   items: readonly ItemFile[];
   documents: readonly DocumentFile[];
   payments: readonly PaymentFile[];
+  dunnings: readonly DunningFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

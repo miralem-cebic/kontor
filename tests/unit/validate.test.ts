@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidFileError, migrate } from '../../src/data/migrations';
-import { makeCancellation, makeContact, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
 import { cents } from '../../src/domain/money';
 import { brandId } from '../../src/data/ids';
 import { isValidId } from '../../src/data/validate';
@@ -399,5 +399,33 @@ describe('payment file validation', () => {
 
   it('a deleted payment is still read, so that the deletion survives', () => {
     expect(migrate('payment', { ...written(), deletedAt: '2026-11-02T08:00:00.000Z' }).deletedAt).toBe('2026-11-02T08:00:00.000Z');
+  });
+});
+
+describe('dunning file validation', () => {
+  const invoice = makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null);
+  const dunning = makeDunning(invoice.id, { level: 'reminder', date: '2026-10-20', debtor: 'business', open: cents(100_000), interestFrom: '2026-10-16', interest: cents(144), flatFee: cents(4_000), fee: cents(0), payBy: '2026-11-03' });
+  const written = () => JSON.parse(JSON.stringify(dunning)) as Record<string, unknown>;
+
+  it('accepts a dunning written by the app', () => {
+    expect(migrate('dunning', written())).toEqual(dunning);
+  });
+
+  it.each([
+    ['id', '__proto__'],
+    ['invoiceId', ''],
+    ['level', 'level4'],
+    ['date', '20.10.2026'],
+    ['debtor', 'company'],
+    ['open', 0],
+    ['open', 1.5],
+    ['interestFrom', '2026-02-30'],
+    ['interest', -1],
+    ['flatFee', 'x'],
+    ['fee', -5],
+    ['payBy', '2026-13-01'],
+    ['createdAt', 'nope'],
+  ])('refuses a dunning whose %s is %j', (field, value) => {
+    expect(() => migrate('dunning', { ...written(), [field]: value })).toThrow(InvalidFileError);
   });
 });

@@ -4,7 +4,7 @@ import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type ItemId, type PaymentId } from '../data/ids';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId } from '../data/ids';
 import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
 import { makeAccount, makeContact, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
@@ -19,6 +19,7 @@ import type {
   InvoiceMergeableField,
   ItemFile,
   ItemMergeableField,
+  DunningFile,
   MergeableField,
   PaymentFile,
   QuoteFile,
@@ -47,13 +48,15 @@ export interface AppState {
   documents: ReadonlyMap<DocumentId, DocumentFile>;
   /** Payments of issued invoices by ID, deleted ones included (they count as no payment) */
   payments: ReadonlyMap<PaymentId, PaymentFile>;
+  /** Dunnings of issued invoices by ID; a dunning is never changed */
+  dunnings: ReadonlyMap<DunningId, DunningFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -73,15 +76,16 @@ export interface CompanyRecords {
   items: readonly ItemFile[];
   documents: readonly DocumentFile[];
   payments: readonly PaymentFile[];
+  dunnings: readonly DunningFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items, documents, payments }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
@@ -89,6 +93,7 @@ export function applyRecovered(company: CompanyFile, { contacts, items, document
     items: items.length ? new Map([...s.items, ...byId(items)]) : s.items,
     documents: documents.length ? new Map([...s.documents, ...byId(documents)]) : s.documents,
     payments: payments.length ? new Map([...s.payments, ...byId(payments)]) : s.payments,
+    dunnings: dunnings.length ? new Map([...s.dunnings, ...byId(dunnings)]) : s.dunnings,
   }));
 }
 
@@ -306,6 +311,22 @@ export function integrateWrittenPayment(sent: PaymentFile, written: PaymentFile)
   const current = get().payments.get(written.id);
   if (!current) return;
   putPayment(current === sent ? written : mergePayment(current, written));
+}
+
+/* ---------- Dunnings ---------- */
+
+function putDunning(dunning: DunningFile) {
+  set((s) => ({ dunnings: new Map(s.dunnings).set(dunning.id, dunning) }));
+}
+
+/** A dunning as the dunning flow wrote it (app/dunning.ts): issued, and kept as it is from then on */
+export function putWrittenDunning(dunning: DunningFile) {
+  putDunning(dunning);
+}
+
+/** Like `integrateWrittenPayment`, for one dunning: a dunning is never changed, so the written one is kept */
+export function integrateWrittenDunning(_sent: DunningFile, written: DunningFile) {
+  if (get().dunnings.has(written.id)) putDunning(written);
 }
 
 /** An invoice or a quote as the issue flow wrote it (app/issue.ts): issued, with its number, snapshot and PDF */

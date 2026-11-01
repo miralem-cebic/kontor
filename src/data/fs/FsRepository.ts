@@ -3,7 +3,7 @@ import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from '../types';
+import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
@@ -13,6 +13,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   items/<id>.json            one file per item or service of the catalogue
 //   documents/<id>.json        one file per quote or invoice
 //   payments/<id>.json         one file per payment of an issued invoice
+//   dunnings/<id>.json         one file per dunning (Mahnung) of an issued invoice, never changed
 //   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
 //   documents/quotes/<file>    the PDF of a finalized quote, the same way
 //   numbering/<range>.json     the counters and reservations of a number range
@@ -21,7 +22,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
 
 /** The folder in documents/ with the PDFs of each number range */
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
@@ -158,6 +159,18 @@ export class FsRepository implements Repository {
       return remote;
     };
     return attempt(() => this.saveRecord(DIRS.documents, document, read, mergeDocument));
+  }
+
+  loadDunnings() {
+    return attempt(async () => {
+      const { records, issues } = await this.loadRecords(DIRS.dunnings, (raw) => migrate('dunning', raw));
+      return { dunnings: records, issues };
+    });
+  }
+
+  /** A dunning is a letter that went out: the file that is there wins over a different one with the same ID */
+  saveDunning(dunning: DunningFile) {
+    return attempt(() => this.saveRecord(DIRS.dunnings, dunning, (raw) => migrate('dunning', raw), (_local, remote) => remote));
   }
 
   loadPayments() {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
-import { makeContact, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
 import { cents } from '../../src/domain/money';
 import type { IssuedInfo } from '../../src/domain/invoice';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
@@ -26,8 +26,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(7);
-    expect(migrate('company', company()).schemaVersion).toBe(7);
+    expect(SCHEMA_VERSION).toBe(8);
+    expect(migrate('company', company()).schemaVersion).toBe(8);
   });
 
   it('a file without version counts as version 1', () => {
@@ -256,13 +256,54 @@ describe('version 6 → 7: payments', () => {
   });
 });
 
+/** A file of version 7 of any kind, as the app of version 7 wrote it */
+const asV7 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 7 }) as Record<string, unknown>;
+
+describe('version 7 → 8: dunnings', () => {
+  const invoiceId = makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null).id;
+  const dunning = makeDunning(invoiceId, {
+    level: 'reminder',
+    date: '2026-10-20',
+    debtor: 'business',
+    open: cents(100_000),
+    interestFrom: '2026-10-16',
+    interest: cents(144),
+    flatFee: cents(4_000),
+    fee: cents(0),
+    payBy: '2026-11-03',
+  });
+
+  it('a dunning file is read with its checks', () => {
+    const raw = JSON.parse(JSON.stringify(dunning)) as Record<string, unknown>;
+    expect(migrate('dunning', raw)).toEqual(dunning);
+  });
+
+  it('the files of the other kinds of version 7 stay as they are', () => {
+    const files = {
+      company: asV7(sampleCompany()),
+      contact: asV7(makeContact(sampleContact())),
+      item: asV7(makeItem(sampleItem())),
+      document: asV7(makeQuote(makeContact(sampleContact()).id, sampleQuote())),
+      payment: asV7(makePayment(invoiceId, { date: '2026-10-31', amount: cents(11_900), accountId: sampleCompany().bank.defaultAccountId, note: '' })),
+      numbering: asV7({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 7 refuses a dunning, so it never drops a letter it does not know', () => {
+    expect(() => upgrade('dunning', { ...JSON.parse(JSON.stringify(dunning)), schemaVersion: 8 }, MIGRATIONS.dunning, 7)).toThrow(NewerSchemaError);
+  });
+});
+
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 7 → 8, not in use)', () => {
+describe('migration template (version 8 → 9, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 7,
+      from: 8,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
@@ -271,13 +312,13 @@ describe('migration template (version 7 → 8, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 8);
-    expect(doc['schemaVersion']).toBe(8);
+    const doc = upgrade('company', company(), steps, 9);
+    expect(doc['schemaVersion']).toBe(9);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 8);
+    const doc = upgrade('company', companyV1(), steps, 9);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
@@ -285,10 +326,10 @@ describe('migration template (version 7 → 8, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(7)], 8)).toEqual({ ...raw, schemaVersion: 8 });
+    expect(upgrade('company', raw, [unchanged(8)], 9)).toEqual({ ...raw, schemaVersion: 9 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 8)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 9)).toThrow(InvalidFileError);
   });
 });

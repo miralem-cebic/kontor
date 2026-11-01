@@ -29,3 +29,12 @@ export function toLocalDate(iso: string): Date {
   const [y = 0, mo = 1, d = 1] = iso.split('-').map(Number);
   return new Date(y, mo - 1, d);
 }
+
+/** The number of days from the first valid ISO date to the second (negative when the second comes first) */
+export function daysBetween(from: string, to: string): number {
+  const ms = (iso: string) => {
+    const [y = 0, mo = 1, d = 1] = iso.split('-').map(Number);
+    return Date.UTC(y, mo - 1, d);
+  };
+  return Math.round((ms(to) - ms(from)) / 86_400_000);
+}

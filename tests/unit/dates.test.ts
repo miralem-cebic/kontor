@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { addDays, isIsoDate, isoDateOf, toLocalDate } from '../../src/domain/dates';
+import { addDays, daysBetween, isIsoDate, isoDateOf, toLocalDate } from '../../src/domain/dates';
 import { fcParams } from './fixtures';
 
 describe('ISO dates', () => {
@@ -27,5 +27,25 @@ describe('ISO dates', () => {
   it('a local day survives the way through Date', () => {
     expect(isoDateOf(toLocalDate('2026-10-22'))).toBe('2026-10-22');
     expect(isoDateOf(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
+  });
+});
+
+describe('days between dates', () => {
+  it('counts the days from the first date to the second, negative when the second comes first', () => {
+    expect(daysBetween('2026-10-22', '2026-10-22')).toBe(0);
+    expect(daysBetween('2026-10-22', '2026-11-21')).toBe(30);
+    expect(daysBetween('2026-12-31', '2027-01-01')).toBe(1);
+    expect(daysBetween('2024-02-28', '2024-03-01')).toBe(2);
+    expect(daysBetween('2026-11-21', '2026-10-22')).toBe(-30);
+  });
+
+  it('is the inverse of adding days (property)', () => {
+    fc.assert(
+      fc.property(fc.date({ min: new Date('1990-01-01T00:00:00Z'), max: new Date('2090-12-31T00:00:00Z'), noInvalidDate: true }), fc.integer({ min: -4000, max: 4000 }), (d, n) => {
+        const iso = d.toISOString().slice(0, 10);
+        expect(daysBetween(iso, addDays(iso, n))).toBe(n);
+      }),
+      fcParams,
+    );
   });
 });

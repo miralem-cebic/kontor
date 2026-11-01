@@ -4,6 +4,7 @@ import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../../domain/i
 import type { DocumentId } from '../../data/ids';
 import { cancellationOf, type InvoiceFile } from '../../data/types';
 import { cancelInvoice } from '../../app/issue';
+import { DunningCard } from './DunningCard';
 import { PaymentsCard } from './PaymentsCard';
 import { fmt, t } from '../../i18n';
 import { accountDetail, accountName, cancelFailureText } from '../../lib/labels';
@@ -47,6 +48,11 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
   const allPayments = useApp((s) => s.payments);
   const cancellation = useMemo(() => cancellationOf(documents.values(), invoice.id), [documents, invoice.id]);
   const payments = useMemo(() => [...allPayments.values()].filter((p) => p.invoiceId === invoice.id), [allPayments, invoice.id]);
+  const allDunnings = useApp((s) => s.dunnings);
+  const dunnings = useMemo(
+    () => [...allDunnings.values()].filter((d) => d.invoiceId === invoice.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)),
+    [allDunnings, invoice.id],
+  );
   const smallBusiness = snapshot.company.tax.vat.kind === 'smallBusiness';
   const totals = invoiceTotals(invoice, smallBusiness);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -107,6 +113,8 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
         <IssuedLines id="issued-lines" lines={invoice.lines} totals={totals} note={vatNote(invoice.taxTreatment, smallBusiness)} />
 
         {!cancels && <PaymentsCard invoice={invoice} gross={totals.gross} payments={payments} cancelled={!!cancellation} />}
+
+        {!cancels && <DunningCard invoice={invoice} gross={totals.gross} payments={payments} dunnings={dunnings} cancelled={!!cancellation} />}
 
         <div className="card-actions">
           <PdfButton prepare={() => invoice.id} />

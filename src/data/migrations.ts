@@ -1,7 +1,7 @@
 import { DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateItem, validateNumbering, validatePayment, type Check } from './validate';
-import type { CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, PaymentFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateItem, validateNumbering, validatePayment, type Check } from './validate';
+import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, PaymentFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
@@ -15,6 +15,7 @@ interface FileTypes {
   document: DocumentFile;
   numbering: NumberingFile;
   payment: PaymentFile;
+  dunning: DunningFile;
 }
 export type FileKind = keyof FileTypes;
 
@@ -25,6 +26,7 @@ const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = {
   document: validateDocument,
   numbering: validateNumbering,
   payment: validatePayment,
+  dunning: validateDunning,
 };
 
 export interface Migration {
@@ -101,14 +103,16 @@ const quotesIssued: Migration = {
  * invoices be issued and adds the range files (numbering/), a new kind of file. Version 5 adds cancellation invoices.
  * Version 6 gives quotes numbers: they can be finalized and get new versions, and the settings have a quote pattern.
  * Version 7 adds payments, a new kind of file (payments/); no existing file changes.
+ * Version 8 adds dunnings, a new kind of file (dunnings/); no existing file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6)],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7)],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
 };
 
 export class NewerSchemaError extends Error {

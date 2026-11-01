@@ -21,11 +21,12 @@ import type { ContactFile } from '../../data/types';
 import { t, type MessageKey } from '../../i18n';
 import { fieldError } from '../../lib/labels';
 import { addContact, deleteContact, showToast, updateContact, useApp } from '../../store/appStore';
+import { CustomerAccountView } from './CustomerAccountView';
 
 // Customers and suppliers: a searchable list, and a form for a new or an existing contact.
 // The form edits a draft; only "Save" puts the checked contact into the store (and the persister writes it).
 
-type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ContactId };
+type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ContactId } | { kind: 'account'; id: ContactId };
 type RoleFilter = 'all' | 'customer' | 'supplier';
 
 export function ContactsView() {
@@ -37,17 +38,19 @@ export function ContactsView() {
     case 'new':
       return <ContactEditor contact={null} onDone={back} />;
     case 'edit':
-      return <EditExisting id={mode.id} onDone={back} />;
+      return <EditExisting id={mode.id} onDone={back} onAccount={(id) => setMode({ kind: 'account', id })} />;
+    case 'account':
+      return <CustomerAccountView contactId={mode.id} onDone={() => setMode({ kind: 'edit', id: mode.id })} />;
   }
 }
 
-function EditExisting({ id, onDone }: { id: ContactId; onDone: () => void }) {
+function EditExisting({ id, onDone, onAccount }: { id: ContactId; onDone: () => void; onAccount: (id: ContactId) => void }) {
   const contact = useApp((s) => s.contacts.get(id));
   // deleted or gone (for example merged away from another device): back to the list
   useEffect(() => {
     if (!contact || contact.deletedAt) onDone();
   }, [contact, onDone]);
-  return contact && !contact.deletedAt ? <ContactEditor key={id} contact={contact} onDone={onDone} /> : null;
+  return contact && !contact.deletedAt ? <ContactEditor key={id} contact={contact} onDone={onDone} onAccount={onAccount} /> : null;
 }
 
 /* ---------- List ---------- */
@@ -147,7 +150,7 @@ function ContactRow({ contact: c, onOpen }: { contact: ContactFile; onOpen: (id:
 
 /* ---------- Form ---------- */
 
-function ContactEditor({ contact, onDone }: { contact: ContactFile | null; onDone: () => void }) {
+function ContactEditor({ contact, onDone, onAccount }: { contact: ContactFile | null; onDone: () => void; onAccount?: (id: ContactId) => void }) {
   const contacts = useApp((s) => s.contacts);
   const defaultTerm = useApp((s) => s.company?.invoiceDefaults.paymentTermDays ?? 0);
   const [draft, setDraft] = useState<ContactDraft>(() => (contact ? draftFromContact(contact) : emptyContactDraft()));
@@ -215,6 +218,14 @@ function ContactEditor({ contact, onDone }: { contact: ContactFile | null; onDon
         <h1 ref={heading} tabIndex={-1}>
           {contact ? contact.name : t('contacts.new')}
         </h1>
+        {contact && contact.roles.customer && onAccount && (
+          <>
+            <span className="sp" />
+            <button type="button" className="btn" onClick={() => onAccount(contact.id)}>
+              {t('contacts.account')}
+            </button>
+          </>
+        )}
       </header>
       <div className="split">
         <JumpNav label={t('contacts.sections')} sections={sections} />

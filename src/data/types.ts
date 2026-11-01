@@ -5,8 +5,10 @@ import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
+import type { Cents } from '../domain/money';
+import type { PaymentContent } from '../domain/payment';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type ItemId, type PaymentId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -208,6 +210,29 @@ export interface InvoiceFile extends InvoiceContent {
   fieldUpdatedAt: Partial<Record<InvoiceMergeableField, string>>;
 }
 
+/** Payment fields merged one by one. A payment never changes, so only its deletion is a change, and a deletion wins like any other field. */
+const PAYMENT_MERGEABLE: Record<PaymentMergeableField, true> = { deletedAt: true };
+export const PAYMENT_MERGEABLE_FIELDS = keysOf(PAYMENT_MERGEABLE);
+export type PaymentMergeableField = 'deletedAt';
+
+/**
+ * payments/<id>.json: money received for an issued invoice, booked to one of the bank accounts. Its content is never
+ * changed; a wrong payment is soft-deleted and the deletion is written to the audit log. The payments of an invoice
+ * are a separate file each, so that two devices recording payments for the same invoice never overwrite each other.
+ */
+export interface PaymentFile extends Omit<PaymentContent, 'accountId'> {
+  schemaVersion: number;
+  id: PaymentId;
+  /** The issued invoice the payment belongs to */
+  invoiceId: DocumentId;
+  /** The account the money arrived on; it may have been removed since (then it stays as it was) */
+  accountId: AccountId;
+  createdAt: string;
+  /** Soft delete: a deleted payment stays in its file and counts as no payment */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<PaymentMergeableField, string>>;
+}
+
 /** documents/<id>.json: quotes and invoices, told apart by `kind` */
 export type DocumentFile = QuoteFile | InvoiceFile;
 
@@ -274,7 +299,16 @@ interface AuditBase {
 export type AuditEntry =
   | (AuditBase & { action: 'issue' })
   | (AuditBase & { action: 'cancel'; cancels: { documentId: DocumentId; number: string } })
-  | (AuditBase & { action: 'issueQuote' });
+  | (AuditBase & { action: 'issueQuote' })
+  | (AuditBase & { action: 'recordPayment'; payment: AuditPayment })
+  | (AuditBase & { action: 'deletePayment'; payment: AuditPayment });
+
+/** The payment a line of the audit log is about; `documentId` and `number` of the line are its invoice */
+export interface AuditPayment {
+  id: PaymentId;
+  date: string;
+  amount: Cents;
+}
 
 /** What a backup holds */
 export interface BackupSnapshot {
@@ -282,6 +316,7 @@ export interface BackupSnapshot {
   contacts: readonly ContactFile[];
   items: readonly ItemFile[];
   documents: readonly DocumentFile[];
+  payments: readonly PaymentFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

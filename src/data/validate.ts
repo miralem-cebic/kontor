@@ -28,6 +28,7 @@ import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/do
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
+import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { versionNumber } from '../domain/quoteVersions';
 import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
@@ -52,6 +53,8 @@ import {
   type ItemFile,
   NUMBER_RANGES,
   type NumberingFile,
+  PAYMENT_MERGEABLE_FIELDS,
+  type PaymentFile,
   type QuoteFile,
   type Reservation,
   type RevisedQuote,
@@ -105,6 +108,7 @@ const contactId = idOf<'ContactId'>();
 const accountId = idOf<'AccountId'>();
 const itemId = idOf<'ItemId'>();
 const documentId = idOf<'DocumentId'>();
+const paymentId = idOf<'PaymentId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -469,4 +473,20 @@ export const validateNumbering: Check<NumberingFile> = objectOf<NumberingFile>({
   range: oneOf(NUMBER_RANGES),
   counters,
   reservations: listOf(reservation, MAX_RESERVATIONS),
+});
+
+/** A payment is at least one cent and at most the largest amount a file may hold; its content is checked by the form when it is recorded */
+const paymentAmount: Check<Cents> = (v, path) => cents(int(1, MAX_PAYMENT_AMOUNT)(v, path));
+
+export const validatePayment: Check<PaymentFile> = objectOf<PaymentFile>({
+  schemaVersion: num,
+  id: paymentId,
+  invoiceId: documentId,
+  date: isoDate,
+  amount: paymentAmount,
+  accountId,
+  note: text(PAYMENT_NOTE_LIMIT),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(PAYMENT_MERGEABLE_FIELDS),
 });

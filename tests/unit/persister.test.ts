@@ -4,7 +4,8 @@ import { MemDir } from '../../src/data/fs/memoryFs';
 import { emergencyKey, Persister } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
 import { brandId } from '../../src/data/ids';
-import { nowIso } from '../../src/data/schema';
+import { makePayment, nowIso } from '../../src/data/schema';
+import { cents } from '../../src/domain/money';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
 import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
@@ -23,7 +24,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [] });
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [] });
   persister = new Persister(repo);
   persister.start();
 });
@@ -328,5 +329,31 @@ describe('issued invoices in the store', () => {
     const id = A.addQuote(customer, sampleQuote(), revises);
     A.updateQuote(id, customer, sampleQuote({ subject: 'Geändert' }));
     expect(A.useApp.getState().documents.get(id)).toMatchObject({ subject: 'Geändert', issued: null, revises });
+  });
+});
+
+describe('payments', () => {
+  const invoiceId = brandId<'DocumentId'>('1b4e28ba-2fa1-41d2-883f-0016d3cca427');
+  const payment = () => makePayment(invoiceId, { date: '2026-11-02', amount: cents(5_000), accountId: A.useApp.getState().company!.bank.defaultAccountId, note: '' });
+
+  it('writes a payment that was put into the store to payments/', async () => {
+    const p = payment();
+    A.putWrittenPayment(p);
+    await persister.flush();
+    expect(must(await new FsRepository(root.asHandle()).loadPayments()).payments).toEqual([p]);
+  });
+
+  it('keeps a payment that cannot be written in the emergency copy until it is saved', async () => {
+    const orig = repo.savePayment.bind(repo);
+    repo.savePayment = async () => err({ kind: 'permission', cause: new Error('denied') });
+    const p = payment();
+    A.putWrittenPayment(p);
+    await persister.flush();
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id)) ?? 'null');
+    expect(copy.payments.map((x: { id: string }) => x.id)).toEqual([p.id]);
+
+    repo.savePayment = orig;
+    await persister.flush();
+    expect(must(await new FsRepository(root.asHandle()).loadPayments()).payments.map((x) => x.id)).toEqual([p.id]);
   });
 });

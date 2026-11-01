@@ -66,7 +66,7 @@ Tooling, `file://` build with CSP, data layer (repository, validation, migration
 - Date or period of service (done).
 - PDF with logo, bank details and optional GiroCode (EPC QR). The PDF of drafts is done: DIN 5008 letter with address field, information block and fold marks, lines over several pages, totals, the VAT note, payment request and footer, Inter embedded as a subset, sRGB output intent, "ENTWURF" across the page. GiroCode open.
 - Finalization: issuing assigns the number, writes `documents/issued/<number>.pdf` and its SHA-256, and an audit entry. Corrections only through cancellation or correction invoices ([ADR 0004](adr/0004-invoice-finalization-and-numbering.md)). Issuing is done (number reserved in `numbering/invoice.json` and read back, yearly restart, snapshot of the master data, read-only afterwards), and so is cancelling (a cancellation invoice with its own number that reverses the invoice; a copy of the invoice starts the corrected one). Correction invoices for a part of an invoice are open (F02).
-- Payments, including partial payments, each booked to one of the bank accounts; open and overdue invoices.
+- **Payments (done on 31 October 2026):** each booked to one of the bank accounts, partial payments, the open amount, and open and overdue invoices in the list. A payment is a file of its own (`payments/`), never changed; a wrong one is removed by a soft delete, and both steps are logged (`recordPayment`, `deletePayment`). Basis for the reminders (F03), the open items (I6), the customer accounts and the dashboard.
 - **Customer accounts:** per customer the invoices, payments, credit notes and the open balance.
 
 Must features added from the market analysis:

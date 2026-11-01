@@ -134,7 +134,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
 
   const [file] = await readDocuments(page);
   expect(file).toMatchObject({
-    schemaVersion: 6,
+    schemaVersion: 7,
     kind: 'invoice',
     quoteId: null,
     date: isoToday(),
@@ -315,7 +315,7 @@ test('issuing: the next number, the PDF in the folder, the audit entry, and no c
   await page.reload();
   await nav(page, 'Rechnungen');
   const filter = page.getByRole('group', { name: 'Nach Status filtern' });
-  await expect(filter.getByRole('button')).toHaveText(['Alle 2', 'Entwürfe 0', 'Ausgestellt 2']);
+  await expect(filter.getByRole('button')).toHaveText(['Alle 2', 'Entwürfe 0', 'Ausgestellt 2', 'Offen 2', 'Überfällig 0']);
   await page.getByRole('searchbox').fill(`RE-${year}-0002`);
   await expect(rows).toHaveCount(2);
   await rows.nth(1).getByRole('button', { name: 'Kunde GmbH' }).click();
@@ -397,7 +397,7 @@ test('cancelling: a cancellation invoice with the next number, its PDF and audit
   // the list marks both and keeps them after a reload
   await page.reload();
   await nav(page, 'Rechnungen');
-  await expect(page.getByRole('group', { name: 'Nach Status filtern' }).getByRole('button')).toHaveText(['Alle 3', 'Entwürfe 1', 'Ausgestellt 2']);
+  await expect(page.getByRole('group', { name: 'Nach Status filtern' }).getByRole('button')).toHaveText(['Alle 3', 'Entwürfe 1', 'Ausgestellt 2', 'Offen 0', 'Überfällig 0']);
   await expect(rows.filter({ hasText: second })).toContainText('Storno');
   await expect(rows.filter({ hasText: second })).toContainText(/-904,40\s€/);
   await expect(rows.filter({ hasText: first })).toContainText('Storniert');

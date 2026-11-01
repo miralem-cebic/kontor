@@ -4,6 +4,7 @@ import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../../domain/i
 import type { DocumentId } from '../../data/ids';
 import { cancellationOf, type InvoiceFile } from '../../data/types';
 import { cancelInvoice } from '../../app/issue';
+import { PaymentsCard } from './PaymentsCard';
 import { fmt, t } from '../../i18n';
 import { accountDetail, accountName, cancelFailureText } from '../../lib/labels';
 import { showToast, useApp } from '../../store/appStore';
@@ -43,7 +44,9 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
   const { issued, cancels } = invoice;
   const { snapshot } = issued;
   const documents = useApp((s) => s.documents);
+  const allPayments = useApp((s) => s.payments);
   const cancellation = useMemo(() => cancellationOf(documents.values(), invoice.id), [documents, invoice.id]);
+  const payments = useMemo(() => [...allPayments.values()].filter((p) => p.invoiceId === invoice.id), [allPayments, invoice.id]);
   const smallBusiness = snapshot.company.tax.vat.kind === 'smallBusiness';
   const totals = invoiceTotals(invoice, smallBusiness);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -102,6 +105,8 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
         </section>
 
         <IssuedLines id="issued-lines" lines={invoice.lines} totals={totals} note={vatNote(invoice.taxTreatment, smallBusiness)} />
+
+        {!cancels && <PaymentsCard invoice={invoice} gross={totals.gross} payments={payments} cancelled={!!cancellation} />}
 
         <div className="card-actions">
           <PdfButton prepare={() => invoice.id} />

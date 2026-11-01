@@ -1,9 +1,9 @@
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange } from '../types';
+import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
@@ -12,6 +12,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   contacts/<id>.json         one file per customer or supplier
 //   items/<id>.json            one file per item or service of the catalogue
 //   documents/<id>.json        one file per quote or invoice
+//   payments/<id>.json         one file per payment of an issued invoice
 //   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
 //   documents/quotes/<file>    the PDF of a finalized quote, the same way
 //   numbering/<range>.json     the counters and reservations of a number range
@@ -20,7 +21,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
 
 /** The folder in documents/ with the PDFs of each number range */
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
@@ -157,6 +158,17 @@ export class FsRepository implements Repository {
       return remote;
     };
     return attempt(() => this.saveRecord(DIRS.documents, document, read, mergeDocument));
+  }
+
+  loadPayments() {
+    return attempt(async () => {
+      const { records, issues } = await this.loadRecords(DIRS.payments, (raw) => migrate('payment', raw));
+      return { payments: records, issues };
+    });
+  }
+
+  savePayment(payment: PaymentFile) {
+    return attempt(() => this.saveRecord(DIRS.payments, payment, (raw) => migrate('payment', raw), mergePayment));
   }
 
   /* ---------- Numbering, issued files, audit ---------- */

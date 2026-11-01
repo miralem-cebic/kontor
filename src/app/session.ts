@@ -8,7 +8,7 @@ import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, sameJson } from '../data/merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
 import { emergencyKey, Persister } from '../data/persister';
 import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
@@ -167,7 +167,14 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   if (!loadedItems.ok) return set({ phase: 'failed', error: loadedItems.error.kind, currentId: company.id });
   const loadedDocuments = await r.loadDocuments();
   if (!loadedDocuments.ok) return set({ phase: 'failed', error: loadedDocuments.error.kind, currentId: company.id });
-  const records: CompanyRecords = { contacts: loadedContacts.value.contacts, items: loadedItems.value.items, documents: loadedDocuments.value.documents };
+  const loadedPayments = await r.loadPayments();
+  if (!loadedPayments.ok) return set({ phase: 'failed', error: loadedPayments.error.kind, currentId: company.id });
+  const records: CompanyRecords = {
+    contacts: loadedContacts.value.contacts,
+    items: loadedItems.value.items,
+    documents: loadedDocuments.value.documents,
+    payments: loadedPayments.value.payments,
+  };
   repo = r;
   loadCompany(company, records);
   persister = new Persister(r);
@@ -179,6 +186,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     { issues: loadedContacts.value.issues, toast: 'toast.unreadableContacts' },
     { issues: loadedItems.value.issues, toast: 'toast.unreadableItems' },
     { issues: loadedDocuments.value.issues, toast: 'toast.unreadableDocuments' },
+    { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
   ] as const;
   for (const { issues, toast } of unreadable) {
     if (!issues.length) continue;
@@ -239,16 +247,23 @@ function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ 
   const contacts = recoverRecords(copy['contacts'], loaded.contacts, (raw) => migrate('contact', raw), mergeContact);
   const items = recoverRecords(copy['items'], loaded.items, (raw) => migrate('item', raw), mergeItem);
   const documents = recoverRecords(copy['documents'], loaded.documents, (raw) => migrate('document', raw), mergeDocument);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length) return null;
+  const payments = recoverRecords(copy['payments'], loaded.payments, (raw) => migrate('payment', raw), mergePayment);
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length) return null;
   showToast(t('toast.recovered'));
-  return { company: nextCompany, contacts, items, documents };
+  return { company: nextCompany, contacts, items, documents, payments };
 }
 
 /** Daily backup of the state in the store. Errors here must not disturb the work. */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents } = useApp.getState();
+  const { company, contacts, items, documents, payments } = useApp.getState();
   if (!company) return;
-  const res = await dailyBackup(r, { company, contacts: [...contacts.values()], items: [...items.values()], documents: [...documents.values()] });
+  const res = await dailyBackup(r, {
+    company,
+    contacts: [...contacts.values()],
+    items: [...items.values()],
+    documents: [...documents.values()],
+    payments: [...payments.values()],
+  });
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }
 

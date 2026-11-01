@@ -1,5 +1,5 @@
 import type { Result } from './result';
-import type { AuditEntry, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange } from './types';
+import type { AuditEntry, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from './types';
 
 export interface BackupInfo {
   name: string;
@@ -60,6 +60,10 @@ export interface Repository {
    * issued one back, and one issued with another number stops the save (`conflict`).
    */
   saveDocument(document: DocumentFile): Promise<Result<DocumentFile, StorageError>>;
+  /** All payments, deleted ones included; a broken file is reported like a contact */
+  loadPayments(): Promise<Result<{ payments: PaymentFile[]; issues: LoadIssue[] }, StorageError>>;
+  /** Writes payments/<id>.json, with the same conflict check and merge as `saveCompany` */
+  savePayment(payment: PaymentFile): Promise<Result<PaymentFile, StorageError>>;
   /** numbering/<range>.json, or null when no number of that range was given yet */
   readNumbering(range: NumberRange): Promise<Result<NumberingFile | null, StorageError>>;
   /** Writes the range file and reads it back: what holds after the write, in case another device wrote at the same time */

@@ -3,14 +3,16 @@ import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import { cancellationContent, type InvoiceContent, type IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
+import type { PaymentContent } from '../domain/payment';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newItemId, type AccountId, type ContactId, type DocumentId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newItemId, newPaymentId, type AccountId, type ContactId, type DocumentId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
   INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
+  PAYMENT_MERGEABLE_FIELDS,
   QUOTE_MERGEABLE_FIELDS,
   type BankAccount,
   type CompanyFile,
@@ -21,13 +23,15 @@ import {
   type ItemFile,
   type ItemMergeableField,
   type MergeableField,
+  type PaymentFile,
+  type PaymentMergeableField,
   type QuoteFile,
   type QuoteMergeableField,
   type RevisedQuote,
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const nowIso = (): string => stampNow();
 
@@ -97,4 +101,15 @@ export function makeCancellation(original: InvoiceFile & { issued: IssuedInfo },
     deletedAt: null,
     fieldUpdatedAt,
   };
+}
+
+/**
+ * A new payment of an issued invoice. Every field counts as changed at creation time. A payment is never changed
+ * afterwards; only its deletion (a soft delete) is a change.
+ */
+export function makePayment(invoiceId: DocumentId, content: Omit<PaymentContent, 'accountId'> & { accountId: AccountId }): PaymentFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<PaymentMergeableField, string>> = {};
+  for (const f of PAYMENT_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return { schemaVersion: SCHEMA_VERSION, id: newPaymentId(), invoiceId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

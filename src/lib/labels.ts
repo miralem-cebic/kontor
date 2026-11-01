@@ -1,4 +1,5 @@
 import type { IssueFailure } from '../app/issue';
+import type { PaymentFailure } from '../app/payments';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
@@ -6,6 +7,7 @@ import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
 import type { IssueProblem, TaxTreatment, TaxTreatmentHint } from '../domain/invoice';
+import type { PaymentState } from '../domain/payment';
 import type { QuoteProblem } from '../domain/quote';
 import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
@@ -39,6 +41,10 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   tooManyLines: 'problem.tooManyLines',
   negativeTotal: 'problem.negativeTotal',
   date: 'problem.date',
+  amount: 'problem.amount',
+  amountNotPositive: 'problem.amountNotPositive',
+  amountTooHigh: 'problem.amountTooHigh',
+  accountRemoved: 'problem.accountRemoved',
   validUntil: 'problem.validUntil',
   periodEnd: 'problem.periodEnd',
   'iban.format': 'problem.ibanFormat',
@@ -199,5 +205,37 @@ export function cancelFailureText(f: IssueFailure): string {
     case 'conflict':
     case 'other':
       return t('invoices.cancelFailed', { reason: errorText(f) });
+  }
+}
+
+/** The state of an invoice's payments as a word */
+const PAYMENT_STATE_KEY: Record<PaymentState, MessageKey> = {
+  open: 'payments.statusOpen',
+  partlyPaid: 'payments.statusPartly',
+  paid: 'payments.statusPaid',
+  cancelled: 'invoices.cancelled',
+};
+
+export const paymentStateText = (s: PaymentState): string => t(PAYMENT_STATE_KEY[s]);
+
+/** Why a payment was not recorded or removed; storage failures say what went wrong in the folder */
+export function paymentFailureText(f: PaymentFailure): string {
+  switch (f) {
+    case 'notReady':
+      return t('payments.notReady');
+    case 'tooHigh':
+      return t('payments.tooHigh');
+    case 'notPositive':
+      return t('problem.amountNotPositive');
+    case 'gone':
+      return t('payments.gone');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('payments.failed', { reason: errorText(f) });
   }
 }

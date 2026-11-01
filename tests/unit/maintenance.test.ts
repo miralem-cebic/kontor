@@ -7,7 +7,7 @@ import { makeContact, makeItem, makeQuote } from '../../src/data/schema';
 import { sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
 
 let repo: FsRepository;
-const snapshot = { company: sampleCompany(), contacts: [], items: [], documents: [] };
+const snapshot = { company: sampleCompany(), contacts: [], items: [], documents: [], payments: [] };
 
 beforeEach(() => {
   repo = new FsRepository(new MemDir('c').asHandle());
@@ -38,7 +38,7 @@ describe('dailyBackup', () => {
     const contact = makeContact(sampleContact());
     const item = makeItem(sampleItem());
     const quote = makeQuote(contact.id, sampleQuote());
-    must(await dailyBackup(r, { company: snapshot.company, contacts: [contact], items: [item], documents: [quote] }, new Date(2026, 9, 21)));
+    must(await dailyBackup(r, { company: snapshot.company, contacts: [contact], items: [item], documents: [quote], payments: [] }, new Date(2026, 9, 21)));
     const file = await (await (await root.getDirectoryHandle('backups')).getFileHandle('2026-10-21.json')).getFile();
     const backup = JSON.parse(await file.text());
     expect(backup.company.id).toBe(snapshot.company.id);

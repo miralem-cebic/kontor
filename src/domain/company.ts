@@ -6,7 +6,7 @@
 import { err, ok, type Result } from '../data/result';
 import { ACCOUNT_LIMITS, type BankDetails } from './bankAccount';
 import { Checker, DEFAULT_COUNTRY, TEXT_LIMITS, type Address, type ContactDetails, type FieldError } from './check';
-import { patternProblem, DEFAULT_INVOICE_PATTERN, DEFAULT_QUOTE_PATTERN } from './numbering';
+import { counterOnlyProblem, patternProblem, DEFAULT_CONTACT_PATTERN, DEFAULT_INVOICE_PATTERN, DEFAULT_ITEM_PATTERN, DEFAULT_QUOTE_PATTERN } from './numbering';
 import { minMultiplierPercent } from './tax/tradeTax';
 import { isValidGermanVatId, isValidTaxNumber, normalizeVatId } from './taxIds';
 
@@ -40,6 +40,10 @@ export interface InvoiceDefaults {
   numberPattern: string;
   /** The pattern of quote numbers, given when a quote is finalized; it differs from `numberPattern` */
   quotePattern: string;
+  /** The pattern of the number a new contact starts with (customer or supplier number); a counter only, no date (F28) */
+  contactPattern: string;
+  /** The pattern of the number a new item starts with; a counter only, no date (F28) */
+  itemPattern: string;
   paymentTermDays: number;
   footer: string;
 }
@@ -118,6 +122,8 @@ export interface CompanyDraft {
   bic: string;
   numberPattern: string;
   quotePattern: string;
+  contactPattern: string;
+  itemPattern: string;
   paymentTermDays: string;
   footer: string;
 }
@@ -147,6 +153,8 @@ export const emptyDraft = (): CompanyDraft => ({
   bic: '',
   numberPattern: DEFAULT_INVOICE_PATTERN,
   quotePattern: DEFAULT_QUOTE_PATTERN,
+  contactPattern: DEFAULT_CONTACT_PATTERN,
+  itemPattern: DEFAULT_ITEM_PATTERN,
   paymentTermDays: String(DEFAULT_PAYMENT_TERM_DAYS),
   footer: '',
 });
@@ -177,6 +185,8 @@ export function draftFromProfile(p: CompanyProfile): CompanyDraft {
     bic: '',
     numberPattern: p.invoiceDefaults.numberPattern,
     quotePattern: p.invoiceDefaults.quotePattern,
+    contactPattern: p.invoiceDefaults.contactPattern,
+    itemPattern: p.invoiceDefaults.itemPattern,
     paymentTermDays: String(p.invoiceDefaults.paymentTermDays),
     footer: p.invoiceDefaults.footer,
   };
@@ -205,7 +215,7 @@ export const SECTION_FIELDS: Record<Section, readonly DraftField[]> = {
   master: ['name', 'owner', 'street', 'postalCode', 'city', 'country', 'email', 'phone'],
   tax: ['taxNumber', 'vatId', 'smallBusiness', 'vatMethod', 'vatPeriod', 'permanentExtension', 'businessKind', 'municipality', 'multiplier'],
   bank: ['bankHolder', 'iban', 'bic'],
-  invoice: ['numberPattern', 'quotePattern', 'paymentTermDays', 'footer'],
+  invoice: ['numberPattern', 'quotePattern', 'contactPattern', 'itemPattern', 'paymentTermDays', 'footer'],
 };
 
 type Read<T> = Result<T, CompanyFieldError[]>;
@@ -273,9 +283,15 @@ function readInvoice(d: CompanyDraft): Read<SectionValues['invoice']> {
   const quoteProblem = patternProblem(quotePattern);
   if (quoteProblem) c.add('quotePattern', `pattern.${quoteProblem}`);
   else if (quotePattern === numberPattern) c.add('quotePattern', 'pattern.sameAsInvoice');
+  const contactPattern = d.contactPattern.trim();
+  const contactProblem = counterOnlyProblem(contactPattern);
+  if (contactProblem) c.add('contactPattern', `pattern.${contactProblem}`);
+  const itemPattern = d.itemPattern.trim();
+  const itemProblem = counterOnlyProblem(itemPattern);
+  if (itemProblem) c.add('itemPattern', `pattern.${itemProblem}`);
   const paymentTermDays = c.paymentTerm('paymentTermDays', d.paymentTermDays);
   const footer = c.optionalText('footer', d.footer, LIMITS.footer);
-  return c.done(() => ({ invoiceDefaults: { numberPattern, quotePattern, paymentTermDays, footer } }));
+  return c.done(() => ({ invoiceDefaults: { numberPattern, quotePattern, contactPattern, itemPattern, paymentTermDays, footer } }));
 }
 
 const READERS: { [S in Section]: (d: CompanyDraft, year: number) => Read<SectionValues[S]> } = {

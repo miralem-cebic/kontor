@@ -69,6 +69,7 @@ const CONTACT_MERGEABLE: Record<keyof ContactProfile | 'deletedAt', true> = {
   leitwegId: true,
   orderReference: true,
   paymentTermDays: true,
+  language: true,
   notes: true,
   deletedAt: true,
 };

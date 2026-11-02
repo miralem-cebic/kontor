@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { nextFreeNumber } from '../../domain/numbering';
 import { byItemName, draftFromItem, emptyItemDraft, ITEM_LIMITS, itemMatches, readItem, type ItemDraft, type ItemField, type ItemFieldError } from '../../domain/item';
 import { formatCents, formatRate } from '../../domain/money';
 import { UNITS, type UnitCode } from '../../domain/units';
@@ -17,6 +18,13 @@ import { addItem, deleteItem, showToast, updateItem, useApp } from '../../store/
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ItemId };
 
 const useSmallBusiness = () => useApp((s) => s.company?.tax.vat.kind === 'smallBusiness');
+
+/** The number a new item starts with: the next free one of the pattern in the settings, deleted items counted (F28) */
+function suggestedItemNumber(): string {
+  const { company, items } = useApp.getState();
+  const pattern = company?.invoiceDefaults.itemPattern;
+  return (pattern && nextFreeNumber(pattern, [...items.values()].map((i) => i.number))) || '';
+}
 
 export function ItemsView() {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
@@ -132,7 +140,7 @@ function ItemEditor({ item, onDone }: { item: ItemFile | null; onDone: () => voi
   const items = useApp((s) => s.items);
   const smallBusiness = useSmallBusiness();
   const lang = currentLang();
-  const [draft, setDraft] = useState<ItemDraft>(() => (item ? draftFromItem(item, lang) : emptyItemDraft()));
+  const [draft, setDraft] = useState<ItemDraft>(() => (item ? draftFromItem(item, lang) : { ...emptyItemDraft(), number: suggestedItemNumber() }));
   const [errors, setErrors] = useState<readonly ItemFieldError[]>([]);
   const [checked, setChecked] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);

@@ -98,8 +98,12 @@ describe('readSection', () => {
 
   it('checks the quote number pattern, which must differ from the invoice pattern', () => {
     expect(emptyDraft().quotePattern).toBe('AN-{YYYY}-{NNNN}');
+    const numbers = readSection('invoice', sampleDraft(), YEAR);
+    expect(numbers.ok && numbers.value.invoiceDefaults).toMatchObject({ contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}' });
+    expect(problems(readSection('invoice', sampleDraft({ contactPattern: 'K-' }), YEAR))).toEqual(['contactPattern:pattern.noCounter']);
+    expect(problems(readSection('invoice', sampleDraft({ itemPattern: 'A-{YYYY}-{NNNN}' }), YEAR))).toEqual(['itemPattern:pattern.dateToken']);
     const r = readSection('invoice', sampleDraft({ quotePattern: ' A-{YY}-{NNN} ' }), YEAR);
-    expect(r.ok && r.value.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A-{YY}-{NNN}', paymentTermDays: 14, footer: '' });
+    expect(r.ok && r.value.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A-{YY}-{NNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '' });
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'AN {NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.invalidCharacter']);
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: '' }), YEAR))).toEqual(['quotePattern:pattern.empty']);
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'RE-{YYYY}-{NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.sameAsInvoice']);

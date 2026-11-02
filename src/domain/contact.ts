@@ -9,6 +9,13 @@ import { isPlausibleEuVatId, isPlausibleLeitwegId, normalizeVatId } from './taxI
 /** A company (or other organisation) or a private person */
 export type ContactKind = 'company' | 'person';
 
+/**
+ * The languages the documents of a contact can be made in (F05): the same two as the interface, listed here because the
+ * domain imports no i18n module.
+ */
+export const DOCUMENT_LANGUAGES = ['de', 'en'] as const;
+export type DocumentLanguage = (typeof DOCUMENT_LANGUAGES)[number];
+
 export interface ContactRoles {
   customer: boolean;
   supplier: boolean;
@@ -38,6 +45,8 @@ export interface ContactProfile {
   /** Payment term for this contact; null means the company's default */
   paymentTermDays: number | null;
   notes: string;
+  /** The language of the documents for this contact: invoices, quotes, dunnings and their e-mails; German by default */
+  language: DocumentLanguage;
 }
 
 export const CONTACT_LIMITS = {
@@ -72,6 +81,8 @@ export interface ContactDraft {
   /** Empty means the company's default */
   paymentTermDays: string;
   notes: string;
+  /** The language of the documents: German or English */
+  language: DocumentLanguage;
 }
 
 export type ContactField = keyof ContactDraft;
@@ -96,6 +107,7 @@ export const emptyContactDraft = (): ContactDraft => ({
   orderReference: '',
   paymentTermDays: '',
   notes: '',
+  language: 'de',
 });
 
 export const draftFromContact = (p: ContactProfile): ContactDraft => ({
@@ -117,6 +129,7 @@ export const draftFromContact = (p: ContactProfile): ContactDraft => ({
   orderReference: p.orderReference,
   paymentTermDays: p.paymentTermDays === null ? '' : String(p.paymentTermDays),
   notes: p.notes,
+  language: p.language,
 });
 
 /* ---------- Checks ---------- */
@@ -160,6 +173,7 @@ export function readContact(d: ContactDraft, isNumberTaken: (customerNumber: str
     orderReference,
     paymentTermDays,
     notes,
+    language: d.language,
   }));
 }
 

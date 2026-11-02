@@ -22,7 +22,7 @@ import {
 } from '../domain/company';
 import { ACCOUNT_LIMITS, MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
-import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
+import { CONTACT_LIMITS, DOCUMENT_LANGUAGES, type ContactKind, type ContactRoles, type DocumentLanguage } from '../domain/contact';
 import { isIsoDate } from '../domain/dates';
 import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
@@ -32,7 +32,7 @@ import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunnin
 import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { versionNumber } from '../domain/quoteVersions';
-import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
+import { counterOnlyProblem, MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { LOWEST_MIN_MULTIPLIER_PERCENT } from '../domain/tax/tradeTax';
 import { UNITS, type UnitCode } from '../domain/units';
 import { isVatRate } from '../domain/vat';
@@ -259,9 +259,15 @@ const bank: Check<Banking> = (v, path) => {
 const numberPattern: Check<string> = (v, path) =>
   typeof v === 'string' && v.length <= MAX_PATTERN_LENGTH && patternProblem(v) === null ? v : fail(path, `expected a number pattern, got ${describe(v)}`);
 
+/** A pattern of contact or item numbers: a counter, no date (F28) */
+const counterPattern: Check<string> = (v, path) =>
+  typeof v === 'string' && v.length <= MAX_PATTERN_LENGTH && counterOnlyProblem(v) === null ? v : fail(path, `expected a counter pattern, got ${describe(v)}`);
+
 const invoiceDefaults = objectOf<InvoiceDefaults>({
   numberPattern,
   quotePattern: numberPattern,
+  contactPattern: counterPattern,
+  itemPattern: counterPattern,
   paymentTermDays: int(0, LIMITS.maxPaymentTermDays),
   footer: text(LIMITS.footer),
 });
@@ -314,6 +320,7 @@ const contactProfileShape = {
   orderReference: text(CONTACT_LIMITS.orderReference),
   paymentTermDays: nullable(int(0, TEXT_LIMITS.maxPaymentTermDays)),
   notes: text(CONTACT_LIMITS.notes),
+  language: oneOf<DocumentLanguage>(DOCUMENT_LANGUAGES),
 };
 
 export const validateContact: Check<ContactFile> = objectOf<ContactFile>({

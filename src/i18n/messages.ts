@@ -184,6 +184,18 @@ const MESSAGES_SRC = {
     en: 'Placeholders as for the invoice number. Quotes are counted on their own; their numbers need not be gapless.',
   },
   'invoice.quotePatternPreview': { de: 'Das erste Angebot bekäme die Nummer {number}.', en: 'The first quote would get the number {number}.' },
+  'invoice.contactPattern': { de: 'Nummer neuer Kontakte', en: 'Number of new contacts' },
+  'invoice.contactPatternHint': {
+    de: 'Neue Kunden und Lieferanten bekommen die nächste freie Nummer; sie lässt sich im Formular ändern.',
+    en: 'New customers and suppliers get the next free number; it can be changed in the form.',
+  },
+  'invoice.contactPatternPreview': { de: 'Der erste neue Kontakt bekäme die Nummer {number}.', en: 'The first new contact would get the number {number}.' },
+  'invoice.itemPattern': { de: 'Nummer neuer Artikel', en: 'Number of new items' },
+  'invoice.itemPatternHint': {
+    de: 'Neue Artikel bekommen die nächste freie Nummer; sie lässt sich im Formular ändern.',
+    en: 'New items get the next free number; it can be changed in the form.',
+  },
+  'invoice.itemPatternPreview': { de: 'Der erste neue Artikel bekäme die Nummer {number}.', en: 'The first new item would get the number {number}.' },
   'invoice.paymentTerm': { de: 'Zahlungsziel in Tagen', en: 'Payment term in days' },
   'invoice.paymentTermHint': { de: '0 bedeutet „sofort fällig“', en: '0 means “due immediately”' },
   'invoice.footer': { de: 'Fußzeile', en: 'Footer' },
@@ -254,6 +266,7 @@ const MESSAGES_SRC = {
   'problem.patternTooLong': { de: 'Das Format ist zu lang (höchstens 40 Zeichen).', en: 'The format is too long (at most 40 characters).' },
   'problem.patternCharacter': { de: 'Nur Buchstaben, Ziffern, - und _ sind erlaubt.', en: 'Only letters, digits, - and _ are allowed.' },
   'problem.patternToken': { de: 'Unbekannter Platzhalter. Erlaubt sind {YYYY}, {YY}, {MM} und {N…}.', en: 'Unknown placeholder. Allowed are {YYYY}, {YY}, {MM} and {N…}.' },
+  'problem.patternDate': { de: 'Kontakt- und Artikelnummern haben kein Datum. Ein Datum ist hier nicht erlaubt.', en: 'Contact and item numbers have no date. A date is not allowed here.' },
   'problem.patternNoCounter': { de: 'Das Format braucht eine laufende Nummer, z. B. {NNNN}.', en: 'The format needs a running number, e.g. {NNNN}.' },
   'problem.patternCounters': { de: 'Das Format darf nur eine laufende Nummer enthalten.', en: 'The format may contain only one running number.' },
   'problem.patternSameAsInvoice': {
@@ -368,6 +381,11 @@ const MESSAGES_SRC = {
   'contacts.orderReferenceHint': { de: 'Wird in neue Rechnungen übernommen und lässt sich dort ändern', en: 'Copied into new invoices, where it can be changed' },
   'contacts.paymentTermHint': { de: 'Leer lassen für den Standard des Unternehmens ({days} Tage)', en: 'Leave empty for the company default ({days} days)' },
   'contacts.notes': { de: 'Notizen', en: 'Notes' },
+  'contacts.language': { de: 'Sprache der Dokumente', en: 'Language of the documents' },
+  'contacts.languageHint': {
+    de: 'Rechnungen, Angebote und Mahnungen samt ihren E-Mails entstehen in dieser Sprache. Was Sie selbst schreiben, bleibt unverändert.',
+    en: 'Invoices, quotes and dunnings, and their e-mails, are made in this language. What you write yourself stays as you typed it.',
+  },
   'contacts.save': { de: 'Speichern', en: 'Save' },
   'contacts.delete': { de: 'Löschen', en: 'Delete' },
   'contacts.deleteConfirm': {

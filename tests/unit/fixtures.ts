@@ -29,7 +29,7 @@ export const sampleProfile = (over: Partial<CompanyProfile> = {}): CompanyProfil
     vat: { kind: 'regular', method: 'accrual', period: 'quarterly', permanentExtension: true },
     business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
   },
-  invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: '' },
+  invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '' },
   ...over,
 });
 
@@ -78,6 +78,7 @@ export const sampleContact = (over: Partial<ContactProfile> = {}): ContactProfil
   orderReference: 'PO-4711',
   paymentTermDays: 30,
   notes: '',
+  language: 'de',
   ...over,
 });
 

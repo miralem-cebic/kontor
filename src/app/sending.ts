@@ -11,7 +11,7 @@ import type { IssuedInfo } from '../domain/invoice';
 import { openMailLink, saveFile } from '../lib/browser';
 import { DUNNING_LEVEL_KEY } from '../lib/labels';
 import { sha256Hex } from '../lib/sha256';
-import { fmtIn, tIn, type MessageKey } from '../i18n';
+import { fmtIn, tIn, type Lang, type MessageKey } from '../i18n';
 import { makeDunningPdf, type LogoImage } from '../pdf/documentPdf';
 import { useApp } from '../store/appStore';
 import { issuedPdfName, logoImage } from './documentPdf';
@@ -56,8 +56,6 @@ export type MailFile = { ok: true; fileName: string; bytes: Uint8Array; files: A
 /** A mail that was prepared: its file name, whether the audit line was written, and whether the text fitted into the link */
 export type SendOutcome = { ok: true; fileName: string; auditWritten: boolean; bodyIncluded: boolean } | MailFileFailure;
 
-const LANG = 'de';
-
 /** The kinds of mail about a document; a dunning is about an invoice and its letter */
 type DocumentSendKind = Exclude<SendKind, 'dunning'>;
 
@@ -69,7 +67,7 @@ const TEMPLATE: Record<SendKind, { subject: MessageKey; body: MessageKey }> = {
   dunning: { subject: 'send.tpl.dunningSubject', body: 'send.tpl.dunningBody' },
 };
 
-const dateText = (iso: string): string => fmtIn(LANG, toLocalDate(iso), 'P');
+const dateText = (iso: string, lang: Lang): string => fmtIn(lang, toLocalDate(iso), 'P');
 
 /** Does the document have the kind the source asks for? An invoice is one without a cancellation. */
 function fits(kind: DocumentSendKind, doc: DocumentFile): boolean {
@@ -106,22 +104,24 @@ function letterOf(documentId: DocumentId, dunningId: DunningId, dunnings: Readon
   return index < 0 ? null : { dunning, upTo: all.slice(0, index + 1) };
 }
 
-/** The placeholders of a template, with the values the document has, and the address of the customer */
-function valuesOf(source: SendSource, state: Pick<SendContext, 'documents' | 'dunnings'>): { kind: SendKind; values: Record<string, string>; to: string } | null {
+/** The placeholders of a template with the values the document has, the address of the customer and its language */
+function valuesOf(source: SendSource, state: Pick<SendContext, 'documents' | 'dunnings'>): { kind: SendKind; lang: Lang; values: Record<string, string>; to: string } | null {
   if (source.kind === 'dunning') {
     const invoice = issuedInvoiceOf(source.documentId, state.documents);
     const letter = letterOf(source.documentId, source.dunningId, state.dunnings);
     if (!invoice || !letter) return null;
     const { number, snapshot } = invoice.issued;
+    const lang = snapshot.customer.language;
     return {
       kind: 'dunning',
+      lang,
       to: snapshot.customer.contact.email,
       values: {
-        Schreiben: tIn(LANG, DUNNING_LEVEL_KEY[letter.dunning.level]),
+        Schreiben: tIn(lang, DUNNING_LEVEL_KEY[letter.dunning.level]),
         Rechnungsnummer: number,
-        Rechnungsdatum: dateText(invoice.date),
-        Gesamtforderung: formatCents(claimTotal(letter.dunning.open, letter.upTo), LANG),
-        'Zahlbar bis': dateText(letter.dunning.payBy),
+        Rechnungsdatum: dateText(invoice.date, lang),
+        Gesamtforderung: formatCents(claimTotal(letter.dunning.open, letter.upTo), lang),
+        'Zahlbar bis': dateText(letter.dunning.payBy, lang),
         Firma: snapshot.company.name,
       },
     };
@@ -129,27 +129,30 @@ function valuesOf(source: SendSource, state: Pick<SendContext, 'documents' | 'du
   const doc = issuedOf(source.kind, source.documentId, state.documents);
   if (!doc) return null;
   const { number, snapshot } = doc.issued;
+  const lang = snapshot.customer.language;
   const to = snapshot.customer.contact.email;
   const firm = snapshot.company.name;
   if (doc.kind === 'quote') {
-    return { kind: 'quote', to, values: { Angebotsnummer: number, Datum: dateText(doc.date), 'Gültig bis': dateText(doc.validUntil), Firma: firm } };
+    return { kind: 'quote', lang, to, values: { Angebotsnummer: number, Datum: dateText(doc.date, lang), 'Gültig bis': dateText(doc.validUntil, lang), Firma: firm } };
   }
   if (doc.cancels) {
     return {
       kind: 'cancellation',
+      lang,
       to,
-      values: { Stornonummer: number, Rechnungsnummer: doc.cancels.number, Rechnungsdatum: dateText(doc.cancels.date), Firma: firm },
+      values: { Stornonummer: number, Rechnungsnummer: doc.cancels.number, Rechnungsdatum: dateText(doc.cancels.date, lang), Firma: firm },
     };
   }
   const smallBusiness = snapshot.company.tax.vat.kind === 'smallBusiness';
   return {
     kind: 'invoice',
+    lang,
     to,
     values: {
       Rechnungsnummer: number,
-      Rechnungsdatum: dateText(doc.date),
-      Betrag: formatCents(invoiceTotals(doc, smallBusiness).gross, LANG),
-      Fälligkeit: dateText(dueDate(doc)),
+      Rechnungsdatum: dateText(doc.date, lang),
+      Betrag: formatCents(invoiceTotals(doc, smallBusiness).gross, lang),
+      Fälligkeit: dateText(dueDate(doc), lang),
       Firma: firm,
     },
   };
@@ -162,8 +165,8 @@ export function mailDefaults(source: SendSource, state: Pick<SendContext, 'docum
   const template = TEMPLATE[filled.kind];
   return {
     to: filled.to,
-    subject: fillTemplate(tIn(LANG, template.subject), filled.values),
-    body: fillTemplate(tIn(LANG, template.body), filled.values),
+    subject: fillTemplate(tIn(filled.lang, template.subject), filled.values),
+    body: fillTemplate(tIn(filled.lang, template.body), filled.values),
   };
 }
 
@@ -177,7 +180,7 @@ async function attachmentOf(source: SendSource, ctx: SendContext): Promise<{ ok:
     const letter = letterOf(source.documentId, source.dunningId, ctx.dunnings);
     if (!letter) return { ok: false, failure: 'notReady' };
     try {
-      const pdf = await makeDunningPdf({ invoice, dunning: letter.dunning, dunnings: letter.upTo, lang: LANG }, ctx.logo, ctx.now);
+      const pdf = await makeDunningPdf({ invoice, dunning: letter.dunning, dunnings: letter.upTo, lang: invoice.issued.snapshot.customer.language }, ctx.logo, ctx.now);
       return { ok: true, name: pdf.fileName, bytes: pdf.bytes, files: [] };
     } catch (e) {
       console.error('Could not make the letter', e);

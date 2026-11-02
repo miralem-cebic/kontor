@@ -15,6 +15,19 @@ describe('readContact', () => {
     expect(r.ok && r.value).toMatchObject({ name: 'Kunde GmbH', address: null, paymentTermDays: null, roles: { customer: true, supplier: false } });
   });
 
+  it('the documents of a contact are German unless the English language is chosen (F05)', () => {
+    const german = readContact(sampleContactDraft(), free);
+    expect(german.ok && german.value.language).toBe('de');
+    const english = readContact(sampleContactDraft({ language: 'en' }), free);
+    expect(english.ok && english.value.language).toBe('en');
+  });
+
+  it('the language is kept when a contact is edited', () => {
+    const profile = sampleContact({ language: 'en' });
+    expect(draftFromContact(profile).language).toBe('en');
+    expect(emptyContactDraft().language).toBe('de');
+  });
+
   it('once part of the address is given, the whole address is required', () => {
     expect(problems(readContact(sampleContactDraft({ city: 'Berlin' }), free))).toEqual(['street:required', 'postalCode:required']);
     expect(problems(readContact(sampleContactDraft({ street: 'Weg 1', postalCode: '1011', city: 'Berlin' }), free))).toEqual(['postalCode:postalCode']);

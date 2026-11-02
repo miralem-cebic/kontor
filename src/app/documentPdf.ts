@@ -9,8 +9,8 @@ import { useApp } from '../store/appStore';
 import { openRepository, readLogo } from './session';
 
 // A quote or an invoice as PDF, saved through the browser's download. A draft is made anew each time; an issued
-// invoice or a finalized quote is the file written then, checked against its SHA-256. Documents are German for now; a
-// language per customer follows with F05.
+// invoice or a finalized quote is the file written then, checked against its SHA-256. The documents are in the language
+// of the customer (F05).
 
 /** `changed`: the stored file of an issued invoice or a finalized quote no longer matches the SHA-256 it was written with */
 export type PdfResult = { ok: true; fileName: string; missing: string[]; changed: boolean } | { ok: false };
@@ -61,7 +61,8 @@ export async function logoImage(): Promise<LogoImage | null> {
 const issuedTitle = (doc: DocumentFile): MessageKey => (doc.kind === 'quote' ? 'pdf.quote' : doc.cancels ? 'pdf.cancellation' : 'pdf.invoice');
 
 /** The name of an issued document's PDF for the download and the mail: title, number and customer */
-export const issuedPdfName = (doc: DocumentFile, issued: IssuedInfo): string => pdfFileName([tIn('de', issuedTitle(doc)), issued.number, issued.snapshot.customer.name]);
+export const issuedPdfName = (doc: DocumentFile, issued: IssuedInfo): string =>
+  pdfFileName([tIn(issued.snapshot.customer.language, issuedTitle(doc)), issued.number, issued.snapshot.customer.name]);
 
 /**
  * The file written when the invoice was issued or the quote finalized; it is downloaded even when it changed since,
@@ -89,8 +90,9 @@ export async function downloadDocumentPdf(id: DocumentId): Promise<PdfResult> {
   if (doc.issued) return downloadIssued(doc, doc.issued);
   const accountId = doc.kind === 'invoice' ? doc.accountId : company.bank.defaultAccountId;
   const account: BankAccount | null = company.bank.accounts.find((a) => a.id === accountId) ?? null;
+  const customer = contacts.get(doc.customerId) ?? null;
   try {
-    const pdf = await makeDocumentPdf({ company, document: doc, customer: contacts.get(doc.customerId) ?? null, account, lang: 'de', number: null }, await logoImage());
+    const pdf = await makeDocumentPdf({ company, document: doc, customer, account, lang: customer?.language ?? 'de', number: null }, await logoImage());
     saveFile(pdf.bytes, pdf.fileName, 'application/pdf');
     return { ok: true, fileName: pdf.fileName, missing: pdf.missing, changed: false };
   } catch (e) {

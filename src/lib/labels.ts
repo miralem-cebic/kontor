@@ -1,7 +1,8 @@
 import type { IssueFailure } from '../app/issue';
 import type { PaymentFailure } from '../app/payments';
+import type { SendFailure } from '../app/sending';
 import type { StorageErrorKind } from '../data/repository';
-import type { DunningProblem } from '../domain/dunning';
+import type { DunningLevel, DunningProblem } from '../domain/dunning';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
@@ -253,6 +254,14 @@ const DUNNING_PROBLEM_KEY: Record<DunningProblem, MessageKey> = {
   rateUnknown: 'dunning.problem.rateUnknown',
 };
 
+/** The title of a dunning level: the payment reminder, then the dunning levels 1 to 3 */
+export const DUNNING_LEVEL_KEY: Record<DunningLevel, MessageKey> = {
+  reminder: 'dunning.level.reminder',
+  level1: 'dunning.level.level1',
+  level2: 'dunning.level.level2',
+  level3: 'dunning.level.level3',
+};
+
 /** Why a dunning cannot be planned, as the form tells it */
 export const dunningProblemText = (p: DunningProblem): string => t(DUNNING_PROBLEM_KEY[p]);
 
@@ -274,5 +283,27 @@ export function dunningFailureText(f: DunningFailureKind): string {
     case 'conflict':
     case 'other':
       return t('dunning.failed', { reason: errorText(f) });
+  }
+}
+
+/** Why a mail was not prepared: the document's state, or the storage failures that say what went wrong in the folder */
+export function sendFailureText(f: SendFailure): string {
+  switch (f) {
+    case 'notReady':
+      return t('send.notReady');
+    case 'cancelled':
+      return t('send.cancelled');
+    case 'changed':
+      return t('send.changed');
+    case 'pdf':
+      return t('send.pdfFailed');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('send.failed', { reason: errorText(f) });
   }
 }

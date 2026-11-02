@@ -6,6 +6,7 @@ import { cancellationOf, type InvoiceFile } from '../../data/types';
 import { cancelInvoice } from '../../app/issue';
 import { DunningCard } from './DunningCard';
 import { PaymentsCard } from './PaymentsCard';
+import { SendCard } from '../sending/SendMail';
 import { fmt, t } from '../../i18n';
 import { accountDetail, accountName, cancelFailureText } from '../../lib/labels';
 import { showToast, useApp } from '../../store/appStore';
@@ -115,6 +116,8 @@ export function IssuedInvoiceView({ invoice, onDone, onOpen, onCopy }: Props) {
         {!cancels && <PaymentsCard invoice={invoice} gross={totals.gross} payments={payments} cancelled={!!cancellation} />}
 
         {!cancels && <DunningCard invoice={invoice} gross={totals.gross} payments={payments} dunnings={dunnings} cancelled={!!cancellation} />}
+
+        <SendCard source={{ kind: cancels ? 'cancellation' : 'invoice', documentId: invoice.id }} />
 
         <div className="card-actions">
           <PdfButton prepare={() => invoice.id} />

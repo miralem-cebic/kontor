@@ -2,6 +2,7 @@ import type { DocumentId } from '../data/ids';
 import type { BankAccount, DocumentFile } from '../data/types';
 import type { IssuedInfo } from '../domain/invoice';
 import { tIn, type MessageKey } from '../i18n';
+import { saveFile } from '../lib/browser';
 import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, pdfFileName, type LogoImage } from '../pdf/documentPdf';
 import { useApp } from '../store/appStore';
@@ -56,20 +57,11 @@ export async function logoImage(): Promise<LogoImage | null> {
   }
 }
 
-function download(bytes: Uint8Array, fileName: string) {
-  const url = URL.createObjectURL(new Blob([bytes.slice()], { type: 'application/pdf' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  // the download has started; the URL is only needed until then
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 /** The title the stored PDF of a document is named after */
 const issuedTitle = (doc: DocumentFile): MessageKey => (doc.kind === 'quote' ? 'pdf.quote' : doc.cancels ? 'pdf.cancellation' : 'pdf.invoice');
+
+/** The name of an issued document's PDF for the download and the mail: title, number and customer */
+export const issuedPdfName = (doc: DocumentFile, issued: IssuedInfo): string => pdfFileName([tIn('de', issuedTitle(doc)), issued.number, issued.snapshot.customer.name]);
 
 /**
  * The file written when the invoice was issued or the quote finalized; it is downloaded even when it changed since,
@@ -84,8 +76,8 @@ async function downloadIssued(doc: DocumentFile, issued: IssuedInfo): Promise<Pd
     return { ok: false };
   }
   const changed = (await sha256Hex(read.value.slice())) !== issued.pdf.sha256;
-  const fileName = pdfFileName([tIn('de', issuedTitle(doc)), issued.number, issued.snapshot.customer.name]);
-  download(read.value, fileName);
+  const fileName = issuedPdfName(doc, issued);
+  saveFile(read.value, fileName, 'application/pdf');
   return { ok: true, fileName, missing: [], changed };
 }
 
@@ -99,7 +91,7 @@ export async function downloadDocumentPdf(id: DocumentId): Promise<PdfResult> {
   const account: BankAccount | null = company.bank.accounts.find((a) => a.id === accountId) ?? null;
   try {
     const pdf = await makeDocumentPdf({ company, document: doc, customer: contacts.get(doc.customerId) ?? null, account, lang: 'de', number: null }, await logoImage());
-    download(pdf.bytes, pdf.fileName);
+    saveFile(pdf.bytes, pdf.fileName, 'application/pdf');
     return { ok: true, fileName: pdf.fileName, missing: pdf.missing, changed: false };
   } catch (e) {
     console.error('Could not make the PDF', e);

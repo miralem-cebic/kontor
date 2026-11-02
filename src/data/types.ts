@@ -1,6 +1,7 @@
 // File formats of the company folder (see DEVELOPMENT.md, "Data format").
 
 import type { AccountDetails } from '../domain/bankAccount';
+import type { SendChannel, SendKind } from '../domain/sending';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
@@ -332,7 +333,20 @@ export type AuditEntry =
   | (AuditBase & { action: 'issueQuote' })
   | (AuditBase & { action: 'recordPayment'; payment: AuditPayment })
   | (AuditBase & { action: 'deletePayment'; payment: AuditPayment })
-  | (AuditBase & { action: 'dunning'; dunning: AuditDunning });
+  | (AuditBase & { action: 'dunning'; dunning: AuditDunning })
+  | (AuditBase & { action: 'send'; send: AuditSend });
+
+/**
+ * The mail a line of the audit log is about (`send`): what it is for, the channel it was prepared with and the recipient.
+ * kontor prepares a mail and never sends one, so the line says the mail was prepared, not that it went out. `dunningId`
+ * is the dunning for a letter, null otherwise; the file attached is in the line's `files`, a letter has none.
+ */
+export interface AuditSend {
+  kind: SendKind;
+  channel: SendChannel;
+  to: string;
+  dunningId: DunningId | null;
+}
 
 /** The dunning a line of the audit log is about; `amount` is what it adds to the claim */
 export interface AuditDunning {

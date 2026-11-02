@@ -4,14 +4,15 @@
 import { documentTotals, lineTotal } from '../domain/document';
 import { toLocalDate } from '../domain/dates';
 import { formatIban } from '../domain/iban';
-import { dueDate, invoiceTotals, vatNote } from '../domain/invoice';
+import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../domain/invoice';
+import { claimTotal, SPREAD_BP } from '../domain/dunning';
 import { formatCents, formatQuantity, formatRate, type TaxTotals } from '../domain/money';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import type { DocumentFile, InvoiceFile, QuoteFile } from '../data/types';
+import type { DocumentFile, DunningFile, InvoiceFile, QuoteFile } from '../data/types';
 import { fmtIn, tIn, type Lang, type MessageKey } from '../i18n';
-import { unitTextIn } from '../lib/labels';
+import { DUNNING_LEVEL_KEY, unitTextIn } from '../lib/labels';
 
 /** The master data come as profiles: the current ones for a draft, the snapshot for an issued invoice */
 export interface PdfSource {
@@ -86,6 +87,17 @@ export interface DocumentContent {
 }
 
 const nonEmpty = (lines: readonly string[]): string[] => lines.filter((l) => l.trim() !== '');
+
+/** The column headings of the line table, in the language of the document */
+const tableHeaders = (lang: Lang): Omit<TableRow, 'description'> => ({
+  pos: tIn(lang, 'pdf.colPos'),
+  name: tIn(lang, 'pdf.colName'),
+  quantity: tIn(lang, 'pdf.colQuantity'),
+  unit: tIn(lang, 'pdf.colUnit'),
+  price: tIn(lang, 'pdf.colPrice'),
+  rate: tIn(lang, 'pdf.colRate'),
+  total: tIn(lang, 'pdf.colTotal'),
+});
 
 /** The name of a country in the given language, in capitals as on international mail (DIN 5008) */
 const countryLine = (country: string, lang: Lang): string => (new Intl.DisplayNames([lang], { type: 'region' }).of(country) ?? country).toLocaleUpperCase(lang);
@@ -212,15 +224,7 @@ export function documentContent(src: PdfSource): DocumentContent {
     subject: doc.subject,
     intro: doc.introText,
     table: {
-      headers: {
-        pos: tIn(lang, 'pdf.colPos'),
-        name: tIn(lang, 'pdf.colName'),
-        quantity: tIn(lang, 'pdf.colQuantity'),
-        unit: tIn(lang, 'pdf.colUnit'),
-        price: tIn(lang, 'pdf.colPrice'),
-        rate: tIn(lang, 'pdf.colRate'),
-        total: tIn(lang, 'pdf.colTotal'),
-      },
+      headers: tableHeaders(lang),
       showRate: !note,
       rows,
     },
@@ -265,4 +269,73 @@ function invoiceInfo(inv: InvoiceFile, customer: ContactProfile | null, number: 
     ...optional('pdf.orderReference', inv.orderReference),
     ...optional('pdf.leitwegId', inv.leitwegId),
   ];
+}
+
+/** A dunning and what it is about: the invoice as it was issued, with its snapshot, and the dunnings up to this one */
+export interface DunningSource {
+  invoice: InvoiceFile & { issued: IssuedInfo };
+  /** The dunning the letter is for */
+  dunning: DunningFile;
+  /** The dunnings of the invoice up to and including this one, in the order they were issued */
+  dunnings: readonly DunningFile[];
+  lang: Lang;
+}
+
+/**
+ * The letter of a dunning. It is made from the record and the snapshot of the invoice, so a letter made again says the
+ * same. The claim is the open amount of the dunning plus the interest, the fee and the flat fee of every dunning up to it
+ * (domain/dunning.ts); the totals show each part.
+ */
+export function dunningContent(src: DunningSource): DocumentContent {
+  const { invoice, dunning, dunnings, lang } = src;
+  const { number, snapshot } = invoice.issued;
+  const { company, customer, account } = snapshot;
+  const title = tIn(lang, DUNNING_LEVEL_KEY[dunning.level]);
+  const invoiceDate = formatDate(invoice.date, lang);
+  const claim = claimTotal(dunning.open, dunnings);
+
+  const totals: TotalRow[] = [{ label: tIn(lang, 'pdf.dunningOpen'), value: formatCents(dunning.open, lang), grand: false }];
+  for (const d of dunnings) {
+    if (d.interest > 0) {
+      totals.push({ label: tIn(lang, 'pdf.dunningInterest', { from: formatDate(d.interestFrom, lang), to: formatDate(d.date, lang) }), value: formatCents(d.interest, lang), grand: false });
+    }
+    if (d.fee > 0) totals.push({ label: tIn(lang, 'pdf.dunningFee', { date: formatDate(d.date, lang) }), value: formatCents(d.fee, lang), grand: false });
+    if (d.flatFee > 0) totals.push({ label: tIn(lang, 'pdf.dunningFlat'), value: formatCents(d.flatFee, lang), grand: false });
+  }
+  totals.push({ label: tIn(lang, 'pdf.dunningTotal'), value: formatCents(claim, lang), grand: true });
+
+  const notes = [tIn(lang, 'pdf.dunningPayNote', { amount: formatCents(claim, lang), date: formatDate(dunning.payBy, lang) })];
+  if (dunnings.some((d) => d.interest > 0)) notes.push(tIn(lang, 'pdf.dunningInterestNote', { points: String(SPREAD_BP[dunning.debtor] / 100) }));
+
+  return {
+    lang,
+    watermark: null,
+    letterhead: company.name,
+    senderLine: [company.name, company.address.street, `${company.address.postalCode} ${company.address.city}`].join(' · '),
+    recipient: recipientLines(customer, lang),
+    info: [
+      { label: tIn(lang, 'pdf.invoiceNumber'), value: number },
+      { label: tIn(lang, 'pdf.invoiceDate'), value: invoiceDate },
+      { label: tIn(lang, 'pdf.dueDate'), value: formatDate(dueDate(invoice), lang) },
+      { label: tIn(lang, 'pdf.dunningDate'), value: formatDate(dunning.date, lang) },
+      { label: tIn(lang, 'pdf.dunningPayBy'), value: formatDate(dunning.payBy, lang) },
+      ...(customer.customerNumber ? [{ label: tIn(lang, 'pdf.customerNumber'), value: customer.customerNumber }] : []),
+    ],
+    title,
+    subject: tIn(lang, 'pdf.dunningSubject', { number, date: invoiceDate }),
+    intro: tIn(lang, 'pdf.dunningIntro'),
+    table: { headers: tableHeaders(lang), showRate: false, rows: [] },
+    totals,
+    notes: nonEmpty(notes),
+    closing: tIn(lang, 'pdf.dunningRegards'),
+    footer: { text: company.invoiceDefaults.footer, columns: footerColumns(company, account, lang) },
+    runningHead: nonEmpty([title, customer.name]).join(' · '),
+    pageLabel: tIn(lang, 'pdf.page'),
+    meta: {
+      title: nonEmpty([title, number, customer.name, invoiceDate]).join(' – '),
+      author: company.name,
+      subject: tIn(lang, 'pdf.dunningSubject', { number, date: invoiceDate }),
+      fileName: pdfFileName([title, number, customer.name]),
+    },
+  };
 }

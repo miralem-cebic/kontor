@@ -152,11 +152,13 @@ export function readContact(d: ContactDraft, isNumberTaken: (customerNumber: str
   const address = hasAddress ? c.address(ADDRESS_FIELDS, d) : null;
   const email = c.email('email', d.email, false);
   const phone = c.phone('phone', d.phone);
-  const vatId = normalizeVatId(d.vatId);
+  // a private person has no VAT ID, Leitweg-ID or order number (F27): what is typed for one is not checked and not saved
+  const company = d.kind === 'company';
+  const vatId = company ? normalizeVatId(d.vatId) : '';
   if (vatId && !isPlausibleEuVatId(vatId)) c.add('vatId', 'euVatId');
-  const leitwegId = d.leitwegId.trim();
+  const leitwegId = company ? d.leitwegId.trim() : '';
   if (leitwegId && !isPlausibleLeitwegId(leitwegId)) c.add('leitwegId', 'leitwegId');
-  const orderReference = c.optionalText('orderReference', d.orderReference, CONTACT_LIMITS.orderReference);
+  const orderReference = company ? c.optionalText('orderReference', d.orderReference, CONTACT_LIMITS.orderReference) : '';
   const paymentTermDays = d.paymentTermDays.trim() === '' ? null : c.paymentTerm('paymentTermDays', d.paymentTermDays);
   const notes = c.optionalText('notes', d.notes, CONTACT_LIMITS.notes);
   return c.done(() => ({

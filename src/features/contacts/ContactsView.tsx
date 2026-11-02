@@ -18,6 +18,7 @@ import {
   type DocumentLanguage,
 } from '../../domain/contact';
 import { TEXT_LIMITS } from '../../domain/check';
+import { nextFreeNumber } from '../../domain/numbering';
 import type { ContactId } from '../../data/ids';
 import type { ContactFile } from '../../data/types';
 import { LANG_NAMES, t, type MessageKey } from '../../i18n';
@@ -30,6 +31,13 @@ import { CustomerAccountView } from './CustomerAccountView';
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ContactId } | { kind: 'account'; id: ContactId };
 type RoleFilter = 'all' | 'customer' | 'supplier';
+
+/** The number a new contact starts with: the next free one of the pattern in the settings, deleted contacts counted (F28) */
+function suggestedContactNumber(): string {
+  const { company, contacts } = useApp.getState();
+  const pattern = company?.invoiceDefaults.contactPattern;
+  return (pattern && nextFreeNumber(pattern, [...contacts.values()].map((c) => c.customerNumber))) || '';
+}
 
 /** The languages the documents of a contact can be made in, named in their own language */
 const LANGUAGE_OPTIONS = DOCUMENT_LANGUAGES.map((value) => ({ value, label: LANG_NAMES[value] }));
@@ -158,7 +166,7 @@ function ContactRow({ contact: c, onOpen }: { contact: ContactFile; onOpen: (id:
 function ContactEditor({ contact, onDone, onAccount }: { contact: ContactFile | null; onDone: () => void; onAccount?: (id: ContactId) => void }) {
   const contacts = useApp((s) => s.contacts);
   const defaultTerm = useApp((s) => s.company?.invoiceDefaults.paymentTermDays ?? 0);
-  const [draft, setDraft] = useState<ContactDraft>(() => (contact ? draftFromContact(contact) : emptyContactDraft()));
+  const [draft, setDraft] = useState<ContactDraft>(() => (contact ? draftFromContact(contact) : { ...emptyContactDraft(), customerNumber: suggestedContactNumber() }));
   const [errors, setErrors] = useState<readonly ContactFieldError[]>([]);
   const [checked, setChecked] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);

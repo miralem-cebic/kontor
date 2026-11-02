@@ -1,4 +1,4 @@
-import { DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
+import { DEFAULT_CONTACT_PATTERN, DEFAULT_ITEM_PATTERN, DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
 import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateItem, validateNumbering, validatePayment, type Check } from './validate';
 import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, PaymentFile } from './types';
@@ -96,6 +96,37 @@ const quotesIssued: Migration = {
   },
 };
 
+/**
+ * Version 10: contacts and items get their numbers from a pattern, so company.json has the two patterns. A profile of
+ * version 9 gets the defaults; a profile that has them keeps them.
+ */
+function withNumberPatterns(profile: unknown): unknown {
+  if (!isRecord(profile)) return profile;
+  const defaults = profile['invoiceDefaults'];
+  if (!isRecord(defaults)) return profile;
+  if ('contactPattern' in defaults && 'itemPattern' in defaults) return profile;
+  return { ...profile, invoiceDefaults: { contactPattern: DEFAULT_CONTACT_PATTERN, itemPattern: DEFAULT_ITEM_PATTERN, ...defaults } };
+}
+
+const numberPatterns: Migration = {
+  from: 9,
+  up: (raw) => withNumberPatterns(raw) as Record<string, unknown>,
+};
+
+/**
+ * Version 10 for documents: the company in the snapshot of an issued document gets the two patterns like company.json,
+ * so that it is read with the same checks. Nothing else of the document changes, and its PDF is not touched.
+ */
+const snapshotNumberPatterns: Migration = {
+  from: 9,
+  up: (raw) => {
+    const issued = raw['issued'];
+    if (!isRecord(issued) || !isRecord(issued['snapshot'])) return raw;
+    const snapshot = issued['snapshot'];
+    return { ...raw, issued: { ...issued, snapshot: { ...snapshot, company: withNumberPatterns(snapshot['company']) } } };
+  },
+};
+
 /** Version 9: the documents of a contact are made in its language. A contact of version 8 is German, as its documents were. */
 const contactLanguage: Migration = {
   from: 8,
@@ -127,15 +158,17 @@ const snapshotLanguage: Migration = {
  * Version 7 adds payments, a new kind of file (payments/); no existing file changes.
  * Version 8 adds dunnings, a new kind of file (dunnings/); no existing file changes.
  * Version 9 gives every contact the language of its documents; the customer in an issued document's snapshot gets it too.
+ * Version 10 gives contacts and items numbers from a pattern: company.json gets the two patterns, and the company in an
+ * issued document's snapshot gets them too.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage, snapshotNumberPatterns],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
 };
 
 export class NewerSchemaError extends Error {

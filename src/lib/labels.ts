@@ -62,6 +62,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   'pattern.noCounter': 'problem.patternNoCounter',
   'pattern.multipleCounters': 'problem.patternCounters',
   'pattern.sameAsInvoice': 'problem.patternSameAsInvoice',
+  'pattern.dateToken': 'problem.patternDate',
 };
 
 /** The minimum multiplier is the one of the current year, the year the forms check against */

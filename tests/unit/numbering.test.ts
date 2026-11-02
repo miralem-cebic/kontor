@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { counterKey, formatNumber, nextCounter, numberFor, patternProblem, restartsYearly } from '../../src/domain/numbering';
+import { counterKey, counterOnlyProblem, formatNumber, nextCounter, nextFreeNumber, numberFor, patternProblem, restartsYearly } from '../../src/domain/numbering';
 
 describe('number patterns', () => {
   const parts = { year: 2026, month: 3, counter: 7 };
@@ -51,5 +51,31 @@ describe('assigning numbers', () => {
   it('formats the number from the document date', () => {
     expect(numberFor('RE-{YYYY}-{NNNN}', '2026-12-31', 42)).toBe('RE-2026-0042');
     expect(numberFor('{YY}{MM}-{NN}', '2027-01-02', 1)).toBe('2701-01');
+  });
+});
+
+describe('the next free number of a contact or an item (F28)', () => {
+  it('starts at 1 when no number of the pattern exists', () => {
+    expect(nextFreeNumber('K-{NNNN}', [])).toBe('K-0001');
+  });
+
+  it('is one more than the highest counter of the pattern', () => {
+    expect(nextFreeNumber('K-{NNNN}', ['K-0001', 'K-0007', 'K-0003'])).toBe('K-0008');
+  });
+
+  it('ignores numbers of other patterns and numbers that are not of this pattern', () => {
+    expect(nextFreeNumber('K-{NNNN}', ['A-0009', 'K-0002', 'K-x', 'kunde-5', 'XK-0100'])).toBe('K-0003');
+  });
+
+  it('a counter longer than its width is written in full', () => {
+    expect(nextFreeNumber('K-{NNNN}', ['K-9999'])).toBe('K-10000');
+  });
+
+  it('a pattern with a year or a month is refused: a contact number has no date', () => {
+    expect(counterOnlyProblem('K-{YYYY}-{NNNN}')).toBe('dateToken');
+    expect(counterOnlyProblem('K-{MM}-{NNNN}')).toBe('dateToken');
+    expect(counterOnlyProblem('K-{NNNN}')).toBeNull();
+    expect(counterOnlyProblem('K-')).toBe('noCounter');
+    expect(nextFreeNumber('K-{YYYY}-{NNNN}', [])).toBeNull();
   });
 });

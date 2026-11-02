@@ -4,7 +4,7 @@ import { ExternalLink } from '../../components/ExternalLink';
 import { CheckField, Choice, Row, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
 import { checkLogo, LIMITS, TRADE_TAX_MULTIPLIER_SOURCE, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
-import { formatNumber, patternProblem } from '../../domain/numbering';
+import { formatNumber, nextFreeNumber, patternProblem } from '../../domain/numbering';
 import { upcomingMinimum } from '../../domain/tax/tradeTax';
 import { t } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
@@ -151,10 +151,15 @@ function firstNumber(pattern: string): string | null {
   return patternProblem(p) === null ? formatNumber(p, { year: now.getFullYear(), month: now.getMonth() + 1, counter: 1 }) : null;
 }
 
+/** The first contact or item number of a pattern, or null while the pattern cannot number them (F28) */
+const firstCounterNumber = (pattern: string): string | null => nextFreeNumber(pattern.trim(), []);
+
 export function InvoiceFields({ draft, set, errors }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
   const preview = firstNumber(draft.numberPattern);
   const quotePreview = firstNumber(draft.quotePattern);
+  const contactPreview = firstCounterNumber(draft.contactPattern);
+  const itemPreview = firstCounterNumber(draft.itemPattern);
   return (
     <>
       <TextField
@@ -172,6 +177,24 @@ export function InvoiceFields({ draft, set, errors }: FieldsProps) {
         value={draft.quotePattern}
         onChange={(quotePattern) => set({ quotePattern })}
         error={e('quotePattern')}
+        required
+        maxLength={60}
+      />
+      <TextField
+        label={t('invoice.contactPattern')}
+        hint={contactPreview ? `${t('invoice.contactPatternPreview', { number: contactPreview })} ${t('invoice.contactPatternHint')}` : t('invoice.contactPatternHint')}
+        value={draft.contactPattern}
+        onChange={(contactPattern) => set({ contactPattern })}
+        error={e('contactPattern')}
+        required
+        maxLength={60}
+      />
+      <TextField
+        label={t('invoice.itemPattern')}
+        hint={itemPreview ? `${t('invoice.itemPatternPreview', { number: itemPreview })} ${t('invoice.itemPatternHint')}` : t('invoice.itemPatternHint')}
+        value={draft.itemPattern}
+        onChange={(itemPattern) => set({ itemPattern })}
+        error={e('itemPattern')}
         required
         maxLength={60}
       />

@@ -32,7 +32,7 @@ import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunnin
 import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { versionNumber } from '../domain/quoteVersions';
-import { MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
+import { counterOnlyProblem, MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
 import { LOWEST_MIN_MULTIPLIER_PERCENT } from '../domain/tax/tradeTax';
 import { UNITS, type UnitCode } from '../domain/units';
 import { isVatRate } from '../domain/vat';
@@ -259,9 +259,15 @@ const bank: Check<Banking> = (v, path) => {
 const numberPattern: Check<string> = (v, path) =>
   typeof v === 'string' && v.length <= MAX_PATTERN_LENGTH && patternProblem(v) === null ? v : fail(path, `expected a number pattern, got ${describe(v)}`);
 
+/** A pattern of contact or item numbers: a counter, no date (F28) */
+const counterPattern: Check<string> = (v, path) =>
+  typeof v === 'string' && v.length <= MAX_PATTERN_LENGTH && counterOnlyProblem(v) === null ? v : fail(path, `expected a counter pattern, got ${describe(v)}`);
+
 const invoiceDefaults = objectOf<InvoiceDefaults>({
   numberPattern,
   quotePattern: numberPattern,
+  contactPattern: counterPattern,
+  itemPattern: counterPattern,
   paymentTermDays: int(0, LIMITS.maxPaymentTermDays),
   footer: text(LIMITS.footer),
 });

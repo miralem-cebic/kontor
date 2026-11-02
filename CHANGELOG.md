@@ -35,8 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Documents in English for English customers (F05): a contact has a language for its documents, German or English (German by default). Invoices, quotes and dunnings, their PDFs and their e-mails are made in the language of the customer. The language of an issued invoice or quote is fixed in its PDF when it is issued.
 
+- Automatic numbers for contacts and items (F28): a new customer or supplier starts with the next free number of the pattern in the settings (`K-{NNNN}` by default), and a new item with the next free item number (`A-{NNNN}`). The number is shown in the form and can be changed there. A deleted contact or item keeps its number, so no number is given twice. The patterns are set in the invoice settings with a preview, and they may not contain a date.
+
 ### Changed
 
+- All files of a company folder have schema version 10: the settings have the patterns of contact and item numbers (defaults `K-{NNNN}` and `A-{NNNN}`); no other file changes.
 - All files of a company folder have schema version 9: a contact has the language of its documents (German for existing contacts), and the customer in an issued document gets it too; no other file changes.
 - All files of a company folder have schema version 8: dunnings are a new kind of file (`dunnings/`); no existing file changes.
 - All files of a company folder have schema version 7: payments are a new kind of file (`payments/`); no existing file changes.

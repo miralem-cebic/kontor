@@ -6,9 +6,12 @@
 
 export const DEFAULT_INVOICE_PATTERN = 'RE-{YYYY}-{NNNN}';
 export const DEFAULT_QUOTE_PATTERN = 'AN-{YYYY}-{NNNN}';
+/** Contact and item numbers (F28): a counter only, no date */
+export const DEFAULT_CONTACT_PATTERN = 'K-{NNNN}';
+export const DEFAULT_ITEM_PATTERN = 'A-{NNNN}';
 export const MAX_PATTERN_LENGTH = 40;
 
-export type PatternProblem = 'empty' | 'tooLong' | 'invalidCharacter' | 'unknownToken' | 'noCounter' | 'multipleCounters';
+export type PatternProblem = 'empty' | 'tooLong' | 'invalidCharacter' | 'unknownToken' | 'noCounter' | 'multipleCounters' | 'dateToken';
 
 type Token = { kind: 'text'; text: string } | { kind: 'year4' } | { kind: 'year2' } | { kind: 'month' } | { kind: 'counter'; digits: number };
 
@@ -92,4 +95,39 @@ export const nextCounter = (known: readonly number[]): number => Math.max(0, ...
 /** The number for a document date (YYYY-MM-DD) and a counter */
 export function numberFor(pattern: string, isoDate: string, counter: number): string {
   return formatNumber(pattern, { year: Number(isoDate.slice(0, 4)), month: Number(isoDate.slice(5, 7)), counter });
+}
+
+/* ---------- Contact and item numbers (F28) ---------- */
+
+/**
+ * Why a pattern cannot number contacts or items: any problem of a pattern, or a date. A contact or item number has no
+ * date, so {YYYY}, {YY} and {MM} are refused for them.
+ */
+export function counterOnlyProblem(pattern: string): PatternProblem | null {
+  const problem = patternProblem(pattern);
+  if (problem) return problem;
+  return /\{(YYYY|YY|MM)\}/.test(pattern) ? 'dateToken' : null;
+}
+
+/** The counter of a number of the pattern, or null when the number is not of this pattern */
+export function counterOf(pattern: string, number: string): number | null {
+  if (counterOnlyProblem(pattern) !== null) return null;
+  const tokens = tokenize(pattern);
+  if (typeof tokens === 'string') return null;
+  // the text of a pattern holds only letters, digits, "_" and "-", so it needs no escaping in a regular expression
+  const source = tokens.map((t) => (t.kind === 'text' ? t.text : t.kind === 'counter' ? '(\\d+)' : '')).join('');
+  const match = new RegExp(`^${source}$`).exec(number);
+  const counter = match?.[1];
+  return counter === undefined ? null : Number(counter);
+}
+
+/**
+ * The next number of a contact or item pattern: one more than the highest counter among the numbers of the pattern.
+ * Numbers of other patterns are ignored. The caller passes every number, deleted ones too, so that no number is given
+ * twice. Null when the pattern cannot number contacts or items.
+ */
+export function nextFreeNumber(pattern: string, existing: readonly string[]): string | null {
+  if (counterOnlyProblem(pattern) !== null) return null;
+  const counters = existing.map((n) => counterOf(pattern, n)).filter((c): c is number => c !== null);
+  return formatNumber(pattern, { year: 0, month: 1, counter: nextCounter(counters) });
 }

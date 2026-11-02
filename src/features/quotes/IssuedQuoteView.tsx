@@ -14,6 +14,7 @@ import { Fact, IssuedLines } from '../documents/IssuedParts';
 import { PdfButton } from '../documents/PdfButton';
 import { QuoteHistory } from './QuoteHistory';
 import { SendCard } from '../sending/SendMail';
+import { QuoteDecisionCard } from './QuoteDecisionCard';
 
 // A finalized quote: what it says, with the master data it was finalized with, and its PDF in the folder. Nothing can be
 // changed or deleted (ADR 0004); a change is a new version (F22), which replaces it. The quote can still become an
@@ -101,6 +102,8 @@ export function IssuedQuoteView({ quote, onDone, onCreateInvoice, onCopy, onNewV
         <IssuedLines id="finalized-lines" lines={quote.lines} totals={documentTotals(quote.lines, smallBusiness)} note={smallBusiness ? 'smallBusiness' : null} />
 
         <QuoteHistory quote={quote} customerName={snapshot.customer.name} onOpen={onOpen} />
+
+        <QuoteDecisionCard quoteId={quote.id} replaced={replaced} />
 
         {/* a replaced version is not sent: the customer gets the quote that replaces it */}
         {!replaced && <SendCard source={{ kind: 'quote', documentId: quote.id }} />}

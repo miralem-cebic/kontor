@@ -1,7 +1,7 @@
 import { DEFAULT_CONTACT_PATTERN, DEFAULT_ITEM_PATTERN, DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateItem, validateNumbering, validatePayment, type Check } from './validate';
-import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, PaymentFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateItem, validateNumbering, validatePayment, validateQuoteStatus, type Check } from './validate';
+import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, PaymentFile, QuoteStatusFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
@@ -16,6 +16,7 @@ interface FileTypes {
   numbering: NumberingFile;
   payment: PaymentFile;
   dunning: DunningFile;
+  quoteStatus: QuoteStatusFile;
 }
 export type FileKind = keyof FileTypes;
 
@@ -27,6 +28,7 @@ const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = {
   numbering: validateNumbering,
   payment: validatePayment,
   dunning: validateDunning,
+  quoteStatus: validateQuoteStatus,
 };
 
 export interface Migration {
@@ -160,15 +162,17 @@ const snapshotLanguage: Migration = {
  * Version 9 gives every contact the language of its documents; the customer in an issued document's snapshot gets it too.
  * Version 10 gives contacts and items numbers from a pattern: company.json gets the two patterns, and the company in an
  * issued document's snapshot gets them too.
+ * Version 11 adds the decisions of the customer on a quote, a new kind of file (quoteStatus/); no existing file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage, snapshotNumberPatterns],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage, snapshotNumberPatterns, unchanged(10)],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
+  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
 };
 
 export class NewerSchemaError extends Error {

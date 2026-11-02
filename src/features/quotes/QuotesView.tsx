@@ -20,6 +20,7 @@ import {
   type QuoteFieldError,
 } from '../../domain/quote';
 import { changeStats, replacedAlready, versionNumber } from '../../domain/quoteVersions';
+import { activeDecision, quoteStateOf } from '../../domain/quoteStatus';
 import type { DocumentId } from '../../data/ids';
 import { isQuote, nextVersionOf, type QuoteFile, type RevisedQuote } from '../../data/types';
 import { finalizeQuote } from '../../app/issue';
@@ -44,6 +45,15 @@ const VALIDITY_FILTERS: { value: ValidityFilter; label: MessageKey }[] = [
   { value: 'all', label: 'quotes.filterAll' },
   { value: 'valid', label: 'quotes.filterValid' },
   { value: 'expired', label: 'quotes.filterExpired' },
+];
+
+type DecisionFilter = 'all' | 'open' | 'accepted' | 'declined';
+
+const DECISION_FILTERS: { value: DecisionFilter; label: MessageKey }[] = [
+  { value: 'all', label: 'quotes.filterAll' },
+  { value: 'open', label: 'quotes.decisionOpen' },
+  { value: 'accepted', label: 'quotes.decisionAccepted' },
+  { value: 'declined', label: 'quotes.decisionDeclined' },
 ];
 
 /** `onCreateInvoice` opens a new invoice for a saved quote */
@@ -123,15 +133,24 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
   const smallBusiness = useSmallBusiness();
   const [query, setQuery] = useState('');
   const [validity, setValidity] = useState<ValidityFilter>('all');
+  const [decision, setDecision] = useState<DecisionFilter>('all');
+  const quoteStatuses = useApp((s) => s.quoteStatuses);
   const searchId = useId();
   const active = useMemo(() => [...documents.values()].filter(isQuote).filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
   // a finalized quote keeps the customer and the VAT scheme it was finalized with
   const customerName = (q: QuoteFile) => q.issued?.snapshot.customer.name ?? contacts.get(q.customerId)?.name ?? '';
   const gross = (q: QuoteFile) => documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
   const today = isoDateOf(new Date());
+  // the state a quote is listed in: a draft, open, or the decision that counts (F21)
+  const stateOf = (q: QuoteFile) => quoteStateOf({ finalized: !!q.issued, decision: activeDecision([...quoteStatuses.values()].filter((s) => s.quoteId === q.id))?.decision ?? null });
+  const inDecision = (q: QuoteFile, f: DecisionFilter) => f === 'all' || stateOf(q) === f;
+  const stateBadge = (q: QuoteFile) => {
+    const s = stateOf(q);
+    return s === 'accepted' || s === 'declined' ? <span className="badge">{t(s === 'accepted' ? 'quotes.decisionAccepted' : 'quotes.decisionDeclined')}</span> : null;
+  };
   const inFilter = (q: QuoteFile, f: ValidityFilter) => f === 'all' || isExpired(q, today) === (f === 'expired');
   const matching = active.filter((q) => quoteMatches(q, customerName(q), query) || (q.issued?.number.toLowerCase().includes(query.trim().toLowerCase()) ?? false));
-  const shown = matching.filter((q) => inFilter(q, validity));
+  const shown = matching.filter((q) => inFilter(q, validity) && inDecision(q, decision));
   const lang = currentLang();
   const stats = changeStats(active);
   // a quote with a finalized later version is replaced
@@ -163,6 +182,13 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
               {VALIDITY_FILTERS.map((f) => (
                 <button key={f.value} type="button" className={validity === f.value ? 'on' : ''} aria-pressed={validity === f.value} onClick={() => setValidity(f.value)}>
                   {t(f.label)} <span className="seg-n">{matching.filter((q) => inFilter(q, f.value)).length}</span>
+                </button>
+              ))}
+            </div>
+            <div className="seg" role="group" aria-label={t('quotes.decisionFilter')}>
+              {DECISION_FILTERS.map((f) => (
+                <button key={f.value} type="button" className={decision === f.value ? 'on' : ''} aria-pressed={decision === f.value} onClick={() => setDecision(f.value)}>
+                  {t(f.label)} <span className="seg-n">{matching.filter((q) => inFilter(q, validity) && inDecision(q, f.value)).length}</span>
                 </button>
               ))}
             </div>
@@ -203,7 +229,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
                     </td>
                     <td>{q.subject || <span className="muted">{t('documents.noSubject')}</span>}</td>
                     <td>
-                      {formatDate(q.validUntil)} {isExpired(q, today) && <span className="badge muted-badge">{t('quotes.expired')}</span>}
+                      {formatDate(q.validUntil)} {isExpired(q, today) && <span className="badge muted-badge">{t('quotes.expired')}</span>} {stateBadge(q)}
                     </td>
                     <td className="num">{formatCents(gross(q), lang)}</td>
                   </tr>

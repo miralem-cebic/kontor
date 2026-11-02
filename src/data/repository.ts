@@ -1,5 +1,5 @@
 import type { Result } from './result';
-import type { AuditEntry, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from './types';
+import type { AuditEntry, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, NumberRange, PaymentFile, QuoteStatusFile } from './types';
 
 export interface BackupInfo {
   name: string;
@@ -64,6 +64,10 @@ export interface Repository {
   loadPayments(): Promise<Result<{ payments: PaymentFile[]; issues: LoadIssue[] }, StorageError>>;
   /** Writes payments/<id>.json, with the same conflict check and merge as `saveCompany` */
   savePayment(payment: PaymentFile): Promise<Result<PaymentFile, StorageError>>;
+  /** All decisions on quotes, removed ones included; a broken file is reported like a contact */
+  loadQuoteStatuses(): Promise<Result<{ quoteStatuses: QuoteStatusFile[]; issues: LoadIssue[] }, StorageError>>;
+  /** Writes quoteStatus/<id>.json, with the same conflict check and merge as `savePayment` */
+  saveQuoteStatus(quoteStatus: QuoteStatusFile): Promise<Result<QuoteStatusFile, StorageError>>;
   /** All dunnings, a broken file is reported like a contact */
   loadDunnings(): Promise<Result<{ dunnings: DunningFile[]; issues: LoadIssue[] }, StorageError>>;
   /** Writes dunnings/<id>.json. A dunning is never changed: the file that is there wins over a different one with the same ID. */

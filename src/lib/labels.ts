@@ -3,6 +3,7 @@ import type { PaymentFailure } from '../app/payments';
 import type { SendFailure } from '../app/sending';
 import type { StorageErrorKind } from '../data/repository';
 import type { DunningLevel, DunningProblem } from '../domain/dunning';
+import type { DecisionProblem } from '../domain/quoteStatus';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
@@ -262,6 +263,35 @@ export const DUNNING_LEVEL_KEY: Record<DunningLevel, MessageKey> = {
   level2: 'dunning.level.level2',
   level3: 'dunning.level.level3',
 };
+
+/** Why a decision on a quote cannot be recorded, as the form tells it (F21) */
+const DECISION_PROBLEM_KEY: Record<DecisionProblem, MessageKey> = {
+  notFinalized: 'quotes.decisionProblem.notFinalized',
+  replaced: 'quotes.decisionProblem.replaced',
+  alreadyDecided: 'quotes.decisionProblem.alreadyDecided',
+  dateBeforeQuote: 'quotes.decisionProblem.dateBeforeQuote',
+  dateInFuture: 'quotes.decisionProblem.dateInFuture',
+};
+
+export const quoteDecisionProblemText = (p: DecisionProblem): string => t(DECISION_PROBLEM_KEY[p]);
+
+/** Why a decision was not recorded or removed: no such quote or decision, a date that is not one, or a storage failure */
+export function quoteDecisionFailureText(f: 'notReady' | 'date' | StorageErrorKind): string {
+  switch (f) {
+    case 'notReady':
+      return t('quotes.decisionNotReady');
+    case 'date':
+      return t('quotes.decisionDateInvalid');
+    case 'permission':
+    case 'notFound':
+    case 'quota':
+    case 'newerSchema':
+    case 'invalid':
+    case 'conflict':
+    case 'other':
+      return t('quotes.decisionFailed');
+  }
+}
 
 /** Why a dunning cannot be planned, as the form tells it */
 export const dunningProblemText = (p: DunningProblem): string => t(DUNNING_PROBLEM_KEY[p]);

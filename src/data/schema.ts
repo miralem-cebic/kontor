@@ -4,15 +4,17 @@ import type { ContactProfile } from '../domain/contact';
 import { cancellationContent, type InvoiceContent, type IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { PaymentContent } from '../domain/payment';
+import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newItemId, newPaymentId, type AccountId, type ContactId, type DocumentId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
   INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
   PAYMENT_MERGEABLE_FIELDS,
+  QUOTE_STATUS_MERGEABLE_FIELDS,
   QUOTE_MERGEABLE_FIELDS,
   type BankAccount,
   type CompanyFile,
@@ -25,6 +27,8 @@ import {
   type DunningFile,
   type MergeableField,
   type PaymentFile,
+  type QuoteStatusFile,
+  type QuoteStatusMergeableField,
   type PaymentMergeableField,
   type QuoteFile,
   type QuoteMergeableField,
@@ -32,7 +36,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const nowIso = (): string => stampNow();
 
@@ -118,4 +122,15 @@ export function makePayment(invoiceId: DocumentId, content: Omit<PaymentContent,
 /** A new dunning of an issued invoice, from what its plan claims (domain/dunning.ts). A dunning is never changed afterwards. */
 export function makeDunning(invoiceId: DocumentId, content: Omit<DunningFile, 'schemaVersion' | 'id' | 'invoiceId' | 'createdAt'>): DunningFile {
   return { schemaVersion: SCHEMA_VERSION, id: newDunningId(), invoiceId, ...content, createdAt: nowIso() };
+}
+
+/**
+ * A new decision of the customer on a finalized quote (F21). Every field counts as changed at creation time. A decision
+ * never changes; removing it is a deletion of its own.
+ */
+export function makeQuoteStatus(quoteId: DocumentId, content: { decision: QuoteDecision; date: string }): QuoteStatusFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<QuoteStatusMergeableField, string>> = {};
+  for (const f of QUOTE_STATUS_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return { schemaVersion: SCHEMA_VERSION, id: newQuoteStatusId(), quoteId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

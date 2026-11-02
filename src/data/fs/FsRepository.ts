@@ -1,9 +1,9 @@
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, NumberRange, PaymentFile } from '../types';
+import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ItemFile, NumberingFile, NumberRange, PaymentFile, QuoteStatusFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { writeFile, writeJson } from './jsonFile';
 
@@ -13,6 +13,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   items/<id>.json            one file per item or service of the catalogue
 //   documents/<id>.json        one file per quote or invoice
 //   payments/<id>.json         one file per payment of an issued invoice
+//   quoteStatus/<id>.json   one file per decision of the customer on a quote; never changed, only removed (soft delete)
 //   dunnings/<id>.json         one file per dunning (Mahnung) of an issued invoice, never changed
 //   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
 //   documents/quotes/<file>    the PDF of a finalized quote, the same way
@@ -22,7 +23,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
 
 /** The folder in documents/ with the PDFs of each number range */
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
@@ -182,6 +183,17 @@ export class FsRepository implements Repository {
 
   savePayment(payment: PaymentFile) {
     return attempt(() => this.saveRecord(DIRS.payments, payment, (raw) => migrate('payment', raw), mergePayment));
+  }
+
+  loadQuoteStatuses() {
+    return attempt(async () => {
+      const { records, issues } = await this.loadRecords(DIRS.quoteStatus, (raw) => migrate('quoteStatus', raw));
+      return { quoteStatuses: records, issues };
+    });
+  }
+
+  saveQuoteStatus(quoteStatus: QuoteStatusFile) {
+    return attempt(() => this.saveRecord(DIRS.quoteStatus, quoteStatus, (raw) => migrate('quoteStatus', raw), mergeQuoteStatus));
   }
 
   /* ---------- Numbering, issued files, audit ---------- */

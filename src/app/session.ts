@@ -8,7 +8,7 @@ import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../data/merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
 import { emergencyKey, Persister } from '../data/persister';
 import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
@@ -171,12 +171,15 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   if (!loadedPayments.ok) return set({ phase: 'failed', error: loadedPayments.error.kind, currentId: company.id });
   const loadedDunnings = await r.loadDunnings();
   if (!loadedDunnings.ok) return set({ phase: 'failed', error: loadedDunnings.error.kind, currentId: company.id });
+  const loadedQuoteStatuses = await r.loadQuoteStatuses();
+  if (!loadedQuoteStatuses.ok) return set({ phase: 'failed', error: loadedQuoteStatuses.error.kind, currentId: company.id });
   const records: CompanyRecords = {
     contacts: loadedContacts.value.contacts,
     items: loadedItems.value.items,
     documents: loadedDocuments.value.documents,
     payments: loadedPayments.value.payments,
     dunnings: loadedDunnings.value.dunnings,
+    quoteStatuses: loadedQuoteStatuses.value.quoteStatuses,
   };
   repo = r;
   loadCompany(company, records);
@@ -191,6 +194,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     { issues: loadedDocuments.value.issues, toast: 'toast.unreadableDocuments' },
     { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
     { issues: loadedDunnings.value.issues, toast: 'toast.unreadableDunnings' },
+    { issues: loadedQuoteStatuses.value.issues, toast: 'toast.unreadableQuoteStatuses' },
   ] as const;
   for (const { issues, toast } of unreadable) {
     if (!issues.length) continue;
@@ -254,14 +258,15 @@ function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ 
   const payments = recoverRecords(copy['payments'], loaded.payments, (raw) => migrate('payment', raw), mergePayment);
   // a dunning is never changed: the copy's version of one that the folder holds is not used
   const dunnings = recoverRecords(copy['dunnings'], loaded.dunnings, (raw) => migrate('dunning', raw), (local) => local);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length) return null;
+  const quoteStatuses = recoverRecords(copy['quoteStatuses'], loaded.quoteStatuses, (raw) => migrate('quoteStatus', raw), mergeQuoteStatus);
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length) return null;
   showToast(t('toast.recovered'));
-  return { company: nextCompany, contacts, items, documents, payments, dunnings };
+  return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses };
 }
 
 /** Daily backup of the state in the store. Errors here must not disturb the work. */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents, payments, dunnings } = useApp.getState();
+  const { company, contacts, items, documents, payments, dunnings, quoteStatuses } = useApp.getState();
   if (!company) return;
   const res = await dailyBackup(r, {
     company,
@@ -270,6 +275,7 @@ async function maintenance(r: FsRepository) {
     documents: [...documents.values()],
     payments: [...payments.values()],
     dunnings: [...dunnings.values()],
+    quoteStatuses: [...quoteStatuses.values()],
   });
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }

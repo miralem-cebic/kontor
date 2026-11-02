@@ -30,6 +30,7 @@ import { ITEM_LIMITS } from '../domain/item';
 import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunning';
 import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
+import { QUOTE_DECISIONS, type QuoteDecision } from '../domain/quoteStatus';
 import { QUOTE_LIMITS } from '../domain/quote';
 import { versionNumber } from '../domain/quoteVersions';
 import { counterOnlyProblem, MAX_PATTERN_LENGTH, patternProblem } from '../domain/numbering';
@@ -56,7 +57,9 @@ import {
   NUMBER_RANGES,
   type NumberingFile,
   PAYMENT_MERGEABLE_FIELDS,
+  QUOTE_STATUS_MERGEABLE_FIELDS,
   type PaymentFile,
+  type QuoteStatusFile,
   type QuoteFile,
   type Reservation,
   type RevisedQuote,
@@ -111,6 +114,7 @@ const accountId = idOf<'AccountId'>();
 const itemId = idOf<'ItemId'>();
 const documentId = idOf<'DocumentId'>();
 const paymentId = idOf<'PaymentId'>();
+const quoteStatusId = idOf<'QuoteStatusId'>();
 const dunningId = idOf<'DunningId'>();
 
 const text =
@@ -499,6 +503,18 @@ export const validatePayment: Check<PaymentFile> = objectOf<PaymentFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(PAYMENT_MERGEABLE_FIELDS),
+});
+
+/** A decision of the customer on a finalized quote: accepted or declined, with the date it was made (F21) */
+export const validateQuoteStatus: Check<QuoteStatusFile> = objectOf<QuoteStatusFile>({
+  schemaVersion: num,
+  id: quoteStatusId,
+  quoteId: documentId,
+  decision: oneOf<QuoteDecision>(QUOTE_DECISIONS),
+  date: isoDate,
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(QUOTE_STATUS_MERGEABLE_FIELDS),
 });
 
 /** A dunning claims an amount in cents: not negative, at most the largest amount a file may hold */

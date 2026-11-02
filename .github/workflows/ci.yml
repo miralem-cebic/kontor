@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Lint Markdown files
-        uses: DavidAnson/markdownlint-cli2-action@v24
+        uses: DavidAnson/markdownlint-cli2-action@v25
         with:
           globs: "**/*.md"
 
@@ -84,7 +84,7 @@ jobs:
   # commit in uses:, baseline-ref and "baseline" in baseline.json together: Dependabot only updates uses:.
   conformance:
     name: conformance
-    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@06fe6b0e9c71709004e67dd4326acebc950a78c7 # v0.1.0
+    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@41304f703e5607321b696040cd586870a7f0f886 # v0.1.1
     with:
       strict: false
       baseline-ref: v0.1.0

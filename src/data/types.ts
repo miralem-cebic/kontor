@@ -9,8 +9,9 @@ import type { ItemProfile } from '../domain/item';
 import type { Cents } from '../domain/money';
 import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
+import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -265,6 +266,29 @@ export interface DunningFile {
   createdAt: string;
 }
 
+/** Decisions of the customer on a finalized quote are merged one by one: only their deletion is a change */
+const QUOTE_STATUS_MERGEABLE: Record<QuoteStatusMergeableField, true> = { deletedAt: true };
+export const QUOTE_STATUS_MERGEABLE_FIELDS = keysOf(QUOTE_STATUS_MERGEABLE);
+export type QuoteStatusMergeableField = 'deletedAt';
+
+/**
+ * quoteStatus/<id>.json: the decision of the customer on a finalized quote, accepted or declined, with its date (F21). A
+ * decision never changes; a wrong one is removed (soft delete) and the removal is logged. The quote itself does not change.
+ */
+export interface QuoteStatusFile {
+  schemaVersion: number;
+  id: QuoteStatusId;
+  /** The finalized quote the decision is about */
+  quoteId: DocumentId;
+  decision: QuoteDecision;
+  /** The date the customer decided (YYYY-MM-DD) */
+  date: string;
+  createdAt: string;
+  /** Soft delete: a removed decision stays in its file and counts as no decision */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<QuoteStatusMergeableField, string>>;
+}
+
 /** documents/<id>.json: quotes and invoices, told apart by `kind` */
 export type DocumentFile = QuoteFile | InvoiceFile;
 
@@ -335,7 +359,9 @@ export type AuditEntry =
   | (AuditBase & { action: 'recordPayment'; payment: AuditPayment })
   | (AuditBase & { action: 'deletePayment'; payment: AuditPayment })
   | (AuditBase & { action: 'dunning'; dunning: AuditDunning })
-  | (AuditBase & { action: 'send'; send: AuditSend });
+  | (AuditBase & { action: 'send'; send: AuditSend })
+  | (AuditBase & { action: 'quoteDecision'; quoteStatus: AuditQuoteDecision })
+  | (AuditBase & { action: 'deleteQuoteDecision'; quoteStatus: AuditQuoteDecision });
 
 /**
  * The mail a line of the audit log is about (`send`): what it is for, the channel it was prepared with and the recipient.
@@ -347,6 +373,13 @@ export interface AuditSend {
   channel: SendChannel;
   to: string;
   dunningId: DunningId | null;
+}
+
+/** The decision on a quote a line of the audit log is about: the decision and its date */
+export interface AuditQuoteDecision {
+  id: QuoteStatusId;
+  decision: QuoteDecision;
+  date: string;
 }
 
 /** The dunning a line of the audit log is about; `amount` is what it adds to the claim */
@@ -372,6 +405,7 @@ export interface BackupSnapshot {
   documents: readonly DocumentFile[];
   payments: readonly PaymentFile[];
   dunnings: readonly DunningFile[];
+  quoteStatuses: readonly QuoteStatusFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

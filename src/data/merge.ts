@@ -5,11 +5,13 @@ import {
   MERGEABLE_FIELDS,
   PAYMENT_MERGEABLE_FIELDS,
   QUOTE_MERGEABLE_FIELDS,
+  QUOTE_STATUS_MERGEABLE_FIELDS,
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
   type ItemFile,
   type PaymentFile,
+  type QuoteStatusFile,
 } from './types';
 
 // Field-level merge of a file that two devices changed: each field keeps the value with the newer
@@ -42,6 +44,9 @@ export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeF
 
 /** A payment changes only by its deletion, which wins over the older state of another device */
 export const mergePayment = (local: PaymentFile, remote: PaymentFile): PaymentFile => mergeFields(local, remote, PAYMENT_MERGEABLE_FIELDS);
+
+/** A decision on a quote changes only by its deletion, which wins over the older state of another device */
+export const mergeQuoteStatus = (local: QuoteStatusFile, remote: QuoteStatusFile): QuoteStatusFile => mergeFields(local, remote, QUOTE_STATUS_MERGEABLE_FIELDS);
 
 /**
  * Quotes and invoices have their own fields. A quote and an invoice are never the same record (the repository

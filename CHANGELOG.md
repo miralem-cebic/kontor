@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Decisions of the customer on a finalized quote (F21): a quote is accepted or declined, with its date, on its page. Each decision is a file of its own; the quote does not change. A wrong decision is removed, and both are logged. The list shows whether a quote is open, accepted or declined, and filters by it.
 - Setup assistant for the first start and for "Add company": browser check, folder, company details with logo (PNG, JPG or SVG up to 1 MB), tax settings (small business scheme, cash or accrual VAT, return period, permanent extension, freelance or trade with multiplier), bank account with IBAN check, invoice number format with preview, payment term and footer, and a summary. Every step is checked; nothing is written before "Finish".
 - Several companies, each in its own folder. A switcher in the sidebar lists them and adds new ones; the last opened company opens again after a restart.
 - Settings page with the fields of the assistant, saved section by section.
@@ -39,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- All files of a company folder have schema version 11: decisions of the customer on a quote are a new kind of file (`quoteStatus/`); no other file changes.
 - All files of a company folder have schema version 10: the settings have the patterns of contact and item numbers (defaults `K-{NNNN}` and `A-{NNNN}`); no other file changes.
 - All files of a company folder have schema version 9: a contact has the language of its documents (German for existing contacts), and the customer in an issued document gets it too; no other file changes.
 - All files of a company folder have schema version 8: dunnings are a new kind of file (`dunnings/`); no existing file changes.

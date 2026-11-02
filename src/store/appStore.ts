@@ -4,8 +4,8 @@ import type { ContactProfile } from '../domain/contact';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId } from '../data/ids';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, sameJson } from '../data/merge';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
 import { makeAccount, makeContact, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
 import type {
@@ -23,6 +23,7 @@ import type {
   MergeableField,
   PaymentFile,
   QuoteFile,
+  QuoteStatusFile,
   QuoteMergeableField,
   RevisedQuote,
 } from '../data/types';
@@ -50,13 +51,15 @@ export interface AppState {
   payments: ReadonlyMap<PaymentId, PaymentFile>;
   /** Dunnings of issued invoices by ID; a dunning is never changed */
   dunnings: ReadonlyMap<DunningId, DunningFile>;
+  /** Decisions of the customer on quotes by ID, removed ones included (they count as no decision) */
+  quoteStatuses: ReadonlyMap<QuoteStatusId, QuoteStatusFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -77,15 +80,16 @@ export interface CompanyRecords {
   documents: readonly DocumentFile[];
   payments: readonly PaymentFile[];
   dunnings: readonly DunningFile[];
+  quoteStatuses: readonly QuoteStatusFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
@@ -94,6 +98,7 @@ export function applyRecovered(company: CompanyFile, { contacts, items, document
     documents: documents.length ? new Map([...s.documents, ...byId(documents)]) : s.documents,
     payments: payments.length ? new Map([...s.payments, ...byId(payments)]) : s.payments,
     dunnings: dunnings.length ? new Map([...s.dunnings, ...byId(dunnings)]) : s.dunnings,
+    quoteStatuses: quoteStatuses.length ? new Map([...s.quoteStatuses, ...byId(quoteStatuses)]) : s.quoteStatuses,
   }));
 }
 
@@ -311,6 +316,24 @@ export function integrateWrittenPayment(sent: PaymentFile, written: PaymentFile)
   const current = get().payments.get(written.id);
   if (!current) return;
   putPayment(current === sent ? written : mergePayment(current, written));
+}
+
+/* ---------- Decisions on quotes ---------- */
+
+function putQuoteStatus(quoteStatus: QuoteStatusFile) {
+  set((s) => ({ quoteStatuses: new Map(s.quoteStatuses).set(quoteStatus.id, quoteStatus) }));
+}
+
+/** A decision on a quote as the decision flow wrote it (app/quoteStatus.ts): recorded, or removed; the file is written first */
+export function putWrittenQuoteStatus(quoteStatus: QuoteStatusFile) {
+  putQuoteStatus(quoteStatus);
+}
+
+/** Like `integrateWrittenPayment`, for one decision on a quote */
+export function integrateWrittenQuoteStatus(sent: QuoteStatusFile, written: QuoteStatusFile) {
+  const current = get().quoteStatuses.get(written.id);
+  if (!current) return;
+  putQuoteStatus(current === sent ? written : mergeQuoteStatus(current, written));
 }
 
 /* ---------- Dunnings ---------- */

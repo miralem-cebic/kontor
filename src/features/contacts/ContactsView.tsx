@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CheckGroup, Choice, Row, TextArea, TextField } from '../../components/Field';
+import { CheckGroup, Choice, Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import {
@@ -14,11 +14,13 @@ import {
   type ContactFieldError,
   type ContactKind,
   type ContactRoles,
+  DOCUMENT_LANGUAGES,
+  type DocumentLanguage,
 } from '../../domain/contact';
 import { TEXT_LIMITS } from '../../domain/check';
 import type { ContactId } from '../../data/ids';
 import type { ContactFile } from '../../data/types';
-import { t, type MessageKey } from '../../i18n';
+import { LANG_NAMES, t, type MessageKey } from '../../i18n';
 import { fieldError } from '../../lib/labels';
 import { addContact, deleteContact, showToast, updateContact, useApp } from '../../store/appStore';
 import { CustomerAccountView } from './CustomerAccountView';
@@ -28,6 +30,9 @@ import { CustomerAccountView } from './CustomerAccountView';
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ContactId } | { kind: 'account'; id: ContactId };
 type RoleFilter = 'all' | 'customer' | 'supplier';
+
+/** The languages the documents of a contact can be made in, named in their own language */
+const LANGUAGE_OPTIONS = DOCUMENT_LANGUAGES.map((value) => ({ value, label: LANG_NAMES[value] }));
 
 export function ContactsView() {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
@@ -299,6 +304,13 @@ function ContactEditor({ contact, onDone, onAccount }: { contact: ContactFile | 
                 maxLength={3}
               />
             </Row>
+            <SelectField<DocumentLanguage>
+              label={t('contacts.language')}
+              hint={t('contacts.languageHint')}
+              value={draft.language}
+              options={LANGUAGE_OPTIONS}
+              onChange={(language) => set({ language })}
+            />
             <TextArea label={t('contacts.notes')} value={draft.notes} onChange={(notes) => set({ notes })} error={e('notes')} maxLength={CONTACT_LIMITS.notes} />
           </section>
 

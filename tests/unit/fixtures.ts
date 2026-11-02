@@ -78,6 +78,7 @@ export const sampleContact = (over: Partial<ContactProfile> = {}): ContactProfil
   orderReference: 'PO-4711',
   paymentTermDays: 30,
   notes: '',
+  language: 'de',
   ...over,
 });
 

@@ -96,6 +96,28 @@ const quotesIssued: Migration = {
   },
 };
 
+/** Version 9: the documents of a contact are made in its language. A contact of version 8 is German, as its documents were. */
+const contactLanguage: Migration = {
+  from: 8,
+  up: (raw) => ('language' in raw ? raw : { ...raw, language: 'de' }),
+};
+
+/**
+ * Version 9 for documents: the customer in the snapshot of an issued document of version 8 is German, as its PDF was. A
+ * draft or a quote has no snapshot and stays; anything else in the snapshot is left to the validation that follows.
+ */
+const snapshotLanguage: Migration = {
+  from: 8,
+  up: (raw) => {
+    const issued = raw['issued'];
+    if (!isRecord(issued) || !isRecord(issued['snapshot'])) return raw;
+    const snapshot = issued['snapshot'];
+    const customer = snapshot['customer'];
+    if (!isRecord(customer) || 'language' in customer) return raw;
+    return { ...raw, issued: { ...issued, snapshot: { ...snapshot, customer: { ...customer, language: 'de' } } } };
+  },
+};
+
 /**
  * Version 1 is the first format; contacts were added in it as a new kind of file. Items and documents (quotes) were
  * added in version 2 as new kinds of file: such a file without a version counts as version 1 like any other, and its
@@ -104,15 +126,16 @@ const quotesIssued: Migration = {
  * Version 6 gives quotes numbers: they can be finalized and get new versions, and the settings have a quote pattern.
  * Version 7 adds payments, a new kind of file (payments/); no existing file changes.
  * Version 8 adds dunnings, a new kind of file (dunnings/); no existing file changes.
+ * Version 9 gives every contact the language of its documents; the customer in an issued document's snapshot gets it too.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7)],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
+  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8)],
 };
 
 export class NewerSchemaError extends Error {

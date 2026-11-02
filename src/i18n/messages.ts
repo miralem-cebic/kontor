@@ -368,6 +368,11 @@ const MESSAGES_SRC = {
   'contacts.orderReferenceHint': { de: 'Wird in neue Rechnungen übernommen und lässt sich dort ändern', en: 'Copied into new invoices, where it can be changed' },
   'contacts.paymentTermHint': { de: 'Leer lassen für den Standard des Unternehmens ({days} Tage)', en: 'Leave empty for the company default ({days} days)' },
   'contacts.notes': { de: 'Notizen', en: 'Notes' },
+  'contacts.language': { de: 'Sprache der Dokumente', en: 'Language of the documents' },
+  'contacts.languageHint': {
+    de: 'Rechnungen, Angebote und Mahnungen samt ihren E-Mails entstehen in dieser Sprache. Was Sie selbst schreiben, bleibt unverändert.',
+    en: 'Invoices, quotes and dunnings, and their e-mails, are made in this language. What you write yourself stays as you typed it.',
+  },
   'contacts.save': { de: 'Speichern', en: 'Save' },
   'contacts.delete': { de: 'Löschen', en: 'Delete' },
   'contacts.deleteConfirm': {

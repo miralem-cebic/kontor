@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
 import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, SCHEMA_VERSION } from '../../src/data/schema';
+import type { InvoiceFile } from '../../src/data/types';
 import { cents } from '../../src/domain/money';
 import type { IssuedInfo } from '../../src/domain/invoice';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
@@ -26,8 +27,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(8);
-    expect(migrate('company', company()).schemaVersion).toBe(8);
+    expect(SCHEMA_VERSION).toBe(9);
+    expect(migrate('company', company()).schemaVersion).toBe(9);
   });
 
   it('a file without version counts as version 1', () => {
@@ -297,13 +298,71 @@ describe('version 7 → 8: dunnings', () => {
   });
 });
 
+const asV8 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 8 }) as Record<string, unknown>;
+
+describe('version 8 → 9: the language of the documents (F05)', () => {
+  const contact = makeContact(sampleContact());
+  const invoice = makeInvoice(contact.id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null);
+  /** The customer of an issued document of version 8 has no language yet */
+  const withoutCustomerLanguage = (raw: Record<string, unknown>): Record<string, unknown> => {
+    const issued = raw['issued'] as Record<string, unknown>;
+    const snapshot = issued['snapshot'] as Record<string, unknown>;
+    const { language: _language, ...customer } = snapshot['customer'] as Record<string, unknown>;
+    return { ...raw, issued: { ...issued, snapshot: { ...snapshot, customer } } };
+  };
+  const contactV8 = (): Record<string, unknown> => {
+    const { language: _language, ...raw } = asV8(contact);
+    return raw;
+  };
+
+  it('a contact of version 8 is German: its documents were made in German', () => {
+    const migrated = migrate('contact', contactV8());
+    expect(migrated).toMatchObject({ id: contact.id, name: contact.name, language: 'de', schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('a contact with a language of its own keeps it, and an unknown language is refused', () => {
+    expect(migrate('contact', { ...contactV8(), language: 'en' })).toMatchObject({ language: 'en' });
+    expect(() => migrate('contact', { ...contactV8(), language: 'fr' })).toThrow(InvalidFileError);
+  });
+
+  it('an issued document of version 8 says German for its customer, and keeps the rest of its snapshot', () => {
+    const issued = { ...invoice, issued: sampleIssued('RE-2026-0001') };
+    const migrated = migrate('document', withoutCustomerLanguage(asV8(issued))) as InvoiceFile & { issued: IssuedInfo };
+    expect(migrated.issued.snapshot.customer.language).toBe('de');
+    expect(migrated.issued.snapshot.customer.name).toBe('Kunde GmbH');
+    expect(migrated.issued.pdf).toEqual(issued.issued.pdf);
+  });
+
+  it('a draft or a quote of version 8 changes nothing but its version', () => {
+    const quote = makeQuote(contact.id, sampleQuote());
+    expect(migrate('document', asV8(quote))).toEqual({ ...quote, schemaVersion: SCHEMA_VERSION });
+    expect(migrate('document', asV8(invoice))).toEqual({ ...invoice, schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('the files of the other kinds of version 8 stay as they are', () => {
+    const files = {
+      company: asV8(sampleCompany()),
+      item: asV8(makeItem(sampleItem())),
+      payment: asV8(makePayment(invoice.id, { date: '2026-10-31', amount: cents(11_900), accountId: sampleCompany().bank.defaultAccountId, note: '' })),
+      numbering: asV8({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 8 refuses a contact with a language, so it never drops the language of its documents', () => {
+    expect(() => upgrade('contact', { ...contact, schemaVersion: 9 }, MIGRATIONS.contact, 8)).toThrow(NewerSchemaError);
+  });
+});
+
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 8 → 9, not in use)', () => {
+describe('migration template (version 9 → 10, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 8,
+      from: 9,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
@@ -312,13 +371,13 @@ describe('migration template (version 8 → 9, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 9);
-    expect(doc['schemaVersion']).toBe(9);
+    const doc = upgrade('company', company(), steps, 10);
+    expect(doc['schemaVersion']).toBe(10);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 9);
+    const doc = upgrade('company', companyV1(), steps, 10);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
@@ -326,10 +385,10 @@ describe('migration template (version 8 → 9, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(8)], 9)).toEqual({ ...raw, schemaVersion: 9 });
+    expect(upgrade('company', raw, [unchanged(9)], 10)).toEqual({ ...raw, schemaVersion: 10 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 9)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 10)).toThrow(InvalidFileError);
   });
 });

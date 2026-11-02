@@ -88,6 +88,7 @@ const contactProfile = (c: ContactFile): ContactProfile => ({
   orderReference: c.orderReference,
   paymentTermDays: c.paymentTermDays,
   notes: c.notes,
+  language: c.language,
 });
 
 function accountDetails(a: BankAccount): AccountDetails {
@@ -256,7 +257,8 @@ async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot,
     if (!existing.ok) return fail(existing.error.kind);
     bytes = existing.value;
   } else {
-    const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: 'de', number }, ctx.logo, ctx.now);
+    // the PDF is in the language of the customer, and stays so: the file is written once
+    const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: snapshot.customer.language, number }, ctx.logo, ctx.now);
     const written = await ctx.repo.writeIssuedFile(range, file, pdf.bytes);
     if (!written.ok) return fail(written.error.kind);
     bytes = pdf.bytes;

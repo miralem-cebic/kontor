@@ -22,7 +22,7 @@ import {
 } from '../domain/company';
 import { ACCOUNT_LIMITS, MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
-import { CONTACT_LIMITS, type ContactKind, type ContactRoles } from '../domain/contact';
+import { CONTACT_LIMITS, DOCUMENT_LANGUAGES, type ContactKind, type ContactRoles, type DocumentLanguage } from '../domain/contact';
 import { isIsoDate } from '../domain/dates';
 import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
@@ -314,6 +314,7 @@ const contactProfileShape = {
   orderReference: text(CONTACT_LIMITS.orderReference),
   paymentTermDays: nullable(int(0, TEXT_LIMITS.maxPaymentTermDays)),
   notes: text(CONTACT_LIMITS.notes),
+  language: oneOf<DocumentLanguage>(DOCUMENT_LANGUAGES),
 };
 
 export const validateContact: Check<ContactFile> = objectOf<ContactFile>({

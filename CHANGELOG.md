@@ -33,8 +33,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Sending by e-mail (F04): an issued invoice, its cancellation, a finalized quote or a dunning can be sent as an e-mail file (.eml) with its PDF attached, which opens as a draft in Outlook or Thunderbird. Or the mail program opens with the recipient, the subject and the text, and the PDF is downloaded to be attached. The text is filled in from the document and can be changed in the form; kontor sends nothing itself, and each prepared mail is written to the audit log. A PDF that changed since it was issued is not sent.
 - The letter of a dunning is a PDF: the claim with its open amount, the default interest of each dunning, the dunning fee and the flat fee, the date to pay by and the interest rate it was calculated with. It is made from the dunning and the invoice as issued.
 
+- Documents in English for English customers (F05): a contact has a language for its documents, German or English (German by default). Invoices, quotes and dunnings, their PDFs and their e-mails are made in the language of the customer. The language of an issued invoice or quote is fixed in its PDF when it is issued.
+
 ### Changed
 
+- All files of a company folder have schema version 9: a contact has the language of its documents (German for existing contacts), and the customer in an issued document gets it too; no other file changes.
 - All files of a company folder have schema version 8: dunnings are a new kind of file (`dunnings/`); no existing file changes.
 - All files of a company folder have schema version 7: payments are a new kind of file (`payments/`); no existing file changes.
 - The trade tax multiplier must be at least 280 % from 2027 (§ 16 Abs. 4 Satz 2 GewStG; 200 % up to 2026). The forms check against the minimum of the current year; in 2026 they say that a lower multiplier is replaced by 280 % from 2027. Company folders with a lower multiplier from an earlier year still open.

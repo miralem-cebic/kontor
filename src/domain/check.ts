@@ -79,6 +79,9 @@ const PHONE = /^[0-9+()/ -]+$/;
 const GERMAN_POSTAL_CODE = /^\d{5}$/;
 const OTHER_POSTAL_CODE = /^[A-Za-z0-9][A-Za-z0-9 -]{1,9}$/;
 
+/** Is the text an email address the forms accept? (Used for the recipient of a mail too: domain/sending.ts) */
+export const isEmailAddress = (text: string): boolean => text.length > 0 && text.length <= TEXT_LIMITS.email && EMAIL.test(text);
+
 export class Checker<F extends string> {
   readonly errors: FieldError<F>[] = [];
 

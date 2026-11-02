@@ -1,30 +1,24 @@
 import { useState } from 'react';
 import { TextField } from '../../components/Field';
 import { issueDunningOf } from '../../app/dunning';
-import type { DocumentId } from '../../data/ids';
+import type { DocumentId, DunningId } from '../../data/ids';
 import type { DunningFile, InvoiceFile, PaymentFile } from '../../data/types';
 import { isoDateOf } from '../../domain/dates';
 import { dueDate, type IssuedInfo } from '../../domain/invoice';
-import { claimTotal, planDunning, readDunningDraft, emptyDunningDraft, type Debtor, type DunningDraft, type DunningField, type DunningFieldError, type DunningLevel, type PriorDunning } from '../../domain/dunning';
+import { claimTotal, planDunning, readDunningDraft, emptyDunningDraft, type Debtor, type DunningDraft, type DunningField, type DunningFieldError, type PriorDunning } from '../../domain/dunning';
 import { formatCents, type Cents } from '../../domain/money';
 import { openAmount, paidAmount } from '../../domain/payment';
-import { currentLang, t, type MessageKey } from '../../i18n';
-import { dunningFailureText, dunningProblemText, fieldError } from '../../lib/labels';
+import { currentLang, t } from '../../i18n';
+import { DUNNING_LEVEL_KEY, dunningFailureText, dunningProblemText, fieldError } from '../../lib/labels';
 import { showToast } from '../../store/appStore';
 import { focusFirstError, formatDate } from '../documents/common';
+import { SendMailForm } from '../sending/SendMail';
 
 // The dunnings (Mahnungen) of an issued invoice: the levels issued so far with their interest and fees, and the form to
 // issue the next one. The form shows what the next dunning would claim before it is saved (domain/dunning.ts). Dunnings
 // are estimates for the letter, not legal advice, and they are never changed once issued (app/dunning.ts).
 
 type IssuedInvoice = InvoiceFile & { issued: IssuedInfo };
-
-const LEVEL_KEY: Record<DunningLevel, MessageKey> = {
-  reminder: 'dunning.level.reminder',
-  level1: 'dunning.level.level1',
-  level2: 'dunning.level.level2',
-  level3: 'dunning.level.level3',
-};
 
 /** The dunnings as the planning reads them: level, date and the flat fee each claimed */
 const priorOf = (dunnings: readonly DunningFile[]): PriorDunning[] => dunnings.map((d) => ({ level: d.level, date: d.date, flatFee: d.flatFee }));
@@ -44,6 +38,9 @@ interface Props {
 export function DunningCard({ invoice, gross, payments, dunnings, cancelled }: Props) {
   const lang = currentLang();
   const [adding, setAdding] = useState(false);
+  /** The dunning whose letter is being mailed */
+  const [mailFor, setMailFor] = useState<DunningId | null>(null);
+  const mailing = dunnings.find((d) => d.id === mailFor) ?? null;
   const paid = paidAmount(payments);
   const open = openAmount(gross, paid);
   const canAdd = !cancelled && open > 0;
@@ -84,21 +81,35 @@ export function DunningCard({ invoice, gross, payments, dunnings, cancelled }: P
                   {t('dunning.colFlat')}
                 </th>
                 <th scope="col">{t('dunning.colPayBy')}</th>
+                <th scope="col">{t('send.colMail')}</th>
               </tr>
             </thead>
             <tbody>
               {dunnings.map((d) => (
                 <tr key={d.id}>
                   <td>{formatDate(d.date)}</td>
-                  <td>{t(LEVEL_KEY[d.level])}</td>
+                  <td>{t(DUNNING_LEVEL_KEY[d.level])}</td>
                   <td className="num">{formatCents(d.interest, lang)}</td>
                   <td className="num">{formatCents(d.fee, lang)}</td>
                   <td className="num">{formatCents(d.flatFee, lang)}</td>
                   <td>{formatDate(d.payBy)}</td>
+                  <td>
+                    {!cancelled && (
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        aria-label={t('send.openFor', { level: t(DUNNING_LEVEL_KEY[d.level]) })}
+                        onClick={() => setMailFor(d.id)}
+                      >
+                        {t('send.open')}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {mailing && <SendMailForm key={mailing.id} source={{ kind: 'dunning', documentId: invoice.id, dunningId: mailing.id }} onDone={() => setMailFor(null)} />}
         </>
       )}
 
@@ -195,7 +206,7 @@ function DunningForm({ invoiceId, open, due, debtor, prior, dunnings, onDone }: 
       {typed.ok && plan?.ok && (
         <dl className="facts" aria-label={t('dunning.preview')}>
           <dt>{t('dunning.previewLevel')}</dt>
-          <dd>{t(LEVEL_KEY[plan.value.level])}</dd>
+          <dd>{t(DUNNING_LEVEL_KEY[plan.value.level])}</dd>
           <dt>{t('dunning.previewInterest', { from: formatDate(plan.value.interestFrom) })}</dt>
           <dd>{formatCents(plan.value.interest, lang)}</dd>
           <dt>{t('dunning.previewFlat')}</dt>

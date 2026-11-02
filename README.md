@@ -27,7 +27,8 @@ Der aktuelle Stand enthält:
 - **Einrichtungsassistent:** Ordner, Stammdaten mit Logo, Steuer (Kleinunternehmer nach § 19 UStG, Soll-/Ist-Versteuerung, Voranmeldungszeitraum, Freiberuf oder Gewerbe mit Hebesatz, dazu ein Link zur Karte der Hebesätze aller Gemeinden), Bankverbindung mit IBAN-Prüfung, Formate für Rechnungs- und Angebotsnummern, Zahlungsziel und Fußzeile.
 - **Mehrere Unternehmen:** Jedes Unternehmen hat einen eigenen Ordner. Ein Umschalter wechselt zwischen ihnen.
 - **Kontakte:** Kunden und Lieferanten mit Anschrift, Rechnungs-E-Mail, Kundennummer, USt-IdNr., Leitweg-ID für Behörden, Standard-Bestellnummer und Zahlungsziel. Suche und Filter nach Rolle.
-- **Mahnungen:** Für eine überfällige Rechnung wird die Zahlungserinnerung oder die 1. bis 3. Mahnung erstellt, mit den Verzugszinsen seit dem Fälligkeitstag (bei Unternehmern) bzw. seit der ersten Erinnerung (bei Verbrauchern), dem Basiszinssatz des jeweiligen Halbjahres und 9 bzw. 5 Prozentpunkten darüber. Für Unternehmer kommt die Pauschale von 40 € einmal dazu. Das Formular zeigt die Forderung vor dem Speichern. Die Berechnung ist eine Schätzung für das Mahnschreiben, keine Rechtsberatung. Eine Mahnung wird nicht geändert und steht im Protokoll. Das Mahnschreiben als PDF und der Versand folgen.
+- **Mahnungen:** Für eine überfällige Rechnung wird die Zahlungserinnerung oder die 1. bis 3. Mahnung erstellt, mit den Verzugszinsen seit dem Fälligkeitstag (bei Unternehmern) bzw. seit der ersten Erinnerung (bei Verbrauchern), dem Basiszinssatz des jeweiligen Halbjahres und 9 bzw. 5 Prozentpunkten darüber. Für Unternehmer kommt die Pauschale von 40 € einmal dazu. Das Formular zeigt die Forderung vor dem Speichern. Die Berechnung ist eine Schätzung für das Mahnschreiben, keine Rechtsberatung. Eine Mahnung wird nicht geändert und steht im Protokoll. Das Mahnschreiben gibt es als PDF; wie bei Rechnungen und Angeboten lässt sich die Mail dazu als E-Mail-Datei mit PDF-Anhang erstellen oder im Mailprogramm öffnen.
+- **Versand per E-Mail:** Rechnung, Stornorechnung, Angebot und Mahnung lassen sich als E-Mail-Datei (.eml) mit dem PDF im Anhang erstellen; die Datei öffnet sich als Entwurf im Mailprogramm. Alternativ öffnet kontor das Mailprogramm mit Empfänger, Betreff und Text, und das PDF wird heruntergeladen, um es anzuhängen. kontor verschickt nichts selbst. Jede vorbereitete Mail steht im Protokoll.
 - **Kundenkonto:** Pro Kunde stehen die Rechnungen, Stornorechnungen und Zahlungen in zeitlicher Reihenfolge, mit dem Saldo nach jeder Buchung und dem überfälligen Betrag. Ein Guthaben entsteht, wenn ein Kunde bezahlt hat und die Rechnung danach storniert wurde; es ist zu erstatten. Zu öffnen über den Kontakt.
 - **Bankkonten:** Mehrere Konten pro Unternehmen, zum Beispiel zwei Girokonten und PayPal. Eines davon ist das Standardkonto für Rechnungen.
 - **Artikel & Leistungen:** Ein Katalog mit Nummer, Bezeichnung, Beschreibung, Einheit, Nettopreis und Umsatzsteuersatz, mit Suche. Angebote übernehmen ihre Positionen daraus.
@@ -40,7 +41,7 @@ Der aktuelle Stand enthält:
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Angebotsstatus (angenommen, abgelehnt), Rabatte, Rechnungskorrekturen und Gutschriften, GiroCode, Mahnschreiben als PDF und Versand, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Angebotsstatus (angenommen, abgelehnt), Rabatte, Rechnungskorrekturen und Gutschriften, GiroCode, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

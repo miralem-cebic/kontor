@@ -38,7 +38,7 @@ npm run test:e2e      # Playwright against dist/index.html (needs installed Chro
 - Every change to a mergeable field sets that field's `fieldUpdatedAt` entry (`updateCompany` does it). The field-level merge depends on it.
 - Deletes are soft (`deletedAt`). Physical removal of files happens only in `src/data/maintenance.ts`.
 - Drafts are never written to disk: the setup assistant and the settings forms keep their state in memory until the user finishes or saves.
-- Links: only `http:` and `https:` may become an `href`.
+- Links: only `http:` and `https:` may become an `href`. One exception: the `mailto:` link of the e-mail sending (F04) is built only by `mailtoHref()` in `src/domain/links.ts`, from a checked address and percent-encoded parts, never from raw text.
 - File names that come from file content (logo, later invoice numbers) are checked before any file access.
 
 ## Finance rules

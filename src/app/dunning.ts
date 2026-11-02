@@ -34,7 +34,7 @@ export interface DunningContext {
 }
 
 /** The dunnings of one invoice, in the order they were issued */
-const dunningsOf = (dunnings: ReadonlyMap<DunningId, DunningFile>, invoiceId: DocumentId): DunningFile[] =>
+export const dunningsOf = (dunnings: ReadonlyMap<DunningId, DunningFile>, invoiceId: DocumentId): DunningFile[] =>
   [...dunnings.values()].filter((d) => d.invoiceId === invoiceId).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
 
 /** Issues a dunning of an issued invoice on `content.date` with the fee typed in */

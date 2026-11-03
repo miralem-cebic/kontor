@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.
 - All files of a company folder have schema version 11: decisions of the customer on a quote are a new kind of file (`quoteStatus/`); no other file changes.
 - All files of a company folder have schema version 10: the settings have the patterns of contact and item numbers (defaults `K-{NNNN}` and `A-{NNNN}`); no other file changes.
 - All files of a company folder have schema version 9: a contact has the language of its documents (German for existing contacts), and the customer in an issued document gets it too; no other file changes.

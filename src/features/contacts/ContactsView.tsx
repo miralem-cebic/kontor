@@ -190,7 +190,7 @@ function ContactEditor({ contact, onDone, onAccount }: { contact: ContactFile | 
   const sections: JumpSection[] = [
     { id: 'contact-sec-who', title: t('contacts.sectionWho'), icon: 'contacts' },
     { id: 'contact-sec-address', title: t('contacts.sectionAddress'), icon: 'home' },
-    { id: 'contact-sec-invoicing', title: t('contacts.sectionInvoicing'), icon: 'invoice' },
+    { id: 'contact-sec-invoicing', title: draft.kind === 'company' ? t('contacts.sectionInvoicing') : t('contacts.sectionPaymentNotes'), icon: 'invoice' },
   ];
 
   const save = () => {
@@ -294,13 +294,18 @@ function ContactEditor({ contact, onDone, onAccount }: { contact: ContactFile | 
           </section>
 
           <section className="card" id="contact-sec-invoicing" aria-labelledby="contact-invoicing">
-            <h2 id="contact-invoicing" tabIndex={-1}>{t('contacts.sectionInvoicing')}</h2>
+            <h2 id="contact-invoicing" tabIndex={-1}>{draft.kind === 'company' ? t('contacts.sectionInvoicing') : t('contacts.sectionPaymentNotes')}</h2>
+            {draft.kind === 'person' && <p className="note">{t('contacts.personNote')}</p>}
+            {draft.kind === 'company' && (
+              <Row>
+                <TextField label={t('contacts.vatId')} hint={t('contacts.vatIdHint')} value={draft.vatId} onChange={(vatId) => set({ vatId })} error={e('vatId')} maxLength={CONTACT_LIMITS.vatId} />
+                <TextField label={t('contacts.leitwegId')} hint={t('contacts.leitwegIdHint')} value={draft.leitwegId} onChange={(leitwegId) => set({ leitwegId })} error={e('leitwegId')} maxLength={46} />
+              </Row>
+            )}
             <Row>
-              <TextField label={t('contacts.vatId')} hint={t('contacts.vatIdHint')} value={draft.vatId} onChange={(vatId) => set({ vatId })} error={e('vatId')} maxLength={CONTACT_LIMITS.vatId} />
-              <TextField label={t('contacts.leitwegId')} hint={t('contacts.leitwegIdHint')} value={draft.leitwegId} onChange={(leitwegId) => set({ leitwegId })} error={e('leitwegId')} maxLength={46} />
-            </Row>
-            <Row>
-              <TextField label={t('contacts.orderReference')} hint={t('contacts.orderReferenceHint')} value={draft.orderReference} onChange={(orderReference) => set({ orderReference })} error={e('orderReference')} maxLength={CONTACT_LIMITS.orderReference} />
+              {draft.kind === 'company' && (
+                <TextField label={t('contacts.orderReference')} hint={t('contacts.orderReferenceHint')} value={draft.orderReference} onChange={(orderReference) => set({ orderReference })} error={e('orderReference')} maxLength={CONTACT_LIMITS.orderReference} />
+              )}
               <TextField
                 className="w-num"
                 label={t('invoice.paymentTerm')}

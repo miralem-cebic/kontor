@@ -22,6 +22,14 @@ describe('readContact', () => {
     expect(english.ok && english.value.language).toBe('en');
   });
 
+  it('a private person has no VAT ID, Leitweg-ID, order number or contact person: what is typed for one is not saved (F27)', () => {
+    const r = readContact(
+      sampleContactDraft({ kind: 'person', contactPerson: 'Max Muster', vatId: 'DE136695976', leitwegId: 'nicht-gueltig', orderReference: 'PO-4711', paymentTermDays: '7', notes: 'Notiz' }),
+      free,
+    );
+    expect(r.ok && r.value).toMatchObject({ kind: 'person', contactPerson: '', vatId: '', leitwegId: '', orderReference: '', paymentTermDays: 7, notes: 'Notiz' });
+  });
+
   it('the language is kept when a contact is edited', () => {
     const profile = sampleContact({ language: 'en' });
     expect(draftFromContact(profile).language).toBe('en');

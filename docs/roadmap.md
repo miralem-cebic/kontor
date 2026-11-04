@@ -35,7 +35,7 @@ kontor cannot offer a live bank connection, direct ELSTER submission, AI receipt
 | Release | Content |
 | --- | --- |
 | **1.0** | Phases 1, 2, 3, 3.5 and 4 with all Must features (F01–F12, F21–F23, F25, I1–I7), plus R1, R3, R4 and R5 |
-| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13–F17, F24 |
+| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13, F14, F16, F17, F24 |
 | 2.x | Time tracking, F18–F20, R7 |
 
 Priorities: **Must** = needed for 1.0, **Should** = 1.x, **Could** = 2.x, **Won't** = deliberately not. Effort: S, M, L.
@@ -49,6 +49,7 @@ Priorities: **Must** = needed for 1.0, **Should** = 1.x, **Could** = 2.x, **Won'
 | Stock and inventory | not needed by the target group |
 | Native mobile app | the File System Access API is not available on smartphones; the inbox folder covers capture on the go (F06) |
 | AI categorisation | needs a model or a service; deterministic rules instead (F07) |
+| Foreign currencies (F15) | all amounts are in euro, also for customers abroad, so there is no currency per document, no exchange rate and no conversion for the EÜR |
 
 ## Phases
 
@@ -211,7 +212,6 @@ Before the work starts:
 | --- | --- | --- |
 | F13 | **Read-only mode for the tax advisor** | open a folder without write permission; no editing, exports still work |
 | F14 | **Cash book** | cash income and expenses in a running sequence, corrections only by a counter entry, cash report. Strict GoBD rules; needs its own ADR |
-| F15 | **Foreign currencies** | currency per document and receipt, exchange rate entered by hand (no network), conversion for the EÜR |
 | F16 | **Projects and cost centres** | a tag per booking and document, reports per project. The basis for time tracking |
 | F17 | **Time tracking earlier** | time tracking is a reason to switch at Papierkram and sevDesk. **Open decision:** move it from 2.x to 1.x |
 | F24 | **Tax office from the Steuernummer** | while typing the Steuernummer, show the state and the responsible tax office (for example "Finanzamt Hanau") with what is needed to deal with it: address, PO box, phone, email, opening hours and bank accounts for payments; and convert the number to the 13-digit ELSTER format. The data comes from the official directory of the tax offices (BZSt) as a JSON file in the repository with its source and date, checked when it is read in like any other input and updated once a year. Under `file://` with `connect-src 'none'` the app cannot load a file at run time, so the JSON is bundled into the build (it adds to the size of `dist/index.html`) |

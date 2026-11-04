@@ -124,9 +124,9 @@ describe('draft ↔ quote', () => {
 });
 
 describe('copy', () => {
-  it('a copy is dated today and valid for the usual days; everything else is as in the quote', () => {
-    const d = quoteDraftFromCopy('c1', sampleQuote(), '2026-12-01', 'de', key);
-    expect(d).toMatchObject({ customerId: 'c1', date: '2026-12-01', validUntil: '2026-12-31', subject: 'Website-Relaunch', introText: 'Sehr geehrte Damen und Herren,', closingText: '' });
+  it('a copy is dated today and valid for the usual days; no customer is chosen; everything else is as in the quote', () => {
+    const d = quoteDraftFromCopy(sampleQuote(), '2026-12-01', 'de', key);
+    expect(d).toMatchObject({ customerId: '', date: '2026-12-01', validUntil: '2026-12-31', subject: 'Website-Relaunch', introText: 'Sehr geehrte Damen und Herren,', closingText: '' });
     expect(d.lines.map((l) => [l.name, l.quantity, l.unitPrice])).toEqual([
       ['Webdesign', '12,5', '85,00'],
       ['Lektorat', '1', '300,00'],

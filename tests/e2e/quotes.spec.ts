@@ -320,6 +320,11 @@ test('finalizing a quote: the next quote number, the final PDF in the folder, no
   await expect(page.getByLabel('Betreff')).toHaveValue('Website-Relaunch');
   await expect(page.getByLabel('Gültig bis')).toHaveValue(daysFromToday(30));
   await expect(line(page, 1).getByLabel('Bezeichnung')).toHaveValue('Konzept');
+  // the copy goes to a customer chosen anew: none is preselected, so saving without one keeps the form open
+  await expect(page.getByLabel('Kunde')).toHaveValue('');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByLabel('Betreff')).toHaveValue('Website-Relaunch');
+  await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
   await page.getByRole('button', { name: 'Speichern' }).click();
   await page.getByRole('searchbox').fill('');
   await expect(rows).toHaveCount(3);
@@ -363,6 +368,8 @@ test('quote versions: a change of a finalized quote is a new version with a suff
   await page.getByRole('button', { name: 'Neue Version' }).click();
   await expect(page.getByRole('heading', { name: `Version 2 von ${first}` })).toBeVisible();
   await expect(page.getByText(`Version 2 des Angebots ${first}: ersetzt ${first} vom ${today} und bekommt beim Abschließen die Nummer ${second}.`)).toBeVisible();
+  // a new version keeps the customer of the quote it replaces (a copy would not)
+  await expect(page.getByLabel('Kunde').locator('option:checked')).toHaveText('Kunde GmbH');
   await expect(page.getByLabel('Betreff')).toHaveValue('Website-Relaunch');
   await page.getByRole('button', { name: 'Position 1 entfernen' }).click();
   await line(page, 1).getByLabel('Menge').fill('12');

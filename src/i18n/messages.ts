@@ -554,8 +554,8 @@ const MESSAGES_SRC = {
   'versions.total': { de: 'Gesamtbetrag {from} → {to}', en: 'Total {from} → {to}' },
   'quotes.copy': { de: 'Als neues Angebot kopieren', en: 'Copy as new quote' },
   'quotes.copyOf': {
-    de: 'Kopie des Angebots {number}. Datum und Gültigkeit beginnen heute, alles andere wie im Angebot.',
-    en: 'Copy of quote {number}. Date and validity start today, everything else as in the quote.',
+    de: 'Kopie des Angebots {number}. Datum und Gültigkeit beginnen heute, der Kunde ist neu zu wählen, alles andere wie im Angebot.',
+    en: 'Copy of quote {number}. Date and validity start today, the customer is to be chosen anew, everything else as in the quote.',
   },
   'quotes.sectionFinalize': { de: 'Abschließen', en: 'Finalize' },
   'quotes.finalizeLater': {

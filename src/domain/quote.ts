@@ -71,9 +71,12 @@ export const draftFromQuote = (customerId: string, q: QuoteContent, locale: Mone
   ...discountDraft(q.discount, locale),
 });
 
-/** A new draft with the content of a quote, dated `today` and valid for the usual days: a finalized quote is copied like this */
-export const quoteDraftFromCopy = (customerId: string, q: QuoteContent, today: string, locale: MoneyLocale, newKey: () => string): QuoteDraft => ({
-  ...draftFromQuote(customerId, q, locale, newKey),
+/**
+ * A new draft with the content of a quote, dated `today` and valid for the usual days: a finalized quote is copied like
+ * this. No customer is chosen: a copy is a new quote for whoever gets it.
+ */
+export const quoteDraftFromCopy = (q: QuoteContent, today: string, locale: MoneyLocale, newKey: () => string): QuoteDraft => ({
+  ...draftFromQuote('', q, locale, newKey),
   date: today,
   validUntil: addDays(today, DEFAULT_VALIDITY_DAYS),
 });

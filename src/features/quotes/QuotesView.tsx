@@ -96,7 +96,10 @@ function NewQuote({ copyOf, versionOf, onDone, onCreateInvoice }: NewProps) {
   const revises = versionOf && source ? nextVersionOf(source) : null;
   const start = (): QuoteDraft => {
     const today = isoDateOf(new Date());
-    return source ? quoteDraftFromCopy(source.customerId, source, today, currentLang(), newLineKey) : emptyQuoteDraft(today);
+    if (!source) return emptyQuoteDraft(today);
+    const draft = quoteDraftFromCopy(source, today, currentLang(), newLineKey);
+    // a new version stays with the customer of the quote it replaces; a copy goes to a customer chosen anew
+    return versionOf ? { ...draft, customerId: source.customerId } : draft;
   };
   return <QuoteEditor quote={null} copyOf={source && !revises ? source.issued.number : null} revises={revises} start={start} onDone={onDone} onCreateInvoice={onCreateInvoice} />;
 }

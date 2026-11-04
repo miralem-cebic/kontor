@@ -119,6 +119,7 @@ const QUOTE_MERGEABLE: Record<QuoteMergeableField, true> = {
   introText: true,
   closingText: true,
   lines: true,
+  discount: true,
   deletedAt: true,
 };
 export const QUOTE_MERGEABLE_FIELDS = keysOf(QUOTE_MERGEABLE);
@@ -174,6 +175,7 @@ const INVOICE_MERGEABLE: Record<InvoiceMergeableField, true> = {
   introText: true,
   closingText: true,
   lines: true,
+  discount: true,
   deletedAt: true,
 };
 export const INVOICE_MERGEABLE_FIELDS = keysOf(INVOICE_MERGEABLE);

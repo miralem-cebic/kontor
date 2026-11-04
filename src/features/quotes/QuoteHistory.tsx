@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { documentTotals } from '../../domain/document';
+import { sameDiscount } from '../../domain/discount';
 import { formatCents, formatQuantity, formatRate } from '../../domain/money';
 import { changeStats, lineChanges, versionChain, type LineChange, type LineChangeField } from '../../domain/quoteVersions';
 import type { DocumentId } from '../../data/ids';
 import { isQuote, type QuoteFile } from '../../data/types';
 import { currentLang, t } from '../../i18n';
-import { unitText } from '../../lib/labels';
+import { discountText, unitText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 import { formatDate, useSmallBusiness } from '../documents/common';
 
@@ -13,7 +14,8 @@ import { formatDate, useSmallBusiness } from '../documents/common';
 // quotes of the customer were changed.
 
 /** The total of a version: a finalized one with the VAT scheme it was finalized with, a draft with the current one */
-const grossOf = (q: QuoteFile, smallBusiness: boolean) => documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
+const grossOf = (q: QuoteFile, smallBusiness: boolean) =>
+  documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness, q.discount).gross;
 
 /** One change of the lines in words, in the interface language */
 function changeText(c: LineChange): string {
@@ -37,6 +39,8 @@ function changeText(c: LineChange): string {
             return t('versions.unitPrice', { from: formatCents(before.unitPrice, lang), to: formatCents(after.unitPrice, lang) });
           case 'vatRate':
             return t('versions.vatRate', { from: formatRate(before.vatRate, lang), to: formatRate(after.vatRate, lang) });
+          case 'discount':
+            return t('versions.discount', { from: discountText(before.discount, lang), to: discountText(after.discount, lang) });
         }
       });
       return t('versions.changed', { name: after.name, changes: parts.join(', ') });
@@ -72,6 +76,7 @@ export function QuoteHistory({ quote, customerName, onOpen }: Props) {
             const label = v.issued ? t('quotes.quoteOf', { number: v.issued.number, date: formatDate(v.date) }) : t('quotes.versionDraft', { version: v.revises?.version ?? 1 });
             const previous = i > 0 ? chain[i - 1] : undefined;
             const changes = previous ? lineChanges(previous.lines, v.lines) : [];
+            const discountChanged = previous ? !sameDiscount(previous.discount, v.discount) : false;
             return (
               <li key={v.id}>
                 <div className="version-head">
@@ -89,7 +94,8 @@ export function QuoteHistory({ quote, customerName, onOpen }: Props) {
                 </div>
                 {previous && (
                   <ul className="version-changes">
-                    {changes.length === 0 ? <li>{t('versions.linesSame')}</li> : changes.map((c, j) => <li key={j}>{changeText(c)}</li>)}
+                    {changes.length === 0 && !discountChanged ? <li>{t('versions.linesSame')}</li> : changes.map((c, j) => <li key={j}>{changeText(c)}</li>)}
+                    {discountChanged && <li>{t('versions.documentDiscount', { from: discountText(previous.discount, lang), to: discountText(v.discount, lang) })}</li>}
                     <li>{t('versions.total', { from: money(previous), to: money(v) })}</li>
                   </ul>
                 )}

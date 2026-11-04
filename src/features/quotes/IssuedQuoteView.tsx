@@ -99,7 +99,7 @@ export function IssuedQuoteView({ quote, onDone, onCreateInvoice, onCopy, onNewV
           </p>
         </section>
 
-        <IssuedLines id="finalized-lines" lines={quote.lines} totals={documentTotals(quote.lines, smallBusiness)} note={smallBusiness ? 'smallBusiness' : null} />
+        <IssuedLines id="finalized-lines" lines={quote.lines} totals={documentTotals(quote.lines, smallBusiness, quote.discount)} note={smallBusiness ? 'smallBusiness' : null} />
 
         <QuoteHistory quote={quote} customerName={snapshot.customer.name} onOpen={onOpen} />
 

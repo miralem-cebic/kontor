@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Sending by e-mail (F04): an issued invoice, its cancellation, a finalized quote or a dunning can be sent as an e-mail file (.eml) with its PDF attached, which opens as a draft in Outlook or Thunderbird. Or the mail program opens with the recipient, the subject and the text, and the PDF is downloaded to be attached. The text is filled in from the document and can be changed in the form; kontor sends nothing itself, and each prepared mail is written to the audit log. A PDF that changed since it was issued is not sent.
 - The letter of a dunning is a PDF: the claim with its open amount, the default interest of each dunning, the dunning fee and the flat fee, the date to pay by and the interest rate it was calculated with. It is made from the dunning and the invoice as issued.
 
+- Discounts (F23) on quotes and invoices: a line takes off a percentage or an amount, and the whole document does too. The VAT is calculated on the discounted amounts per tax rate, as before. The PDF shows the lines before the discount, the discount and then the net amount, and a discounted line says what it took off. A discount larger than its line or than the document is refused, and a cancellation reverses the discounts of its invoice exactly. The version history shows a changed discount. Finalized quotes and issued invoices keep the discounts they were issued with.
+
 - Documents in English for English customers (F05): a contact has a language for its documents, German or English (German by default). Invoices, quotes and dunnings, their PDFs and their e-mails are made in the language of the customer. The language of an issued invoice or quote is fixed in its PDF when it is issued.
 
 - Automatic numbers for contacts and items (F28): a new customer or supplier starts with the next free number of the pattern in the settings (`K-{NNNN}` by default), and a new item with the next free item number (`A-{NNNN}`). The number is shown in the form and can be changed there. A deleted contact or item keeps its number, so no number is given twice. The patterns are set in the invoice settings with a preview, and they may not contain a date.
@@ -41,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.
+- All files of a company folder have schema version 12: quotes and invoices have discounts on their lines and on the whole document; a document of version 11 has none. No other file changes.
 - All files of a company folder have schema version 11: decisions of the customer on a quote are a new kind of file (`quoteStatus/`); no other file changes.
 - All files of a company folder have schema version 10: the settings have the patterns of contact and item numbers (defaults `K-{NNNN}` and `A-{NNNN}`); no other file changes.
 - All files of a company folder have schema version 9: a contact has the language of its documents (German for existing contacts), and the customer in an issued document gets it too; no other file changes.

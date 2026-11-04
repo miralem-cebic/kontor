@@ -34,6 +34,8 @@ export type FieldProblem =
   | 'amount'
   | 'amountNotPositive'
   | 'amountTooHigh'
+  | 'percent'
+  | 'discountTooLarge'
   | 'accountRemoved'
   | 'feeNegative'
   | 'date'

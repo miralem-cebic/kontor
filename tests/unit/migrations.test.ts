@@ -27,8 +27,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(11);
-    expect(migrate('company', company()).schemaVersion).toBe(11);
+    expect(SCHEMA_VERSION).toBe(12);
+    expect(migrate('company', company()).schemaVersion).toBe(12);
   });
 
   it('a file without version counts as version 1', () => {
@@ -330,6 +330,79 @@ describe('version 10 → 11: decisions of the customer on a quote (F21)', () => 
   });
 });
 
+const asV11 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 11 }) as Record<string, unknown>;
+
+/** A quote or an invoice as version 11 wrote it: neither the document nor its lines have a discount */
+const withoutDiscounts = (file: object): Record<string, unknown> => {
+  const { discount: _d, ...rest } = asV11(file);
+  const lines = (rest['lines'] as Record<string, unknown>[]).map(({ discount: _x, ...line }) => line);
+  return { ...rest, lines };
+};
+
+describe('version 11 → 12: discounts on lines and on the document (F23)', () => {
+  const customerId = makeContact(sampleContact()).id;
+  const quote = withoutDiscounts(makeQuote(customerId, sampleQuote()));
+  const invoice = withoutDiscounts(makeInvoice(customerId, sampleCompany().bank.defaultAccountId, sampleInvoice(), null));
+
+  it('a quote of version 11 gets no discount, on the document and on each line', () => {
+    const migrated = migrate('document', quote);
+    expect(migrated).toEqual({
+      ...quote,
+      schemaVersion: SCHEMA_VERSION,
+      discount: { kind: 'none' },
+      lines: (quote['lines'] as Record<string, unknown>[]).map((l) => ({ ...l, discount: { kind: 'none' } })),
+    });
+  });
+
+  it('an issued invoice of version 11 gets no discount, and its snapshot and PDF stay as they are', () => {
+    const issued = { ...invoice, issued: sampleIssued() };
+    const migrated = migrate('document', issued);
+    expect(migrated['issued']).toEqual(JSON.parse(JSON.stringify(sampleIssued())));
+    expect(migrated).toMatchObject({ discount: { kind: 'none' } });
+    expect((migrated['lines'] as { discount: unknown }[]).every((l) => JSON.stringify(l.discount) === '{"kind":"none"}')).toBe(true);
+  });
+
+  it('a discount of a line is read with its checks', () => {
+    const withDiscount = (discount: unknown) => ({ ...quote, lines: [{ ...(quote['lines'] as Record<string, unknown>[])[0], discount }, ...(quote['lines'] as unknown[]).slice(1)] });
+    expect(() => migrate('document', withDiscount({ kind: 'percent', rate: 1000 }))).not.toThrow();
+    expect(() => migrate('document', withDiscount({ kind: 'percent', rate: 0 }))).toThrow(InvalidFileError);
+    expect(() => migrate('document', withDiscount({ kind: 'percent', rate: 10_001 }))).toThrow(InvalidFileError);
+    expect(() => migrate('document', withDiscount({ kind: 'amount', amount: -5 }))).toThrow(InvalidFileError);
+    expect(() => migrate('document', withDiscount({ kind: 'bogus' }))).toThrow(InvalidFileError);
+  });
+
+  it('an amount discount is at most its line, and at most the lines of the document', () => {
+    const withLine = (discount: unknown) => ({ ...quote, lines: [{ ...(quote['lines'] as Record<string, unknown>[])[0], discount }, ...(quote['lines'] as unknown[]).slice(1)] });
+    // the first line of the sample quote is 1.062,50 €, the lines add up to 1.362,50 €
+    expect(() => migrate('document', withLine({ kind: 'amount', amount: 106_250 }))).not.toThrow();
+    expect(() => migrate('document', withLine({ kind: 'amount', amount: 106_251 }))).toThrow(InvalidFileError);
+    expect(() => migrate('document', { ...quote, discount: { kind: 'amount', amount: 136_250 } })).not.toThrow();
+    expect(() => migrate('document', { ...quote, discount: { kind: 'amount', amount: 136_251 } })).toThrow(InvalidFileError);
+  });
+
+  it('a discount of the document is read with its checks', () => {
+    expect(() => migrate('document', { ...quote, discount: { kind: 'amount', amount: 500 } })).not.toThrow();
+    expect(() => migrate('document', { ...quote, discount: { kind: 'amount', amount: 0 } })).toThrow(InvalidFileError);
+  });
+
+  it('the files of the other kinds of version 11 stay as they are', () => {
+    const files = {
+      company: asV11(sampleCompany()),
+      contact: asV11(makeContact(sampleContact())),
+      item: asV11(makeItem(sampleItem())),
+      numbering: asV11({ range: 'quote', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+      quoteStatus: asV11(makeQuoteStatus(makeQuote(customerId, sampleQuote()).id, { decision: 'accepted', date: '2026-11-03' })),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 11 refuses a document with discounts, so it never drops one', () => {
+    expect(() => upgrade('document', { ...quote, schemaVersion: 12 }, MIGRATIONS.document, 11)).toThrow(NewerSchemaError);
+  });
+});
+
 const asV9 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 9 }) as Record<string, unknown>;
 
 describe('version 9 → 10: the numbers of contacts and items (F28)', () => {
@@ -433,11 +506,11 @@ describe('version 8 → 9: the language of the documents (F05)', () => {
 
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 11 → 12, not in use)', () => {
+describe('migration template (version 12 → 13, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 11,
+      from: 12,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
@@ -446,13 +519,13 @@ describe('migration template (version 11 → 12, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 12);
-    expect(doc['schemaVersion']).toBe(12);
+    const doc = upgrade('company', company(), steps, 13);
+    expect(doc['schemaVersion']).toBe(13);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 12);
+    const doc = upgrade('company', companyV1(), steps, 13);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
@@ -460,10 +533,10 @@ describe('migration template (version 11 → 12, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(11)], 12)).toEqual({ ...raw, schemaVersion: 12 });
+    expect(upgrade('company', raw, [unchanged(12)], 13)).toEqual({ ...raw, schemaVersion: 13 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 12)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 13)).toThrow(InvalidFileError);
   });
 });

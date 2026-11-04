@@ -28,7 +28,7 @@ import { currentLang, t, type MessageKey } from '../../i18n';
 import { fieldError, finalizeFailureText, problemText, quoteProblemText } from '../../lib/labels';
 import { addQuote, deleteDocument, showToast, updateQuote, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
-import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
+import { DocumentDiscount, LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
 import { IssuedQuoteView } from './IssuedQuoteView';
 
@@ -139,7 +139,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
   const active = useMemo(() => [...documents.values()].filter(isQuote).filter((d) => !d.deletedAt).sort(byQuoteDate), [documents]);
   // a finalized quote keeps the customer and the VAT scheme it was finalized with
   const customerName = (q: QuoteFile) => q.issued?.snapshot.customer.name ?? contacts.get(q.customerId)?.name ?? '';
-  const gross = (q: QuoteFile) => documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness).gross;
+  const gross = (q: QuoteFile) => documentTotals(q.lines, q.issued ? q.issued.snapshot.company.tax.vat.kind === 'smallBusiness' : smallBusiness, q.discount).gross;
   const today = isoDateOf(new Date());
   // the state a quote is listed in: a draft, open, or the decision that counts (F21)
   const stateOf = (q: QuoteFile) => quoteStateOf({ finalized: !!q.issued, decision: activeDecision([...quoteStatuses.values()].filter((s) => s.quoteId === q.id))?.decision ?? null });
@@ -280,7 +280,7 @@ function QuoteEditor({ quote, copyOf, revises, start, onDone, onCreateInvoice }:
     }
   };
   const e = (f: QuoteField) => fieldError(errors, f);
-  const totals = draftTotals(draft.lines, lang, smallBusiness);
+  const totals = draftTotals(draft.lines, lang, smallBusiness, draft);
   // a negative sum shows up while it is typed, not only on "Save"
   const lineError = (path: LineFieldPath | 'lines') => e(path) ?? (path === 'lines' && hasNegativeRate(totals) ? problemText('negativeTotal') : undefined);
   const sections: JumpSection[] = [
@@ -391,6 +391,7 @@ function QuoteEditor({ quote, copyOf, revises, start, onDone, onCreateInvoice }:
               {t('lines.title')}
             </h2>
             <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={lineError} withoutVat={smallBusiness} />
+            <DocumentDiscount value={draft} onChange={set} error={e('discountValue')} />
             <Totals totals={totals} note={smallBusiness ? 'smallBusiness' : null} />
           </section>
 

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { lineTotal, type DocumentLine } from '../../domain/document';
+import { lineTotal, type DocumentLine, type DocumentTotals } from '../../domain/document';
 import type { VatNote } from '../../domain/invoice';
-import { formatCents, formatQuantity, type TaxTotals } from '../../domain/money';
+import { formatCents, formatQuantity } from '../../domain/money';
 import { currentLang, t } from '../../i18n';
-import { unitText } from '../../lib/labels';
+import { discountText, unitText } from '../../lib/labels';
 import { Totals } from './LinesEditor';
 
 // What the read-only views of an issued invoice and a finalized quote share: a fact of the document, and its lines with
@@ -17,7 +17,7 @@ export const Fact = ({ label, children }: { label: string; children: ReactNode }
 );
 
 /** The lines of an issued document in a table, with its totals and the note on VAT */
-export function IssuedLines({ id, lines, totals, note }: { id: string; lines: readonly DocumentLine[]; totals: TaxTotals; note: VatNote | null }) {
+export function IssuedLines({ id, lines, totals, note }: { id: string; lines: readonly DocumentLine[]; totals: DocumentTotals; note: VatNote | null }) {
   const lang = currentLang();
   return (
     <section className="card" aria-labelledby={id}>
@@ -44,6 +44,7 @@ export function IssuedLines({ id, lines, totals, note }: { id: string; lines: re
               <td>
                 {l.name}
                 {l.description && <small className="f-hint issued-desc">{l.description}</small>}
+                {l.discount.kind !== 'none' && <small className="f-hint issued-desc">{`${t('lines.discount')} ${discountText(l.discount, lang)}`}</small>}
               </td>
               <td className="num">{formatQuantity(l.quantity, lang)}</td>
               <td>{unitText(l.unit)}</td>

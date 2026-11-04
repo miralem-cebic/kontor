@@ -10,7 +10,10 @@ import {
   formatRate,
   lineNet,
   MoneyRangeError,
+  allocate,
+  formatPercent,
   parseCents,
+  parsePercent,
   parseQuantity,
   percentOf,
   quantity,
@@ -216,6 +219,68 @@ describe('quantities as text', () => {
   it('reads back what it formats', () =>
     fc.assert(
       fc.property(fc.integer({ min: -999_999_999, max: 999_999_999 }).map(quantity), fc.constantFrom('de' as const, 'en' as const), (q, locale) => parseQuantity(formatQuantity(q, locale), locale) === q),
+      params,
+    ));
+});
+
+describe('allocate', () => {
+  it('splits by weight; the cents left over go to the largest remainders, ties to the earlier part', () => {
+    expect(allocate(cents(10), [cents(1), cents(1), cents(1)])).toEqual([4, 3, 3]);
+    expect(allocate(cents(100), [cents(1), cents(3)])).toEqual([25, 75]);
+  });
+
+  it('a negative total splits the same way, with negative parts', () => {
+    expect(allocate(cents(-10), [cents(1), cents(1), cents(1)])).toEqual([-4, -3, -3]);
+  });
+
+  it('every part is within one cent of its exact share, and the parts add up to the total', () =>
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -1_000_000, max: 1_000_000 }),
+        fc.array(fc.integer({ min: -100_000, max: 100_000 }), { minLength: 1, maxLength: 8 }),
+        (total, weights) => {
+          const w = weights.reduce((a, b) => a + b, 0);
+          fc.pre(w > 0);
+          const parts = allocate(cents(total), weights.map(cents));
+          return sum(parts) === total && parts.every((p, i) => Math.abs(p * w - total * (weights[i] ?? 0)) < w);
+        },
+      ),
+      params,
+    ));
+
+  it('needs weights that add up to a positive sum', () => {
+    expect(() => allocate(cents(10), [cents(0)])).toThrow(MoneyRangeError);
+    expect(() => allocate(cents(10), [cents(-1), cents(1)])).toThrow(MoneyRangeError);
+  });
+});
+
+describe('percentages as text', () => {
+  it.each([
+    ['7,5', 750],
+    ['10', 1000],
+    ['12,25', 1225],
+    [' 10 % ', 1000],
+    ['0', 0],
+  ])('parses "%s" (de)', (input, expected) => expect(parsePercent(input, 'de')).toBe(expected));
+
+  it.each(['', '7,555', '-5', 'abc', '7.5', ','])('rejects "%s" (de)', (input) => expect(parsePercent(input, 'de')).toBeNull());
+
+  it('parses English input', () => {
+    expect(parsePercent('7.5', 'en')).toBe(750);
+    expect(parsePercent('7,5', 'en')).toBeNull();
+  });
+
+  it('formats for an input field, without the % sign', () => {
+    expect(formatPercent(basisPoints(750), 'de')).toBe('7,5');
+    expect(formatPercent(basisPoints(1000), 'de')).toBe('10');
+    expect(formatPercent(basisPoints(1225), 'de')).toBe('12,25');
+    expect(formatPercent(basisPoints(5), 'de')).toBe('0,05');
+    expect(formatPercent(basisPoints(750), 'en')).toBe('7.5');
+  });
+
+  it('reads back what it formats', () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 10_000 }).map(basisPoints), fc.constantFrom('de' as const, 'en' as const), (r, locale) => parsePercent(formatPercent(r, locale), locale) === r),
       params,
     ));
 });

@@ -8,6 +8,8 @@
 // - 'perLine': the tax is computed and rounded for every line, then summed. Only for documents that are not
 //   e-invoices and whose amounts were agreed per line; the totals may differ from 'perDocument' by up to half a
 //   cent per line.
+// A discount of a whole document is shared between the tax rates by `allocate` (largest remainders), which adds up
+// to the discount exactly.
 
 declare const brand: unique symbol;
 
@@ -74,6 +76,38 @@ export const percentOf = (amount: Cents, rate: BasisPoints): Cents =>
 /** Net amount of a line: unit price × quantity, rounded once. */
 export const lineNet = (unitPrice: Cents, qty: Quantity): Cents =>
   fromBig(divideRounded(BigInt(unitPrice) * BigInt(qty), BigInt(QUANTITY_SCALE)));
+
+const floorDivide = (n: bigint, d: bigint): bigint => {
+  const q = n / d;
+  return n % d !== 0n && n < 0n ? q - 1n : q;
+};
+
+/**
+ * Splits `total` in proportion to `weights`, which must add up to a positive sum (F23: a discount of the whole document
+ * is shared between the tax rates). Every part is rounded down, and the cents left over go to the parts with the
+ * largest remainders (a tie goes to the earlier part). The parts add up to `total` exactly, and each is less than a
+ * cent away from its exact share. The rounding of a share is therefore not half away from zero, by design.
+ */
+export function allocate(total: Cents, weights: readonly Cents[]): Cents[] {
+  const weightSum = BigInt(sum(weights));
+  if (weightSum <= 0n) throw new MoneyRangeError(`The weights must add up to a positive sum, got ${weightSum}`);
+  // A negative total is split as the positive one and negated, so the cents go the same way for both (0 - x: no −0)
+  if (total < 0) return allocate(cents(-total), weights).map((part) => cents(0 - part));
+  const t = BigInt(total);
+  const floors = weights.map((w) => floorDivide(t * BigInt(w), weightSum));
+  // The remainder of each part over the common denominator: t·w − floor·W, in [0, W)
+  const remainders = weights.map((w, i) => t * BigInt(w) - (floors[i] ?? 0n) * weightSum);
+  const remainder = (i: number) => remainders[i] ?? 0n;
+  const order = weights.map((_, i) => i).sort((a, b) => (remainder(b) > remainder(a) ? 1 : remainder(b) < remainder(a) ? -1 : a - b));
+  const parts = [...floors];
+  let left = t - floors.reduce((a, b) => a + b, 0n);
+  for (const i of order) {
+    if (left <= 0n) break;
+    parts[i] = (parts[i] ?? 0n) + 1n;
+    left -= 1n;
+  }
+  return parts.map(fromBig);
+}
 
 /** Splits a gross amount into net and tax for one rate. net + tax is always exactly `gross`. */
 export function splitGross(gross: Cents, rate: BasisPoints): { net: Cents; tax: Cents } {
@@ -187,6 +221,21 @@ function parseScaled(text: string, locale: MoneyLocale, decimals: number): numbe
 export function parseCents(input: string, locale: MoneyLocale): Cents | null {
   const value = parseScaled(input.replace(/\s|€/g, '').replace(/^EUR|EUR$/i, ''), locale, 2);
   return value === null ? null : cents(value);
+}
+
+/** A rate as a person types it in a field, without the % sign: 750 → "7,5" (de), 1000 → "10", 1225 → "12,25". `parsePercent` reads it back. */
+export function formatPercent(rate: BasisPoints, locale: MoneyLocale): string {
+  const decimal = `${Math.trunc(rate / 100)}.${String(rate % 100).padStart(2, '0')}`;
+  return new Intl.NumberFormat(SEPARATORS[locale].intl, { maximumFractionDigits: 2 }).format(decimal as `${number}`);
+}
+
+/**
+ * Reads a percentage typed by a person: "7,5", "10", "12,25 %" (de) or "7.5" (en). At most two decimal places, as
+ * basis points: "7,5" → 750. Returns null for anything else and for a negative value.
+ */
+export function parsePercent(input: string, locale: MoneyLocale): BasisPoints | null {
+  const value = parseScaled(input.replace(/\s|%/g, ''), locale, 2);
+  return value === null || value < 0 ? null : basisPoints(value);
 }
 
 /** Reads a quantity typed by a person: "2", "1,5", "0,25", "1.000" (de) or "1.5" (en). At most three decimal places. */

@@ -141,10 +141,10 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   await expect(rows.nth(1)).not.toContainText('abgelaufen');
 
   const [file] = await readDocuments(page);
-  expect(file).toMatchObject({ schemaVersion: 11, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', issued: null, deletedAt: null });
+  expect(file).toMatchObject({ schemaVersion: 12, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', issued: null, deletedAt: null });
   expect(file?.lines).toEqual([
-    { name: 'Lektorat', description: '', quantity: 1000, unit: 'H87', unitPrice: 30000, vatRate: 700 },
-    { name: 'Webdesign', description: 'Gestaltung und Umsetzung', quantity: 12500, unit: 'HUR', unitPrice: 8500, vatRate: 1900 },
+    { name: 'Lektorat', description: '', quantity: 1000, unit: 'H87', unitPrice: 30000, vatRate: 700, discount: { kind: 'none' } },
+    { name: 'Webdesign', description: 'Gestaltung und Umsetzung', quantity: 12500, unit: 'HUR', unitPrice: 8500, vatRate: 1900, discount: { kind: 'none' } },
   ]);
 
   // after a reload: open, change, save
@@ -300,7 +300,7 @@ test('finalizing a quote: the next quote number, the final PDF in the folder, no
   const audit = (files[`Ordner-1/audit/${isoToday().slice(0, 7)}.jsonl`] ?? '').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
   expect(audit).toMatchObject([{ action: 'issueQuote', number }]);
   const [quote] = await readDocuments(page);
-  expect(quote).toMatchObject({ schemaVersion: 11, subject: 'Website-Relaunch', issued: { number, pdf: { file: `${number}.pdf` } } });
+  expect(quote).toMatchObject({ schemaVersion: 12, subject: 'Website-Relaunch', issued: { number, pdf: { file: `${number}.pdf` } } });
 
   // an invoice made from the quote names its number
   await page.getByRole('button', { name: 'Rechnung erstellen' }).click();
@@ -408,3 +408,47 @@ test('quote versions: a change of a finalized quote is a new version with a suff
   await expect(page.getByText('Abgeschlossene Angebote: 1 · davon geändert: 1 · Änderungen insgesamt: 1')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('quotes: a discount on a line and on the whole document (F23): totals, checks and the saved file', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+  await addContact(page, 'Kunde GmbH', { customer: true, supplier: false });
+
+  await nav(page, 'Angebote');
+  await page.getByRole('button', { name: 'Neues Angebot' }).click();
+  await page.getByLabel('Kunde').selectOption({ label: 'Kunde GmbH' });
+  await page.getByLabel('Betreff').fill('Rabatt-Test');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 1).getByLabel('Bezeichnung').fill('Webdesign');
+  await line(page, 1).getByLabel('Menge').fill('2');
+  await line(page, 1).getByLabel('Einzelpreis netto €').fill('85');
+
+  // 10 % on the line: 170,00 € less 17,00 €
+  await line(page, 1).getByLabel('Rabatt', { exact: true }).selectOption({ label: 'in Prozent' });
+  await line(page, 1).getByLabel('Rabatt-Wert').fill('10');
+  const totals = page.getByLabel('Summen');
+  await expect(totals).toContainText('Summe Positionen170,00 €');
+  await expect(totals).toContainText('Rabatt-17,00 €');
+  await expect(totals).toContainText('Summe netto153,00 €');
+  await expect(totals).toContainText('Gesamtbetrag182,07 €');
+
+  // an amount on the whole document that is more than the lines add up to: refused on "Save"
+  await page.getByLabel('Rabatt auf das ganze Dokument').selectOption({ label: 'als Betrag' });
+  await page.locator('.doc-discount').getByLabel('Rabatt-Wert').fill('200');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByText('Der Rabatt ist größer als der Betrag, von dem er abgezogen wird.')).toBeVisible();
+
+  // 20,00 € on the whole document: 153,00 € less 20,00 €
+  await page.locator('.doc-discount').getByLabel('Rabatt-Wert').fill('20');
+  await expect(totals).toContainText('Rabatt-37,00 €');
+  await expect(totals).toContainText('Summe netto133,00 €');
+  await expect(totals).toContainText('Gesamtbetrag158,27 €');
+  await page.getByRole('button', { name: 'Speichern' }).click();
+
+  await expect.poll(async () => (await readDocuments(page)).length).toBe(1);
+  const [file] = await readDocuments(page);
+  expect(file).toMatchObject({ discount: { kind: 'amount', amount: 2000 }, lines: [expect.objectContaining({ discount: { kind: 'percent', rate: 1000 } })] });
+  expect(errors).toEqual([]);
+});
+

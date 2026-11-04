@@ -3,7 +3,8 @@ import { makeAccount, makeCancellation, makeContact, makeInvoice, makeQuote } fr
 import { newDocumentId } from '../../src/data/ids';
 import type { BankAccount } from '../../src/data/types';
 import { documentContent as contentOf, pdfFileName, recipientLines, type DocumentContent, type PdfSource } from '../../src/pdf/content';
-import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleQuote } from './fixtures';
+import { basisPoints, cents, quantity } from '../../src/domain/money';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleLine, sampleQuote } from './fixtures';
 
 const company = sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: 'Amtsgericht Köln' } });
 const customer = makeContact(sampleContact());
@@ -169,3 +170,38 @@ describe('helpers', () => {
     expect(pdfFileName(['x'.repeat(100)])).toBe(`${'x'.repeat(60)}.pdf`);
   });
 });
+
+describe('the content of a discount (F23)', () => {
+  it('a line shows its discount under the description; its total is the discounted amount', () => {
+    const c = documentContent(src({ document: invoice({ lines: [sampleLine({ discount: { kind: 'percent', rate: basisPoints(1000) } })] }) }));
+    expect(c.table.rows[0]).toMatchObject({ description: 'Rabatt 10 %', price: '85,00 €', total: '956,25 €' });
+  });
+
+  it('an amount discount of a line is shown as an amount', () => {
+    const c = documentContent(src({ document: invoice({ lines: [sampleLine({ discount: { kind: 'amount', amount: cents(2000) } })] }) }));
+    expect(c.table.rows[0]?.description).toBe('Rabatt 20,00 €');
+  });
+
+  it('the totals show the lines before the discount, the discount, and then the net amount per rate', () => {
+    const c = documentContent(src({ document: invoice({ discount: { kind: 'percent', rate: basisPoints(1000) } }) }));
+    expect(c.totals.map((t) => `${t.label}: ${t.value}${t.grand ? ' (grand)' : ''}`)).toEqual([
+      'Summe Positionen: 1.362,50 €',
+      'Rabatt: -136,25 €',
+      'Summe netto: 1.226,25 €',
+      'Umsatzsteuer 7 % auf 270,00 €: 18,90 €',
+      'Umsatzsteuer 19 % auf 956,25 €: 181,69 €',
+      'Gesamtbetrag: 1.426,84 € (grand)',
+    ]);
+  });
+
+  it('a document without a discount shows no extra rows', () => {
+    expect(documentContent(src({})).totals.map((t) => t.label)).not.toContain('Rabatt');
+  });
+
+  it('a quote with a discount says so in its totals too', () => {
+    const q = makeQuote(customer.id, sampleQuote({ lines: [sampleLine({ quantity: quantity(2000), unitPrice: cents(8500) })], discount: { kind: 'amount', amount: cents(1500) } }));
+    const c = documentContent(src({ document: q, number: null }));
+    expect(c.totals.map((t) => t.value)).toEqual(['170,00 €', '-15,00 €', '155,00 €', '29,45 €', '184,45 €']);
+  });
+});
+

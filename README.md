@@ -41,7 +41,7 @@ Der aktuelle Stand enthält:
 - **Einstellungen:** Alle Angaben aus dem Assistenten lassen sich später ändern.
 - **Sicherung:** Einmal am Tag eine Kopie im Unternehmensordner (`backups/`).
 
-Angebotsstatus (angenommen, abgelehnt), Rabatte, Rechnungskorrekturen und Gutschriften, GiroCode, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
+Angebotsstatus (angenommen, abgelehnt), Rechnungskorrekturen und Gutschriften, GiroCode, E-Rechnung, Ausgaben, Dashboard, Steuerrechner und Exporte folgen. Was geplant ist, steht in der [Roadmap](docs/roadmap.md).
 
 ## Voraussetzungen
 

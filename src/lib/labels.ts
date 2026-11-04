@@ -8,9 +8,11 @@ import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
 import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
+import type { Discount } from '../domain/discount';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
 import type { IssueProblem, TaxTreatment, TaxTreatmentHint } from '../domain/invoice';
+import { formatCents, formatRate } from '../domain/money';
 import type { PaymentState } from '../domain/payment';
 import type { QuoteProblem } from '../domain/quote';
 import type { UnitCode } from '../domain/units';
@@ -48,6 +50,8 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   amount: 'problem.amount',
   amountNotPositive: 'problem.amountNotPositive',
   amountTooHigh: 'problem.amountTooHigh',
+  percent: 'problem.percent',
+  discountTooLarge: 'problem.discountTooLarge',
   accountRemoved: 'problem.accountRemoved',
   feeNegative: 'problem.feeNegative',
   validUntil: 'problem.validUntil',
@@ -120,6 +124,18 @@ export const unitText = (u: UnitCode): string => t(UNIT_KEY[u]);
 
 /** The name of a unit in a given language, for example on a document */
 export const unitTextIn = (lang: Lang, u: UnitCode): string => tIn(lang, UNIT_KEY[u]);
+
+/** A discount in words: "10 %" or "20,00 €", or "no discount" */
+export const discountText = (d: Discount, lang: Lang): string => {
+  switch (d.kind) {
+    case 'none':
+      return tIn(lang, 'discount.none');
+    case 'percent':
+      return formatRate(d.rate, lang);
+    case 'amount':
+      return formatCents(d.amount, lang);
+  }
+};
 
 /** The name of an account for lists and choices: its own name, or its kind */
 export const accountName = (a: AccountDetails): string => a.name || t(a.kind === 'bank' ? 'accounts.kindBank' : 'accounts.kindPaypal');

@@ -1,12 +1,12 @@
 // What a quote or an invoice says on paper: the texts of every part of the page, formatted in the language of the
 // document. Where things go on the page is decided by layout.ts; this module only decides what is written.
 
-import { documentTotals, lineTotal } from '../domain/document';
+import { documentTotals, lineTotal, type DocumentLine, type DocumentTotals } from '../domain/document';
 import { toLocalDate } from '../domain/dates';
 import { formatIban } from '../domain/iban';
 import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../domain/invoice';
 import { claimTotal, SPREAD_BP } from '../domain/dunning';
-import { formatCents, formatQuantity, formatRate, type TaxTotals } from '../domain/money';
+import { formatCents, formatQuantity, formatRate, negate, type TaxTotals } from '../domain/money';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
@@ -149,14 +149,30 @@ const NOTE_KEY = {
   notTaxable: 'totals.notTaxable',
 } as const satisfies Record<NonNullable<ReturnType<typeof vatNote>>, MessageKey>;
 
-function totalRows(totals: TaxTotals, withVat: boolean, lang: Lang): TotalRow[] {
+/** With a discount, the lines are shown before it, then the net amount (F23) */
+function totalRows(totals: DocumentTotals, withVat: boolean, lang: Lang): TotalRow[] {
   const money = (c: TaxTotals['net']) => formatCents(c, lang);
-  if (!withVat) return [{ label: tIn(lang, 'pdf.total'), value: money(totals.gross), grand: true }];
+  const discount: TotalRow[] =
+    totals.discount === 0
+      ? []
+      : [
+          { label: tIn(lang, 'pdf.subtotal'), value: money(totals.subtotal), grand: false },
+          { label: tIn(lang, 'pdf.discount'), value: money(negate(totals.discount)), grand: false },
+        ];
+  if (!withVat) return [...discount, { label: tIn(lang, 'pdf.total'), value: money(totals.gross), grand: true }];
   return [
+    ...discount,
     { label: tIn(lang, 'pdf.net'), value: money(totals.net), grand: false },
     ...totals.byRate.map((r) => ({ label: tIn(lang, 'pdf.vatOn', { rate: formatRate(r.rate, lang), net: money(r.net) }), value: money(r.tax), grand: false })),
     { label: tIn(lang, 'pdf.total'), value: money(totals.gross), grand: true },
   ];
+}
+
+/** The discount of a line, printed under its description: "Rabatt 10 %" or "Rabatt 2,00 €" */
+function lineDiscountText(l: DocumentLine, lang: Lang): string {
+  const { discount } = l;
+  if (discount.kind === 'none') return '';
+  return tIn(lang, 'pdf.lineDiscount', { discount: discount.kind === 'percent' ? formatRate(discount.rate, lang) : formatCents(discount.amount, lang) });
 }
 
 /** The payment request of an invoice: amount, due date and account */
@@ -182,7 +198,7 @@ export function documentContent(src: PdfSource): DocumentContent {
   const isInvoice = doc.kind === 'invoice';
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const note = isInvoice ? vatNote(doc.taxTreatment, smallBusiness) : smallBusiness ? 'smallBusiness' : null;
-  const totals = isInvoice ? invoiceTotals(doc, smallBusiness) : documentTotals(doc.lines, smallBusiness);
+  const totals = isInvoice ? invoiceTotals(doc, smallBusiness) : documentTotals(doc.lines, smallBusiness, doc.discount);
   const cancels = isInvoice ? doc.cancels : null;
   const title = tIn(lang, cancels ? 'pdf.cancellation' : isInvoice ? (number ? 'pdf.invoice' : 'pdf.invoiceDraft') : number ? 'pdf.quote' : 'pdf.quoteDraft');
   const date = formatDate(doc.date, lang);
@@ -191,7 +207,7 @@ export function documentContent(src: PdfSource): DocumentContent {
   const rows: TableRow[] = doc.lines.map((l, i) => ({
     pos: String(i + 1),
     name: l.name,
-    description: l.description,
+    description: nonEmpty([l.description, lineDiscountText(l, lang)]).join(' · '),
     quantity: formatQuantity(l.quantity, lang),
     unit: unitTextIn(lang, l.unit),
     price: formatCents(l.unitPrice, lang),

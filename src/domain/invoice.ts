@@ -10,8 +10,9 @@ import { Checker, TEXT_LIMITS, type FieldError } from './check';
 import type { CompanyProfile } from './company';
 import { CONTACT_LIMITS, type ContactProfile } from './contact';
 import { addDays, isIsoDate } from './dates';
-import { documentTotals, draftFromLine, readLines, type DocumentLine, type LineDraft, type LineFieldPath } from './document';
-import { cents, quantity, type Cents, type MoneyLocale, type TaxTotals } from './money';
+import { documentTotals, draftFromLine, linesReadable, readDocumentDiscount, readLines, type DocumentLine, type DocumentTotals, type LineDraft, type LineFieldPath } from './document';
+import { discountDraft, NO_DISCOUNT_DRAFT, type Discount, type DiscountDraft } from './discount';
+import { cents, quantity, type Cents, type MoneyLocale } from './money';
 import type { QuoteContent } from './quote';
 import { isPlausibleEuVatId, isPlausibleLeitwegId, normalizeVatId } from './taxIds';
 import { isEuMemberState } from './vat';
@@ -54,9 +55,11 @@ export interface InvoiceContent {
   /** Text below the lines; empty when not given */
   closingText: string;
   lines: DocumentLine[];
+  /** The discount of the whole document (F23); NO_DISCOUNT when there is none */
+  discount: Discount;
 }
 
-export const INVOICE_LIMITS = { subject: 200, text: 4000, orderReference: CONTACT_LIMITS.orderReference, leitwegId: 46 } as const;
+export const INVOICE_LIMITS ={ subject: 200, text: 4000, orderReference: CONTACT_LIMITS.orderReference, leitwegId: 46 } as const;
 
 /**
  * Small amount invoices (§ 33 UStDV): up to 250 € gross, the name and address of the customer are not required.
@@ -107,9 +110,9 @@ export function taxTreatmentHint(treatment: TaxTreatment, country: string | null
 /** Does the invoice show VAT? Not for a small business, and not when the customer owes it or the supply is tax-free. */
 export const chargesVat = (treatment: TaxTreatment, smallBusiness: boolean): boolean => vatNote(treatment, smallBusiness) === null;
 
-/** Net, VAT per rate and gross of an invoice */
-export const invoiceTotals = (inv: Pick<InvoiceContent, 'lines' | 'taxTreatment'>, smallBusiness: boolean): TaxTotals =>
-  documentTotals(inv.lines, !chargesVat(inv.taxTreatment, smallBusiness));
+/** Net, VAT per rate and gross of an invoice, after its discounts */
+export const invoiceTotals = (inv: Pick<InvoiceContent, 'lines' | 'taxTreatment' | 'discount'>, smallBusiness: boolean): DocumentTotals =>
+  documentTotals(inv.lines, !chargesVat(inv.taxTreatment, smallBusiness), inv.discount);
 
 export const dueDate = (inv: Pick<InvoiceContent, 'date' | 'paymentTermDays'>): string => addDays(inv.date, inv.paymentTermDays);
 
@@ -150,11 +153,12 @@ export const cancellationContent = (original: InvoiceContent, today: string): In
   introText: '',
   closingText: '',
   lines: original.lines.map((l) => ({ ...l, quantity: quantity(-l.quantity) })),
+  discount: original.discount,
 });
 
 /* ---------- Draft ---------- */
 
-export interface InvoiceDraft {
+export interface InvoiceDraft extends DiscountDraft {
   /** The chosen customer; empty when none is chosen yet */
   customerId: string;
   date: string;
@@ -195,6 +199,7 @@ export const emptyInvoiceDraft = (today: string, accountId: string, paymentTermD
   introText: '',
   closingText: '',
   lines: [],
+  ...NO_DISCOUNT_DRAFT,
 });
 
 /** What the draft takes over from a customer when it is chosen: payment term, order number and Leitweg-ID */
@@ -225,17 +230,19 @@ export function draftFromInvoice(customerId: string, accountId: string, inv: Inv
     introText: inv.introText,
     closingText: inv.closingText,
     lines: inv.lines.map((l) => draftFromLine(newKey(), l, locale)),
+    ...discountDraft(inv.discount, locale),
   };
 }
 
 /**
- * A new invoice for the customer of a quote, with its subject and lines. The texts of a quote (offer, validity)
- * do not fit an invoice and are not taken over. `base` is the new invoice with the customer's defaults.
+ * A new invoice for the customer of a quote, with its subject, lines and discount of the whole document. The texts of a
+ * quote (offer, validity) do not fit an invoice and are not taken over. `base` is the new invoice with the customer's defaults.
  */
 export const invoiceDraftFromQuote = (base: InvoiceDraft, quote: QuoteContent, locale: MoneyLocale, newKey: () => string): InvoiceDraft => ({
   ...base,
   subject: quote.subject,
   lines: quote.lines.map((l) => draftFromLine(newKey(), l, locale)),
+  ...discountDraft(quote.discount, locale),
 });
 
 /** A new draft with the content of an issued invoice, dated `today`: the corrected invoice after a cancellation starts like this */
@@ -284,11 +291,13 @@ export function readInvoice(
   const subject = c.optionalText('subject', d.subject, INVOICE_LIMITS.subject);
   const introText = c.optionalText('introText', d.introText, INVOICE_LIMITS.text);
   const closingText = c.optionalText('closingText', d.closingText, INVOICE_LIMITS.text);
-  const lines = readLines(c, d.lines, locale, !chargesVat(taxTreatment, smallBusiness));
+  const withoutVat = !chargesVat(taxTreatment, smallBusiness);
+  const lines = readLines(c, d.lines, locale, withoutVat);
+  const discount = readDocumentDiscount(c, 'discountValue', d, lines, withoutVat, linesReadable(c), locale);
   return c.done(() => ({
     customerId: d.customerId,
     accountId: d.accountId,
-    content: { date: d.date, service, paymentTermDays, taxTreatment, orderReference, leitwegId, subject, introText, closingText, lines },
+    content: { date: d.date, service, paymentTermDays, taxTreatment, orderReference, leitwegId, subject, introText, closingText, lines, discount },
   }));
 }
 

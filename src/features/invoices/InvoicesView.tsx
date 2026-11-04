@@ -36,7 +36,7 @@ import { currentLang, t, type MessageKey } from '../../i18n';
 import { accountDetail, accountName, fieldError, issueFailureText, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
 import { addInvoice, deleteDocument, showToast, updateInvoice, useApp } from '../../store/appStore';
 import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '../documents/common';
-import { LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
+import { DocumentDiscount, LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
 import { IssuedInvoiceView } from './IssuedInvoiceView';
 
@@ -299,7 +299,7 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
   const account = findAccount(draft.accountId);
   const treatment: TaxTreatment = smallBusiness ? 'standard' : draft.taxTreatment;
   const note = vatNote(treatment, smallBusiness);
-  const totals = draftTotals(draft.lines, lang, note !== null);
+  const totals = draftTotals(draft.lines, lang, note !== null, draft);
   // a negative sum shows up while it is typed, not only on "Save"
   const lineError = (path: LineFieldPath | 'lines') => e(path) ?? (path === 'lines' && hasNegativeRate(totals) ? problemText('negativeTotal') : undefined);
   const problems = issueProblems({
@@ -448,6 +448,7 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
               {t('lines.title')}
             </h2>
             <LinesEditor lines={draft.lines} onChange={(lines) => set({ lines })} errorFor={lineError} withoutVat={note !== null} />
+            <DocumentDiscount value={draft} onChange={set} error={e('discountValue')} />
             <Totals totals={totals} note={note} />
           </section>
 

@@ -129,6 +129,24 @@ const snapshotNumberPatterns: Migration = {
   },
 };
 
+/**
+ * Version 12: a quote or an invoice takes off discounts, on its lines and on the whole document (F23). A document of
+ * version 11 has none, so its lines and the document get the empty discount. An issued document keeps its snapshot
+ * and its PDF, which were made without the discount it does not have.
+ */
+const documentDiscounts: Migration = {
+  from: 11,
+  up: (raw) => {
+    if (raw['kind'] !== 'quote' && raw['kind'] !== 'invoice') return raw;
+    const lines = raw['lines'];
+    return {
+      ...raw,
+      discount: 'discount' in raw ? raw['discount'] : { kind: 'none' },
+      lines: Array.isArray(lines) ? lines.map((l: unknown) => (isRecord(l) && !('discount' in l) ? { ...l, discount: { kind: 'none' } } : l)) : lines,
+    };
+  },
+};
+
 /** Version 9: the documents of a contact are made in its language. A contact of version 8 is German, as its documents were. */
 const contactLanguage: Migration = {
   from: 8,
@@ -163,16 +181,29 @@ const snapshotLanguage: Migration = {
  * Version 10 gives contacts and items numbers from a pattern: company.json gets the two patterns, and the company in an
  * issued document's snapshot gets them too.
  * Version 11 adds the decisions of the customer on a quote, a new kind of file (quoteStatus/); no existing file changes.
+ * Version 12 adds discounts to quotes and invoices, on their lines and on the whole document; the other files do not change.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
-  document: [unchanged(1), unchanged(2), invoicesIssued, invoicesCancelled, quotesIssued, unchanged(6), unchanged(7), snapshotLanguage, snapshotNumberPatterns, unchanged(10)],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
-  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11)],
+  document: [
+    unchanged(1),
+    unchanged(2),
+    invoicesIssued,
+    invoicesCancelled,
+    quotesIssued,
+    unchanged(6),
+    unchanged(7),
+    snapshotLanguage,
+    snapshotNumberPatterns,
+    unchanged(10),
+    documentDiscounts,
+  ],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11)],
+  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11)],
 };
 
 export class NewerSchemaError extends Error {

@@ -270,6 +270,9 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .l-total output{height:34px;display:flex;align-items:center;font-variant-numeric:tabular-nums;font-weight:500}
 .line-sub{display:flex;align-items:flex-end;gap:10px;padding-left:32px}
 .l-actions{display:flex;gap:2px;padding-bottom:4px}
+.l-discount,.doc-discount{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.l-discount-value{width:112px}
+.doc-discount{justify-content:flex-end;padding-top:4px}
 .icon-btn:disabled{opacity:.35;cursor:default}
 .icon-btn:disabled:hover{background:transparent;color:var(--text-2)}
 .picker{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}

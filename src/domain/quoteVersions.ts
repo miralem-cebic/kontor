@@ -3,6 +3,7 @@
 // lists what changed between two of them, finds the versions of a quote and counts how often quotes are changed.
 
 import type { DocumentLine } from './document';
+import { sameDiscount } from './discount';
 
 /** The number of a version: the first number of the quote with the version as a suffix */
 export const versionNumber = (firstNumber: string, version: number): string => `${firstNumber}-${version}`;
@@ -10,8 +11,9 @@ export const versionNumber = (firstNumber: string, version: number): string => `
 /* ---------- What changed ---------- */
 
 /** The fields of a line that can change between versions; a line with another name is another line */
-export type LineChangeField = 'description' | 'quantity' | 'unit' | 'unitPrice' | 'vatRate';
-const LINE_CHANGE_FIELDS: readonly LineChangeField[] = ['description', 'quantity', 'unit', 'unitPrice', 'vatRate'];
+export type LineChangeField = 'description' | 'quantity' | 'unit' | 'unitPrice' | 'vatRate' | 'discount';
+/** The fields compared as they are; the discount is compared by its kind and value (sameDiscount) */
+const LINE_CHANGE_FIELDS = ['description', 'quantity', 'unit', 'unitPrice', 'vatRate'] as const satisfies readonly LineChangeField[];
 
 export type LineChange =
   | { kind: 'added'; line: DocumentLine }
@@ -34,7 +36,8 @@ export function lineChanges(before: readonly DocumentLine[], after: readonly Doc
     }
     const [old] = unmatched.splice(i, 1);
     if (!old) continue;
-    const fields = LINE_CHANGE_FIELDS.filter((f) => old[f] !== line[f]);
+    const fields: LineChangeField[] = LINE_CHANGE_FIELDS.filter((f) => old[f] !== line[f]);
+    if (!sameDiscount(old.discount, line.discount)) fields.push('discount');
     if (fields.length > 0) changes.push({ kind: 'changed', before: old, after: line, fields });
   }
   return [...changes, ...unmatched.map((line): LineChange => ({ kind: 'removed', line }))];

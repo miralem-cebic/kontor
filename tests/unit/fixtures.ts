@@ -3,6 +3,7 @@ import type { CompanyDraft, CompanyProfile } from '../../src/domain/company';
 import { emptyDraft } from '../../src/domain/company';
 import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../../src/domain/contact';
 import type { DocumentLine } from '../../src/domain/document';
+import { NO_DISCOUNT } from '../../src/domain/discount';
 import type { InvoiceContent, IssuedInfo } from '../../src/domain/invoice';
 import type { ItemProfile } from '../../src/domain/item';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
@@ -103,6 +104,7 @@ export const sampleLine = (over: Partial<DocumentLine> = {}): DocumentLine => ({
   unit: 'HUR',
   unitPrice: cents(8500),
   vatRate: basisPoints(1900),
+  discount: NO_DISCOUNT,
   ...over,
 });
 
@@ -114,6 +116,7 @@ export const sampleQuote = (over: Partial<QuoteContent> = {}): QuoteContent => (
   introText: 'Sehr geehrte Damen und Herren,',
   closingText: '',
   lines: [sampleLine(), sampleLine({ name: 'Lektorat', quantity: quantity(1000), unit: 'LS', unitPrice: cents(30000), vatRate: basisPoints(700) })],
+  discount: NO_DISCOUNT,
   ...over,
 });
 
@@ -129,6 +132,7 @@ export const sampleInvoice = (over: Partial<InvoiceContent> = {}): InvoiceConten
   introText: '',
   closingText: 'Vielen Dank für Ihren Auftrag.',
   lines: sampleQuote().lines,
+  discount: NO_DISCOUNT,
   ...over,
 });
 

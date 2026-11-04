@@ -1,10 +1,11 @@
 import { useId, useMemo, useState } from 'react';
 import { SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
-import { DOCUMENT_LIMITS, draftLineNet, emptyLineDraft, lineDraftFromItem, type LineDraft, type LineFieldPath, linePath } from '../../domain/document';
+import { DOCUMENT_LIMITS, draftLineNet, emptyLineDraft, lineDraftFromItem, type DocumentTotals, type LineDraft, type LineFieldPath, linePath } from '../../domain/document';
+import { DISCOUNT_KINDS, type DiscountDraft, type DiscountKind } from '../../domain/discount';
 import type { VatNote } from '../../domain/invoice';
 import { byItemName, ITEM_LIMITS, itemMatches } from '../../domain/item';
-import { formatCents, formatRate, type TaxTotals } from '../../domain/money';
+import { formatCents, formatRate, negate } from '../../domain/money';
 import { UNITS, type UnitCode } from '../../domain/units';
 import { VAT_RATES } from '../../domain/vat';
 import type { ItemFile } from '../../data/types';
@@ -12,8 +13,38 @@ import { currentLang, t, type MessageKey } from '../../i18n';
 import { unitText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 
-// The lines of a quote or an invoice: taken from the catalogue or typed freely, moved and removed.
-// The editor works on drafts; the document form checks them on "Save".
+// The lines of a quote or an invoice: taken from the catalogue or typed freely, moved and removed, each with its own
+// discount (F23). The discount of the whole document is set below the lines. The editor works on drafts; the document
+// form checks them on "Save".
+
+const DISCOUNT_KIND_KEY: Record<DiscountKind, MessageKey> = {
+  none: 'discount.none',
+  percent: 'discount.percent',
+  amount: 'discount.amount',
+};
+
+/** The kind of a discount and its value, as typed; the value is only asked for when there is a discount */
+function DiscountFields({ value, onChange, error, className, label }: { value: DiscountDraft; onChange: (patch: Partial<DiscountDraft>) => void; error: string | undefined; className: string; label: string }) {
+  return (
+    <div className={className}>
+      <SelectField<DiscountKind>
+        className="l-discount-kind"
+        label={label}
+        value={value.discountKind}
+        options={DISCOUNT_KINDS.map((k) => ({ value: k, label: t(DISCOUNT_KIND_KEY[k]) }))}
+        onChange={(discountKind) => onChange({ discountKind, discountValue: discountKind === 'none' ? '' : value.discountValue })}
+      />
+      {value.discountKind !== 'none' && (
+        <TextField className="l-discount-value" label={t('lines.discountValue')} value={value.discountValue} onChange={(discountValue) => onChange({ discountValue })} error={error} inputMode="decimal" maxLength={20} />
+      )}
+    </div>
+  );
+}
+
+/** The discount of the whole document, below the lines (F23) */
+export function DocumentDiscount({ value, onChange, error }: { value: DiscountDraft; onChange: (patch: Partial<DiscountDraft>) => void; error: string | undefined }) {
+  return <DiscountFields value={value} onChange={onChange} error={error} className="doc-discount" label={t('discount.document')} />;
+}
 
 let lineSeq = 0;
 /** A key for a new line in the editor */
@@ -159,6 +190,7 @@ function LineFields({ line, index, last, withoutVat, errorFor, onChange, onMove,
       </div>
       <div className="line-sub">
         <TextArea className="l-description" label={t('lines.description')} value={line.description} onChange={(description) => onChange({ description })} error={e('description')} maxLength={ITEM_LIMITS.description} rows={2} />
+        <DiscountFields value={line} onChange={onChange} error={e('discountValue')} className="l-discount" label={t('lines.discount')} />
         <div className="l-actions">
           <button type="button" className="icon-btn" onClick={() => onMove(-1)} disabled={index === 0} aria-label={t('lines.moveUp', { n })}>
             <Icon n="chevU" s={14} />
@@ -231,12 +263,23 @@ const NOTE_KEY: Record<VatNote, MessageKey> = {
   notTaxable: 'totals.notTaxable',
 };
 
-/** Net, VAT per rate and gross. A document without VAT shows only the total and the note that says why. */
-export function Totals({ totals, note }: { totals: TaxTotals; note: VatNote | null }) {
+/**
+ * Net, VAT per rate and gross. Discounts (F23) show as the lines before them and what they took off. A document without
+ * VAT shows only the total and the note that says why.
+ */
+export function Totals({ totals, note }: { totals: DocumentTotals; note: VatNote | null }) {
   const lang = currentLang();
   return (
     <div className="totals-box">
       <dl className="totals" aria-label={t('totals.label')}>
+        {totals.discount !== 0 && (
+          <>
+            <dt>{t('totals.subtotal')}</dt>
+            <dd>{formatCents(totals.subtotal, lang)}</dd>
+            <dt>{t('totals.discount')}</dt>
+            <dd>{formatCents(negate(totals.discount), lang)}</dd>
+          </>
+        )}
         {!note && (
           <>
             <dt>{t('totals.net')}</dt>

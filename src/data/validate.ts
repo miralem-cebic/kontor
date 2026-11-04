@@ -24,10 +24,11 @@ import { ACCOUNT_LIMITS, MAX_ACCOUNTS, type AccountDetails } from '../domain/ban
 import { TEXT_LIMITS, type Address, type ContactDetails } from '../domain/check';
 import { CONTACT_LIMITS, DOCUMENT_LANGUAGES, type ContactKind, type ContactRoles, type DocumentLanguage } from '../domain/contact';
 import { isIsoDate } from '../domain/dates';
-import { DOCUMENT_LIMITS, lineNetInRange, type DocumentLine } from '../domain/document';
+import { DOCUMENT_LIMITS, documentTotals, lineNetInRange, type DocumentLine } from '../domain/document';
+import { NO_DISCOUNT, type Discount } from '../domain/discount';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { ITEM_LIMITS } from '../domain/item';
-import { cents, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
+import { BASIS_POINTS_PER_UNIT, basisPoints, cents, lineNet, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunning';
 import { MAX_PAYMENT_AMOUNT, PAYMENT_NOTE_LIMIT } from '../domain/payment';
 import { QUOTE_DECISIONS, type QuoteDecision } from '../domain/quoteStatus';
@@ -359,7 +360,14 @@ const lineQuantity: Check<Quantity> = (v, path) => {
   return q !== 0 ? quantity(q) : fail(path, 'expected a quantity other than 0');
 };
 
-/** The line amount must stay in range: every total of the document is then an exact integer */
+/** A discount (F23): none, a percentage of at most 100 %, or an amount of more than 0 */
+const discountCheck: Check<Discount> = variant<Discount>({
+  none: objectOf({ kind: exactly('none') }),
+  percent: objectOf({ kind: exactly('percent'), rate: (v, path) => basisPoints(int(1, BASIS_POINTS_PER_UNIT)(v, path)) }),
+  amount: objectOf({ kind: exactly('amount'), amount: (v, path) => cents(int(1, ITEM_LIMITS.maxNetPrice)(v, path)) }),
+});
+
+/** The line amount must stay in range: every total of the document is then an exact integer. A discount takes off no more than the line. */
 const documentLine: Check<DocumentLine> = (v, path) => {
   const line = objectOf<DocumentLine>({
     name: text(ITEM_LIMITS.name),
@@ -368,8 +376,17 @@ const documentLine: Check<DocumentLine> = (v, path) => {
     unit: oneOf<UnitCode>(UNITS),
     unitPrice: netPrice,
     vatRate,
+    discount: discountCheck,
   })(v, path);
-  return lineNetInRange(line.unitPrice, line.quantity) ? line : fail(path, 'the line amount is too large');
+  if (!lineNetInRange(line.unitPrice, line.quantity)) return fail(path, 'the line amount is too large');
+  const fits = line.discount.kind !== 'amount' || line.discount.amount <= Math.abs(lineNet(line.unitPrice, line.quantity));
+  return fits ? line : fail(`${path}.discount`, 'the discount is larger than the line');
+};
+
+/** The discount of a whole document takes off no more than its lines add up to (F23) */
+const documentDiscountFits = <T extends { lines: DocumentLine[]; discount: Discount }>(doc: T, path: string): T => {
+  const fits = doc.discount.kind !== 'amount' || doc.discount.amount <= Math.abs(documentTotals(doc.lines, false, NO_DISCOUNT).net);
+  return fits ? doc : fail(`${path}.discount`, 'the discount is larger than the lines');
 };
 
 /** The order of the dates is checked by the form; any two valid dates are safe */
@@ -412,6 +429,7 @@ const quoteFields = objectOf<QuoteFile>({
   introText: text(QUOTE_LIMITS.text),
   closingText: text(QUOTE_LIMITS.text),
   lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
+  discount: discountCheck,
   issued: nullable(issued),
   revises: nullable(revisedQuote),
   createdAt: dateTime,
@@ -421,7 +439,7 @@ const quoteFields = objectOf<QuoteFile>({
 
 /** A finalized version has the first number of the quote with its version as a suffix */
 const quoteFile: Check<QuoteFile> = (v, path) => {
-  const q = quoteFields(v, path);
+  const q = documentDiscountFits(quoteFields(v, path), path);
   return q.revises && q.issued && q.issued.number !== versionNumber(q.revises.firstNumber, q.revises.version) ? fail(`${path}.issued.number`, 'does not match the version') : q;
 };
 
@@ -444,6 +462,7 @@ const invoiceFields = objectOf<InvoiceFile>({
   introText: text(INVOICE_LIMITS.text),
   closingText: text(INVOICE_LIMITS.text),
   lines: listOf(documentLine, DOCUMENT_LIMITS.lines),
+  discount: discountCheck,
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   issued: nullable(issued),
@@ -453,7 +472,7 @@ const invoiceFields = objectOf<InvoiceFile>({
 
 /** A cancellation is issued when it is made; a cancellation draft does not come from the app */
 const invoiceFile: Check<InvoiceFile> = (v, path) => {
-  const inv = invoiceFields(v, path);
+  const inv = documentDiscountFits(invoiceFields(v, path), path);
   return inv.cancels && !inv.issued ? fail(`${path}.issued`, 'a cancellation is always issued') : inv;
 };
 

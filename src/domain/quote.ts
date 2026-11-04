@@ -7,7 +7,8 @@
 import type { Result } from '../data/result';
 import { Checker, type FieldError } from './check';
 import { addDays, isIsoDate } from './dates';
-import { draftFromLine, readLines, type DocumentLine, type LineDraft, type LineFieldPath } from './document';
+import { draftFromLine, linesReadable, readDocumentDiscount, readLines, type DocumentLine, type LineDraft, type LineFieldPath } from './document';
+import { discountDraft, NO_DISCOUNT_DRAFT, type Discount, type DiscountDraft } from './discount';
 import type { MoneyLocale } from './money';
 
 export interface QuoteContent {
@@ -22,6 +23,8 @@ export interface QuoteContent {
   /** Text below the lines (conditions, closing); empty when not given */
   closingText: string;
   lines: DocumentLine[];
+  /** The discount of the whole document (F23); NO_DISCOUNT when there is none */
+  discount: Discount;
 }
 
 export const QUOTE_LIMITS = { subject: 200, text: 4000 } as const;
@@ -31,7 +34,7 @@ export const DEFAULT_VALIDITY_DAYS = 30;
 
 /* ---------- Draft ---------- */
 
-export interface QuoteDraft {
+export interface QuoteDraft extends DiscountDraft {
   /** The chosen customer; empty when none is chosen yet */
   customerId: string;
   date: string;
@@ -53,6 +56,7 @@ export const emptyQuoteDraft = (today: string): QuoteDraft => ({
   introText: '',
   closingText: '',
   lines: [],
+  ...NO_DISCOUNT_DRAFT,
 });
 
 /** `newKey` gives every line a key for the editor */
@@ -64,6 +68,7 @@ export const draftFromQuote = (customerId: string, q: QuoteContent, locale: Mone
   introText: q.introText,
   closingText: q.closingText,
   lines: q.lines.map((l) => draftFromLine(newKey(), l, locale)),
+  ...discountDraft(q.discount, locale),
 });
 
 /** A new draft with the content of a quote, dated `today` and valid for the usual days: a finalized quote is copied like this */
@@ -86,7 +91,8 @@ export function readQuote(d: QuoteDraft, locale: MoneyLocale, smallBusiness: boo
   const introText = c.optionalText('introText', d.introText, QUOTE_LIMITS.text);
   const closingText = c.optionalText('closingText', d.closingText, QUOTE_LIMITS.text);
   const lines = readLines(c, d.lines, locale, smallBusiness);
-  return c.done(() => ({ customerId: d.customerId, content: { date: d.date, validUntil: d.validUntil, subject, introText, closingText, lines } }));
+  const discount = readDocumentDiscount(c, 'discountValue', d, lines, smallBusiness, linesReadable(c), locale);
+  return c.done(() => ({ customerId: d.customerId, content: { date: d.date, validUntil: d.validUntil, subject, introText, closingText, lines, discount } }));
 }
 
 /* ---------- Ready to finalize ---------- */

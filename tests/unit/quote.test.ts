@@ -1,5 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { NO_DISCOUNT } from '../../src/domain/discount';
 import { documentTotals, draftLineNet, draftTotals, emptyLineDraft, hasNegativeRate, lineDraftFromItem, lineNetInRange, type LineDraft } from '../../src/domain/document';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import { byQuoteDate, draftFromQuote, emptyQuoteDraft, isExpired, quoteDraftFromCopy, quoteMatches, quoteProblems, readQuote, type QuoteDraft } from '../../src/domain/quote';
@@ -15,7 +16,7 @@ const draft = (over: Partial<QuoteDraft> = {}): QuoteDraft => ({ ...emptyQuoteDr
 
 describe('totals', () => {
   it('sums per rate and rounds the VAT once per rate (ADR 0003)', () => {
-    const t = documentTotals(sampleQuote().lines, false);
+    const t = documentTotals(sampleQuote().lines, false, NO_DISCOUNT);
     expect(t.byRate).toEqual([
       { rate: 700, net: 30000, tax: 2100 },
       { rate: 1900, net: 106250, tax: 20188 },
@@ -24,12 +25,12 @@ describe('totals', () => {
   });
 
   it('a small business charges no VAT', () => {
-    const t = documentTotals(sampleQuote().lines, true);
+    const t = documentTotals(sampleQuote().lines, true, NO_DISCOUNT);
     expect([t.net, t.tax, t.gross]).toEqual([136250, 0, 136250]);
   });
 
   it('a negative quantity deducts', () => {
-    const t = documentTotals([sampleLine(), sampleLine({ name: 'Rabatt', quantity: quantity(-1000), unitPrice: cents(6250) })], false);
+    const t = documentTotals([sampleLine(), sampleLine({ name: 'Rabatt', quantity: quantity(-1000), unitPrice: cents(6250) })], false, NO_DISCOUNT);
     expect(t.net).toBe(100000);
   });
 
@@ -55,7 +56,7 @@ describe('readQuote', () => {
     const r = readQuote(draft({ subject: ' Relaunch ' }), 'de', false);
     expect(r.ok && r.value).toEqual({
       customerId: 'c1',
-      content: { date: '2026-10-22', validUntil: '2026-11-21', subject: 'Relaunch', introText: '', closingText: '', lines: [] },
+      content: { date: '2026-10-22', validUntil: '2026-11-21', subject: 'Relaunch', introText: '', closingText: '', lines: [], discount: NO_DISCOUNT },
     });
   });
 
@@ -107,6 +108,7 @@ describe('draft ↔ quote', () => {
     unit: fc.constantFrom(...UNITS),
     unitPrice: fc.integer({ min: 0, max: 99_999_999 }).map(cents),
     vatRate: fc.constantFrom(...VAT_RATES),
+    discount: fc.oneof(fc.constant(NO_DISCOUNT), fc.integer({ min: 1, max: 10_000 }).map((r) => ({ kind: 'percent' as const, rate: basisPoints(r) }))),
   });
 
   it('a quote survives the round trip through the draft, in both languages', () =>
@@ -114,7 +116,7 @@ describe('draft ↔ quote', () => {
       fc.property(fc.array(arbLine, { maxLength: 5 }), fc.constantFrom('de' as const, 'en' as const), (lines, locale) => {
         const quote = sampleQuote({ lines });
         const r = readQuote(draftFromQuote('c1', quote, locale, key), locale, false);
-        if (hasNegativeRate(documentTotals(lines, false))) return problems(r).join() === 'lines:negativeTotal';
+        if (hasNegativeRate(documentTotals(lines, false, NO_DISCOUNT))) return problems(r).join() === 'lines:negativeTotal';
         return r.ok && r.value.customerId === 'c1' && JSON.stringify(r.value.content) === JSON.stringify(quote);
       }),
       fcParams,

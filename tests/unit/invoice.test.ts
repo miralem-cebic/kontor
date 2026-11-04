@@ -1,5 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { NO_DISCOUNT } from '../../src/domain/discount';
 import { documentTotals, emptyLineDraft, hasNegativeRate, type LineDraft } from '../../src/domain/document';
 import {
   byInvoiceDate,
@@ -51,6 +52,7 @@ describe('readInvoice', () => {
         introText: '',
         closingText: '',
         lines: [],
+        discount: NO_DISCOUNT,
       },
     });
   });
@@ -100,7 +102,7 @@ describe('readInvoice', () => {
 describe('totals and due date', () => {
   it('VAT per rate with standard VAT; none for reverse charge, an intra-community supply, a service not taxable in Germany or a small business', () => {
     const inv = sampleInvoice();
-    expect(invoiceTotals(inv, false)).toEqual(documentTotals(inv.lines, false));
+    expect(invoiceTotals(inv, false)).toEqual(documentTotals(inv.lines, false, inv.discount));
     expect(invoiceTotals(inv, false).tax).toBe(22288);
     for (const taxTreatment of ['reverseCharge', 'intraCommunitySupply', 'notTaxable'] as const) {
       expect(invoiceTotals({ ...inv, taxTreatment }, false)).toMatchObject({ net: 136250, tax: 0, gross: 136250 });
@@ -158,6 +160,7 @@ const arbLine = fc.record({
   unit: fc.constantFrom(...UNITS),
   unitPrice: fc.integer({ min: 0, max: 99_999_999 }).map(cents),
   vatRate: fc.constantFrom(...VAT_RATES),
+  discount: fc.oneof(fc.constant(NO_DISCOUNT), fc.integer({ min: 1, max: 10_000 }).map((r) => ({ kind: 'percent' as const, rate: basisPoints(r) }))),
 });
 
 describe('draft ↔ invoice', () => {

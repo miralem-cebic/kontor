@@ -99,6 +99,14 @@ Proposed on 2 November 2026, not agreed yet:
 | --- | --- | --- | --- |
 | F30 | **Case board (Kanban)** | a board with the columns Angebot → Auftrag → Rechnung → Geld-Eingang. Each card is the order (Auftrag) of one customer and moves to the right when its next document exists: an accepted quote becomes an order (F21), an issued invoice moves it to Rechnung (F02, F22), a payment to Geld-Eingang (open, partly paid, paid; overdue is shown on the card, F03). Every card has a case number (Vorgangsnummer, for example `V-2026-0001`) that its quote, order, invoice, cancellation, dunning and payments carry, so the board and the customer account find each other; the case is then the order number, and no separate Auftragsnummer is needed. The board shows the state of the documents and issues nothing by itself: an invoice is still issued on purpose (ADR 0004). Open decisions: when a case starts (with the first quote, or with an invoice made without one), whether a case can hold more than one quote (versions do not count, F22), and whether the Vorgangsnummer is a number range of its own, like the quote numbers. A drag and drop is not needed for a first version. Depends on F21 and F02 | M |
 
+Proposed on 4 November 2026, not agreed yet (the issues are linked; the website on documents is already F26, as free text in the footer):
+
+| ID | Feature | Content | Effort |
+| --- | --- | --- | --- |
+| F31 | **Customer email and phone on the document** ([#47](https://github.com/miralem-cebic/kontor/issues/47)) | the email and phone of the customer are stored but not printed; they go into the recipient block of quotes and invoices. Placement open | S |
+| F32 | **Time and place of the service** ([#48](https://github.com/miralem-cebic/kontor/issues/48)) | an event invoice has a time, a place, a ticket and a participant; today this is free text in the line description. Open: own fields or free text (fields are a schema change) | M |
+| F33 | **Invoice on behalf of another party** ([#49](https://github.com/miralem-cebic/kontor/issues/49)) | an organiser block for documents issued in the name of another party. Only if needed; the tax wording needs a check first | M |
+
 ### Phase 2: e-invoices
 
 - **Outgoing:** ZUGFeRD / Factur-X (profile EN 16931 or XRECHNUNG, PDF/A-3 with embedded XML) and plain XRechnung XML (CII; UBL optional). Optional for small businesses; mandatory for regular businesses after the transition periods (2027 with a previous-year turnover above 800,000 €, otherwise 2028).

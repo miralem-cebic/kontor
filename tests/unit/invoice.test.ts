@@ -81,7 +81,7 @@ describe('readInvoice', () => {
     expect(r.ok && [r.value.content.paymentTermDays, r.value.content.leitwegId]).toEqual([0, '04011000-12345-34']);
   });
 
-  it('a small business has no tax treatment to choose', () => {
+  it('a small business chooses only between no VAT and a service not taxable in Germany', () => {
     const r = readInvoice(draft({ taxTreatment: 'reverseCharge' }), 'de', true);
     expect(r.ok && r.value.content.taxTreatment).toBe('standard');
   });
@@ -112,7 +112,7 @@ describe('totals and due date', () => {
 
   it('the note that explains why there is no VAT', () => {
     expect(TAX_TREATMENTS.map((v) => vatNote(v, false))).toEqual([null, 'reverseCharge', 'intraCommunitySupply', 'notTaxable']);
-    expect(TAX_TREATMENTS.map((v) => vatNote(v, true))).toEqual(['smallBusiness', 'smallBusiness', 'smallBusiness', 'smallBusiness']);
+    expect(TAX_TREATMENTS.map((v) => vatNote(v, true))).toEqual(['smallBusiness', 'smallBusiness', 'smallBusiness', 'notTaxable']);
   });
 
   it('a hint when the tax treatment does not fit where the customer is', () => {

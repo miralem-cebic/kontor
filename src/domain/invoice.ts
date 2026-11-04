@@ -71,15 +71,26 @@ export const SMALL_AMOUNT_LIMIT: Cents = cents(25_000);
 /** Why a document shows no VAT; the document has to say so */
 export type VatNote = 'smallBusiness' | 'reverseCharge' | 'intraCommunitySupply' | 'notTaxable';
 
-/** The note a document needs, or null when it charges VAT */
+/**
+ * The tax treatment an invoice of a small business is written with: a small business charges no VAT, so it chooses
+ * only between "no VAT, § 19" (`standard`) and a service not taxable in Germany (`notTaxable`, § 3a UStG). Any other
+ * treatment counts as `standard`. A regular business keeps its choice.
+ */
+export const effectiveTaxTreatment = (treatment: TaxTreatment, smallBusiness: boolean): TaxTreatment =>
+  smallBusiness ? (treatment === 'notTaxable' ? 'notTaxable' : 'standard') : treatment;
+
+/**
+ * The note a document needs, or null when it charges VAT. A service not taxable in Germany gets its note also from a
+ * small business; any other small business gets the note of § 19.
+ */
 export function vatNote(treatment: TaxTreatment, smallBusiness: boolean): VatNote | null {
+  if (treatment === 'notTaxable') return 'notTaxable';
   if (smallBusiness) return 'smallBusiness';
   switch (treatment) {
     case 'standard':
       return null;
     case 'reverseCharge':
     case 'intraCommunitySupply':
-    case 'notTaxable':
       return treatment;
   }
 }
@@ -284,7 +295,7 @@ export function readInvoice(
     service = { kind: 'period', start: d.serviceStart, end: d.serviceEnd };
   }
   const paymentTermDays = c.paymentTerm('paymentTermDays', d.paymentTermDays);
-  const taxTreatment = smallBusiness ? 'standard' : d.taxTreatment;
+  const taxTreatment = effectiveTaxTreatment(d.taxTreatment, smallBusiness);
   const orderReference = c.optionalText('orderReference', d.orderReference, INVOICE_LIMITS.orderReference);
   const leitwegId = d.leitwegId.trim();
   if (leitwegId && !isPlausibleLeitwegId(leitwegId)) c.add('leitwegId', 'leitwegId');

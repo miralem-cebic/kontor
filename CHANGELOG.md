@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Automatic numbers for contacts and items (F28): a new customer or supplier starts with the next free number of the pattern in the settings (`K-{NNNN}` by default), and a new item with the next free item number (`A-{NNNN}`). The number is shown in the form and can be changed there. A deleted contact or item keeps its number, so no number is given twice. The patterns are set in the invoice settings with a preview, and they may not contain a date.
 
+- Small business (§ 19 UStG): an invoice can be for a service whose place of supply is abroad (§ 3a UStG). It shows no VAT and the note of § 3a instead of the note of § 19 UStG. Every other choice of a small business stays "no VAT, § 19".
+
 ### Changed
 
 - For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.

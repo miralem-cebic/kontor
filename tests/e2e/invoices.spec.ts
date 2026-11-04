@@ -12,6 +12,8 @@ interface ContactInput {
   address?: boolean;
   paymentTerm?: string;
   orderReference?: string;
+  /** The ISO code of the country of the address, for a customer abroad (the address is then needed too) */
+  country?: string;
 }
 
 async function addCustomer(page: Page, c: ContactInput) {
@@ -23,6 +25,7 @@ async function addCustomer(page: Page, c: ContactInput) {
     await page.getByLabel('PLZ').fill('10115');
     await page.getByRole('textbox', { name: 'Ort', exact: true }).fill('Berlin');
   }
+  if (c.country) await page.getByLabel('Land').fill(c.country);
   if (c.orderReference) await page.getByLabel('Bestell- bzw. PO-Nummer').fill(c.orderReference);
   if (c.paymentTerm) await page.getByLabel('Zahlungsziel in Tagen').fill(c.paymentTerm);
   await page.getByRole('button', { name: 'Speichern' }).click();
@@ -220,8 +223,8 @@ test('a quote becomes an invoice; a small business invoices without VAT, without
   await expect(page.getByRole('textbox', { name: 'Schlusstext' })).toHaveValue('');
   await expect(line(page, 1).getByLabel('Menge')).toHaveValue('4');
 
-  // a small business: no tax section, the note on § 19 UStG; up to 250 € the address of the customer is not needed
-  await expect(page.getByRole('navigation', { name: 'Abschnitte der Rechnung' }).getByRole('button', { name: 'Steuer' })).toHaveCount(0);
+  // a small business: the tax section offers no VAT (§ 19) and a service not taxable in Germany; the note on § 19 UStG; up to 250 € the address of the customer is not needed
+  await expect(page.getByRole('navigation', { name: 'Abschnitte der Rechnung' }).getByRole('button', { name: 'Steuer' })).toHaveCount(1);
   await expect(page.getByLabel('Summen')).toHaveText('Gesamtbetrag240,00 €');
   await expect(page.getByText('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.')).toBeVisible();
   await expect(page.getByText('Alle Angaben für das Ausstellen sind da.')).toBeVisible();
@@ -404,3 +407,33 @@ test('cancelling: a cancellation invoice with the next number, its PDF and audit
   await expect(rows.filter({ hasText: 'Beratung, korrigiert' })).toContainText('Entwurf');
   expect(errors).toEqual([]);
 });
+
+test('a small business invoices a service not taxable in Germany (§ 3a UStG): no VAT, its own note instead of § 19', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Klein Design' });
+  await addCustomer(page, { name: 'Studio Tokyo KK', address: true, country: 'JP' });
+
+  await nav(page, 'Rechnungen');
+  await page.getByRole('button', { name: 'Neue Rechnung' }).click();
+  await page.getByLabel('Kunde').selectOption({ label: 'Studio Tokyo KK' });
+  await page.getByLabel('Betreff').fill('Beratung');
+  await page.getByRole('button', { name: 'Freie Position' }).click();
+  await line(page, 1).getByLabel('Bezeichnung').fill('Beratung');
+  await line(page, 1).getByLabel('Menge').fill('1');
+  await line(page, 1).getByLabel('Einzelpreis €').fill('1000');
+
+  // the tax section offers the two choices of a small business; the customer abroad gets the hint
+  const totals = page.getByLabel('Summen');
+  await page.getByRole('radio', { name: 'Nicht im Inland steuerbar' }).check();
+  await expect(totals).toHaveText('Gesamtbetrag1.000,00 €');
+  await expect(page.locator('.totals-box')).toContainText('Nicht im Inland steuerbare Leistung (Leistungsort im Ausland, § 3a UStG)');
+  await expect(page.getByText('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.')).toHaveCount(0);
+  await expect(page.getByText('Der Kunde sitzt nicht in Deutschland.', { exact: false })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Speichern' }).click();
+
+  await expect.poll(async () => (await readDocuments(page)).length).toBe(1);
+  expect((await readDocuments(page))[0]).toMatchObject({ kind: 'invoice', taxTreatment: 'notTaxable' });
+  expect(errors).toEqual([]);
+});
+

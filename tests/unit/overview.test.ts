@@ -26,6 +26,20 @@ describe('netShareOf: the net part of a payment', () => {
     expect(netShareOf(cents(2), cents(1), cents(3))).toBe(1);
     expect(netShareOf(cents(1), cents(1), cents(3))).toBe(0);
   });
+
+  it('takes the same share of an invoice with negative sums (a cancellation) instead of failing', () => {
+    // the app records no payment on a cancellation, but a payment file read from the folder may point to one
+    expect(netShareOf(cents(-5_950), cents(-10_000), cents(-11_900))).toBe(-5_000);
+    expect(netShareOf(cents(5_950), cents(-10_000), cents(-11_900))).toBe(5_000);
+  });
+});
+
+describe('overview with a payment that points to a cancellation', () => {
+  it('still computes the figures', () => {
+    const cancellation = invoice({ id: 's1', isCancellation: true, net: cents(-10_000), gross: cents(-11_900), dueDate: '' });
+    const o = run({ invoices: [invoice(), cancellation], payments: [{ invoiceId: 's1', date: '2026-04-02', amount: cents(5_950) }] });
+    expect(o.income).toBe(5_000);
+  });
 });
 
 describe('overview of a regular business', () => {

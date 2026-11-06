@@ -61,11 +61,14 @@ export interface Overview {
 
 /**
  * The net part of a payment: the share of its invoice that the amount pays, amount × net ÷ gross, rounded once. A payment
- * on an invoice without VAT counts with its whole amount.
+ * on an invoice without VAT counts with its whole amount. The sums of a cancellation are negative: the fraction is
+ * expanded by −1, so the share stays the same and the divisor positive.
  */
 export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
   if (gross === 0) return amount;
-  return cents(Number(divideRounded(BigInt(amount) * BigInt(net), BigInt(gross))));
+  const product = BigInt(amount) * BigInt(net);
+  const share = gross > 0 ? divideRounded(product, BigInt(gross)) : divideRounded(-product, -BigInt(gross));
+  return cents(Number(share));
 }
 
 const inYear = (date: string, year: number): boolean => date.startsWith(`${year}-`);

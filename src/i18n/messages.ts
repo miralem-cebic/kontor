@@ -1297,11 +1297,6 @@ const MESSAGES_SRC = {
   'unit.SET': { de: 'Set', en: 'Set' },
 
   'home.title': { de: 'Übersicht', en: 'Dashboard' },
-  'home.welcome': { de: '{name} ist eingerichtet.', en: '{name} is set up.' },
-  'home.next': {
-    de: 'Hier erscheinen bald Gewinn, offene Forderungen und die Steuer-Rücklage. Zahlungen und Ausgaben folgen in den nächsten Versionen.',
-    en: 'Profit, open receivables and the tax reserve will appear here. Payments and expenses follow in the next versions.',
-  },
 
   'settings.title': { de: 'Einstellungen', en: 'Settings' },
   'settings.app': { de: 'App', en: 'App' },

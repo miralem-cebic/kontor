@@ -7,6 +7,7 @@ import { t, type MessageKey } from '../../i18n';
 import { errorText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 import { ContactsView } from '../contacts/ContactsView';
+import { ExpensesView } from '../expenses/ExpensesView';
 import { HomeView } from '../home/HomeView';
 import { InvoicesView } from '../invoices/InvoicesView';
 import { ItemsView } from '../items/ItemsView';
@@ -17,13 +18,13 @@ import { CompanySwitcher } from './CompanySwitcher';
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'quotes' | 'invoices' | 'contacts' | 'items' | 'settings';
+type View = 'home' | 'quotes' | 'invoices' | 'expenses' | 'contacts' | 'items' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
   { key: 'nav.quotes', icon: 'quote', view: 'quotes' },
   { key: 'nav.invoices', icon: 'invoice', view: 'invoices' },
-  { key: 'nav.expenses', icon: 'expense' },
+  { key: 'nav.expenses', icon: 'expense', view: 'expenses' },
   { key: 'nav.contacts', icon: 'contacts', view: 'contacts' },
   { key: 'nav.items', icon: 'item', view: 'items' },
   { key: 'nav.taxes', icon: 'tax' },
@@ -91,6 +92,8 @@ function MainView({ view, fromQuote, onCreateInvoice }: { view: View; fromQuote:
     case 'invoices':
       // a new key for every quote, so that the view starts again with its new invoice
       return <InvoicesView key={fromQuote ?? 'list'} fromQuote={fromQuote} />;
+    case 'expenses':
+      return <ExpensesView />;
     case 'contacts':
       return <ContactsView />;
     case 'items':

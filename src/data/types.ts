@@ -4,6 +4,7 @@ import type { AccountDetails } from '../domain/bankAccount';
 import type { SendChannel, SendKind } from '../domain/sending';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
+import type { ExpenseProfile } from '../domain/expense';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { Cents } from '../domain/money';
@@ -11,7 +12,7 @@ import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -291,6 +292,36 @@ export interface QuoteStatusFile {
   fieldUpdatedAt: Partial<Record<QuoteStatusMergeableField, string>>;
 }
 
+/** Expense fields merged one by one; like items, a deletion survives edits made elsewhere */
+const EXPENSE_MERGEABLE: Record<keyof ExpenseProfile | 'deletedAt', true> = {
+  date: true,
+  supplier: true,
+  reference: true,
+  gross: true,
+  taxTreatment: true,
+  vatRate: true,
+  category: true,
+  accountId: true,
+  note: true,
+  deletedAt: true,
+};
+export const EXPENSE_MERGEABLE_FIELDS = keysOf(EXPENSE_MERGEABLE);
+export type ExpenseMergeableField = keyof ExpenseProfile | 'deletedAt';
+
+/**
+ * expenses/<id>.json: what the business paid for (domain/expense.ts). Edited like an item; a removed expense stays in its
+ * file and is hidden in the app. `accountId` is the account the money left; it may have been removed since.
+ */
+export interface ExpenseFile extends Omit<ExpenseProfile, 'accountId'> {
+  schemaVersion: number;
+  id: ExpenseId;
+  accountId: AccountId | null;
+  createdAt: string;
+  /** Soft delete: a deleted expense stays in its file and is hidden in the app */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>>;
+}
+
 /** documents/<id>.json: quotes and invoices, told apart by `kind` */
 export type DocumentFile = QuoteFile | InvoiceFile;
 
@@ -408,6 +439,7 @@ export interface BackupSnapshot {
   payments: readonly PaymentFile[];
   dunnings: readonly DunningFile[];
   quoteStatuses: readonly QuoteStatusFile[];
+  expenses: readonly ExpenseFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

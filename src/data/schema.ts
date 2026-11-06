@@ -1,15 +1,19 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
+import type { ExpenseProfile } from '../domain/expense';
 import { cancellationContent, type InvoiceContent, type IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newExpenseId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
+  EXPENSE_MERGEABLE_FIELDS,
+  type ExpenseFile,
+  type ExpenseMergeableField,
   INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
@@ -36,7 +40,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const nowIso = (): string => stampNow();
 
@@ -133,4 +137,15 @@ export function makeQuoteStatus(quoteId: DocumentId, content: { decision: QuoteD
   const fieldUpdatedAt: Partial<Record<QuoteStatusMergeableField, string>> = {};
   for (const f of QUOTE_STATUS_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
   return { schemaVersion: SCHEMA_VERSION, id: newQuoteStatusId(), quoteId, ...content, createdAt: at, deletedAt: null, fieldUpdatedAt };
+}
+
+/**
+ * A new expense. Every field counts as changed at creation time. `accountId` is an active account of the company, checked
+ * by the form (readExpense); the expense keeps it when the account is removed later.
+ */
+export function makeExpense(profile: Omit<ExpenseProfile, 'accountId'> & { accountId: AccountId | null }): ExpenseFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>> = {};
+  for (const f of EXPENSE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

@@ -4,7 +4,7 @@ kontor follows the feature set of epufix (Austria), adapted to German law: quote
 
 Calculators and exports are estimates and filling aids, not tax advice. Every year-dependent value comes from `src/domain/tax/params/<year>.ts`, with its legal source and tests.
 
-The market analysis behind the feature list (competitors, what they export, sources) is in [competition.md](competition.md). Status: 4 November 2026.
+The market analysis behind the feature list (competitors, what they export, sources) is in [competition.md](competition.md). Status: 6 November 2026.
 
 ## Scope
 
@@ -113,6 +113,15 @@ Proposed on 4 November 2026, not agreed yet (a special case: the feature is only
 | --- | --- | --- | --- |
 | F34 | **AWV report for payments from abroad** (special case) | a payment received from abroad above 12,500 € must be reported to the Deutsche Bundesbank under the Außenwirtschaftsverordnung (AWV) for the balance-of-payments statistics. The obligation lies with the German recipient, not with the bank, and the report is filed electronically through the Allgemeines Meldeportal Statistik (AMS). kontor cannot send it (no network), so it prepares the values as a filling aid, like R1: the country of the payer, the amount in euros, the date, and the Kennzahl with its description, each with a copy button, plus a list of the cases as PDF and CSV. Services (software licences, consulting, patents) are reportable; goods imports are not. **Shown only when it applies:** a hint on the payment in `PaymentsCard` and an entry in the list of reports, both only for a payment above the threshold from a payer outside Germany. Nothing is shown otherwise, and there is no menu entry. The threshold, the deadline and the exemptions live in `tax/params/<year>.ts` with their source, not in the code. The Kennzahl is chosen from a list, checked against the current Bundesbank catalogue. The hint is a filling aid, not tax or legal advice (see the scope above). **Before building, to decide:** (1) how the payer's country is known: the country of the customer's address, or a new field on the payment (a schema change); (2) whether the threshold applies per payment or per invoice; (3) how an amount in a foreign currency is converted, which depends on F15; (4) the current threshold, deadline and exemptions, checked with the Bundesbank, since the figures in this entry come from a summary and are not yet verified | M |
 
+Proposed on 6 November 2026, not agreed yet. The export (F35) has to include expenses, so it comes after the expense form. The import and export items reuse the rules of Phase 3.5 and the CSV/XLSX rules of Phase 6.
+
+| ID | Feature | Content | Effort |
+| --- | --- | --- | --- |
+| F35 | **CSV export of the lists** (part of F12) | every list (invoices, quotes, payments, expenses, contacts, items) as a CSV file with a header line; UTF-8 with a BOM and `;` as German spreadsheets expect; amounts as plain decimals, dates as ISO dates. A cell that starts with `=`, `+`, `-` or `@` is written as text (formula injection, see Phase 6). Export from each list and, as a whole, in the daily backup folder | S |
+| F36 | **CSV import of contacts and items** (I3, I7) | encoding (UTF-8 with or without BOM, or Windows-1252, read with `TextDecoder`), separator and columns mapped by hand, since no app preset exists before the real sample exports (see Phase 3.5). A preview with the count and the rows that fail; duplicates by customer number or VAT ID. Every imported record carries an `importBatchId`, so the batch can be taken back as a whole. The parser is a pure function in `src/data/import/` with the limits and tests of the importer rules | M |
+| F37 | **Excel export and import** (XLSX, moved from Phase 6) | the lists and the EÜR as `.xlsx` with amounts as numbers and dates as dates; the import reads what the export writes. The reader parses untrusted input, so it needs an ADR (writer and reader, ZIP library from the spike) and the limits of the importer rules (unpacked size, no paths with `..`). Depends on F35 | L |
+| F38 | **Access for an AI agent on the desktop** | a separate local tool, not part of the browser app (an MCP server or a command line tool), that reads and writes the company folder through the same checks (`migrate` and the domain rules), so that every file stays valid. First version: read all records and the audit log; write expenses and contacts only. No issuing, cancelling, payments or dunnings, because they assign numbers or leave the house. Every write goes to the audit log with the name of the agent. The browser app does not change (`file://`, no network, [ADR 0001](adr/0001-local-first-file-storage.md)). **To decide in an ADR before building:** (1) the transport (stdio of an MCP server that the agent starts on the desktop); (2) how the agent and an open browser window avoid overwriting each other (the field merge covers ordinary edits; numbers and issued documents must never be touched); (3) which folder the agent may use: only the one the user picked, never a folder it finds by itself | L |
+
 ### Phase 2: e-invoices
 
 - **Outgoing:** ZUGFeRD / Factur-X (profile EN 16931 or XRECHNUNG, PDF/A-3 with embedded XML) and plain XRechnung XML (CII; UBL optional). Optional for small businesses; mandatory for regular businesses after the transition periods (2027 with a previous-year turnover above 800,000 €, otherwise 2028).
@@ -124,6 +133,7 @@ Proposed on 4 November 2026, not agreed yet (a special case: the feature is only
 ### Phase 3: expenses and receipts
 
 - Expense: date, gross amount, VAT rate and input tax, category, supplier, payment method, note.
+- **Expense form (done on 6 November 2026):** date, supplier, receipt number, gross amount, VAT treatment and rate, category, account and note, one file each (`expenses/`), edited like an item and removed by soft delete. The VAT inside each amount is shown. Not yet: the receipt file (`belege/<year>/`, with SHA-256) and its link, and the audit entries for them.
 - Receipt as a file copied into the company folder (`belege/<year>/<id>-<name>`, with SHA-256) or as a link (`https://…` to SharePoint, Nextcloud or OneDrive; only http and https). With a link, keeping the receipt is up to its storage location; the UI says so.
 - Categories map to an Anlage EÜR line and to SKR03/SKR04 accounts (for the DATEV export).
 - CSV import of existing bookings with column mapping.

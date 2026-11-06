@@ -133,15 +133,15 @@ src/
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the number patterns (they produce file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
 - `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
 
-## Data format (schema version 8)
+## Data format (schema version 13)
 
-kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
+kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `expenses/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
 ```text
 <company folder>/
   company.json            { schemaVersion, id, name, owner, address, contact, logo, tax, invoiceDefaults, bank, createdAt, fieldUpdatedAt }
   assets/logo-<hash>.<ext> logo files, named after the start of their SHA-256, never overwritten
-  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items, documents, payments, dunnings }
+  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses }
   contacts/<id>.json      customers and suppliers, file name = contact ID; other names (conflict copies) are not read
   items/<id>.json         catalogue of items and services, named like contacts
   documents/<id>.json     quotes, invoices and cancellation invoices, named like contacts
@@ -151,7 +151,7 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
   payments/<id>.json      money received for an issued invoice, named like contacts (see below)
   dunnings/<id>.json      dunnings (Mahnungen) of an issued invoice, named like contacts; never changed (see below)
   quoteStatus/<id>.json   the decision of the customer on a finalized quote (accepted or declined, with its date); never changed, only removed (soft delete), see below
-  expenses/<id>.json      with receipt: { kind: 'file', path, sha256 } | { kind: 'link', url } (planned)
+  expenses/<id>.json      what the business paid for, edited like an item, removed by soft delete (see below); the receipt is planned: { kind: 'file', path, sha256 } | { kind: 'link', url }
   belege/<year>/…         receipt files                                            (planned)
   eingang/                inbox: files waiting to be assigned (F06)                 (planned)
   audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue' | 'cancel' | 'issueQuote' | 'recordPayment' | 'deletePayment' | 'dunning' | 'send' | 'quoteDecision' | 'deleteQuoteDecision', documentId, number, files, device, payment?, dunning?, send? }), only appended; `payment` is { id, date, amount } for the two payment actions, `dunning` is { id, level, date, amount } for a dunning, where amount is what it adds to the claim; `quoteDecision` and `deleteQuoteDecision` are { id, decision, date } for a decision on a quote recorded or removed (F21); `send` is { kind, channel, to, dunningId } for a mail that was prepared (`kind`: invoice, cancellation, quote or dunning; `channel`: eml or mailto), and `files` names the PDF it attached with its SHA-256 (a letter has none). The audit lines have no schema version and nothing reads them back in the app, so the new action needs no migration
@@ -176,6 +176,8 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
 A contact file (`contacts/<id>.json`, types in `src/domain/contact.ts`) has `kind` (`company` or `person`), `roles` (`customer`, `supplier`), `name`, `nameLine2`, `contactPerson`, `customerNumber` (unique among active contacts), `address` (`null` or complete), `contact` (`email`, `phone`), `vatId` (EU), `leitwegId`, `orderReference` (default PO number), `language` (`de` or `en`, the language of its documents; `de` by default, F05), `paymentTermDays` (`null` = company default), `notes`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. Contacts were added in schema version 1 as a new kind of file; no existing file changed, so the version stayed.
 
 An item file (`items/<id>.json`, types in `src/domain/item.ts`) has `number` (unique among active items, may be empty), `name`, `description`, `unit` (a code of UN/ECE Recommendation 20 from `src/domain/units.ts`, for example `HUR` for hour), `netPrice` (integer cents, not negative), `vatRate` (basis points: `1900`, `700` or `0`), `createdAt`, `deletedAt` and `fieldUpdatedAt`. Items were added in schema version 2 as a new kind of file; an app that does not know them leaves the folder alone. A new unit code or rate is a format change: older apps would refuse the file.
+
+An expense file (`expenses/<id>.json`, type `ExpenseFile` in `src/data/types.ts`, the rules in `src/domain/expense.ts`) is what the business paid for. It has `date` (`YYYY-MM-DD`, the day it was paid: the EÜR counts expenses when they are paid), `supplier` (free text), `reference` (the receipt number of the supplier, may be empty), `gross` (integer cents, more than 0, VAT included), `taxTreatment` (`domestic`, `euReverseCharge`, `thirdCountry` or `noVat`), `vatRate` (`1900`, `700` or `0`; always `0` unless the treatment is `domestic`), `category` (free text, may be empty), `accountId` (an account of `company.json`, which may have been removed since, or `null` for cash or another payment), `note`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. It is edited like an item: every field is merged one by one, and a deletion wins. The VAT inside the gross amount is the difference to the net amount, rounded once (`splitGross`), and only for `domestic`. Expenses were added in schema version 13 as a new kind of file; the receipt files and their links are planned.
 
 A document file (`documents/<id>.json`, types in `src/data/types.ts`, `src/domain/quote.ts`, `src/domain/invoice.ts` and `src/domain/document.ts`) is a quote or an invoice, told apart by `kind`. Both have `customerId` (a contact), `date` (`YYYY-MM-DD`), `subject`, `introText`, `closingText`, `lines`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. A line has `name`, `description`, `quantity` (thousandths, not 0, negative for a deduction), `unit`, `unitPrice` (cents, not negative) and `vatRate`; its amount stays within 999,999,999.99 €, so every total is an exact integer. The lines are one mergeable field.
 
@@ -219,6 +221,7 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | 10 | Contacts and items get their numbers from a pattern (F28): `company.json` gets `invoiceDefaults.contactPattern` (`K-{NNNN}`) and `itemPattern` (`A-{NNNN}`), and the company in the snapshot of an issued document gets them as well. No other file changes; every other kind gets `unchanged(9)`. An app of version 9 refuses a company with these patterns instead of dropping them. |
 | 9 | Contacts get the language of their documents (`language`, `de` for existing contacts). The customer in the snapshot of an issued document gets it too (`de` for existing documents). No other file changes; every other kind gets `unchanged(8)`. An app of version 8 refuses a contact or a document with a language instead of dropping it. |
 | 8 | Dunnings: a new kind of file (`dunnings/`). No existing file changes; every kind gets `unchanged(7)`. An app of version 7 refuses a dunning file instead of dropping it. The daily backup holds the dunnings as well. |
+| 13 | Expenses: a new kind of file (`expenses/`). No existing file changes; every other kind gets `unchanged(12)`. An app of version 12 refuses an expense instead of dropping it. The daily backup holds the expenses as well. |
 
 ## Tests
 

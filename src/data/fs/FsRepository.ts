@@ -390,6 +390,23 @@ export class FsRepository implements Repository {
     });
   }
 
+  /** Every file of the folder with its path and bytes, in path order. Hidden files and the helper files of sync clients are left out. */
+  listFolder() {
+    return attempt(async () => {
+      const files: { path: string; data: Uint8Array }[] = [];
+      const walk = async (dir: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
+        for await (const [name, h] of dir.entries()) {
+          if (name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp')) continue;
+          const path = prefix === '' ? name : `${prefix}/${name}`;
+          if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, path);
+          else files.push({ path, data: new Uint8Array(await (await (h as FileSystemFileHandle).getFile()).arrayBuffer()) });
+        }
+      };
+      await walk(this.root, '');
+      return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    });
+  }
+
   readAsset(name: string) {
     return attempt(async () => {
       // The name comes from company.json, which other devices may have written: never use it unchecked

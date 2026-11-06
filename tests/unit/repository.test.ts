@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
+import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
 import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
@@ -468,5 +469,16 @@ describe('audit lines of receipts', () => {
     const audit = await (await (await root.getDirectoryHandle('audit')).getFileHandle('2026-10.jsonl')).getFile();
     const lines = (await audit.text()).trim().split('\n').map((l) => JSON.parse(l) as { action: string });
     expect(lines.map((l) => l.action)).toEqual(['attachReceipt', 'detachReceipt']);
+  });
+});
+
+describe('listFolder', () => {
+  it('lists every file of the folder with its path and bytes, nested ones included, and skips hidden files', async () => {
+    const pdf = new TextEncoder().encode('%PDF-1.4 Beleg');
+    must(await repo.writeReceipt('2026', 'x.pdf', pdf));
+    await writeFile(root.asHandle(), '.DS_Store', 'versteckt');
+    const files = must(await repo.listFolder());
+    expect(files.map((f) => f.path)).toEqual(['belege/2026/x.pdf', 'company.json']);
+    expect(new TextDecoder().decode(files[0]!.data)).toBe('%PDF-1.4 Beleg');
   });
 });

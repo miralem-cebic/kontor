@@ -3,6 +3,7 @@ import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
 import { makeContact, makeDunning, makeExpense, makeInvoice, makeItem, makePayment, makeQuote, makeQuoteStatus, SCHEMA_VERSION } from '../../src/data/schema';
 import type { InvoiceFile } from '../../src/data/types';
+import { brandId } from '../../src/data/ids';
 import { cents } from '../../src/domain/money';
 import { STANDARD_RATE } from '../../src/domain/vat';
 import type { IssuedInfo } from '../../src/domain/invoice';
@@ -28,8 +29,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(13);
-    expect(migrate('company', company()).schemaVersion).toBe(13);
+    expect(SCHEMA_VERSION).toBe(14);
+    expect(migrate('company', company()).schemaVersion).toBe(14);
   });
 
   it('a file without version counts as version 1', () => {
@@ -269,6 +270,46 @@ describe('version 12 → 13: expenses', () => {
 
   it('an app that knows only version 12 refuses an expense, so it never drops one', () => {
     expect(() => upgrade('expense', { ...JSON.parse(JSON.stringify(expense)), schemaVersion: 13 }, MIGRATIONS.expense, 12)).toThrow(NewerSchemaError);
+  });
+});
+
+describe('version 13 → 14: the import of contacts and items', () => {
+  const asV13 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 13 }) as Record<string, unknown>;
+
+  it('a contact or an item of version 13 was typed in, so it gets no import', () => {
+    const contact = asV13(makeContact(sampleContact()));
+    delete contact['importBatchId'];
+    expect(migrate('contact', contact)).toMatchObject({ importBatchId: null, schemaVersion: SCHEMA_VERSION });
+    const item = asV13(makeItem(sampleItem()));
+    delete item['importBatchId'];
+    expect(migrate('item', item)).toMatchObject({ importBatchId: null, schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('a contact from an import keeps its batch', () => {
+    const batch = brandId<'ImportBatchId'>('8d7c6b5a-1f2e-4d3c-9b8a-7f6e5d4c3b2a');
+    const raw = JSON.parse(JSON.stringify(makeContact(sampleContact(), batch))) as Record<string, unknown>;
+    expect(migrate('contact', raw).importBatchId).toBe(batch);
+  });
+
+  it('a batch that is not an ID is refused', () => {
+    const raw = JSON.parse(JSON.stringify(makeContact(sampleContact()))) as Record<string, unknown>;
+    expect(() => migrate('contact', { ...raw, importBatchId: '../x' })).toThrow(InvalidFileError);
+  });
+
+  it('the other kinds of version 13 stay as they are', () => {
+    const files = {
+      company: asV13(sampleCompany()),
+      numbering: asV13({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+      expense: asV13(makeExpense({ date: '2026-10-28', supplier: 'Telekom', reference: '', gross: cents(4_999), taxTreatment: 'domestic', vatRate: STANDARD_RATE, category: 'Telefon', accountId: null, note: '' })),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 13 refuses a contact of version 14, so it never drops a batch', () => {
+    const raw = JSON.parse(JSON.stringify(makeContact(sampleContact()))) as Record<string, unknown>;
+    expect(() => upgrade('contact', { ...raw, schemaVersion: 14 }, MIGRATIONS.contact, 13)).toThrow(NewerSchemaError);
   });
 });
 
@@ -548,11 +589,11 @@ describe('version 8 → 9: the language of the documents (F05)', () => {
 
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 13 → 14, not in use)', () => {
+describe('migration template (version 14 → 15, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 13,
+      from: 14,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
@@ -561,13 +602,13 @@ describe('migration template (version 13 → 14, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 14);
-    expect(doc['schemaVersion']).toBe(14);
+    const doc = upgrade('company', company(), steps, 15);
+    expect(doc['schemaVersion']).toBe(15);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 14);
+    const doc = upgrade('company', companyV1(), steps, 15);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
@@ -575,10 +616,10 @@ describe('migration template (version 13 → 14, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(13)], 14)).toEqual({ ...raw, schemaVersion: 14 });
+    expect(upgrade('company', raw, [unchanged(14)], 15)).toEqual({ ...raw, schemaVersion: 15 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 14)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 15)).toThrow(InvalidFileError);
   });
 });

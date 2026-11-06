@@ -121,6 +121,7 @@ const paymentId = idOf<'PaymentId'>();
 const quoteStatusId = idOf<'QuoteStatusId'>();
 const dunningId = idOf<'DunningId'>();
 const expenseId = idOf<'ExpenseId'>();
+const importBatchId = idOf<'ImportBatchId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -335,6 +336,7 @@ const contactProfileShape = {
 export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
   schemaVersion: num,
   id: contactId,
+  importBatchId: nullable(importBatchId),
   ...contactProfileShape,
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
@@ -347,6 +349,7 @@ const netPrice: Check<Cents> = (v, path) => cents(int(0, ITEM_LIMITS.maxNetPrice
 export const validateItem: Check<ItemFile> = objectOf<ItemFile>({
   schemaVersion: num,
   id: itemId,
+  importBatchId: nullable(importBatchId),
   number: text(ITEM_LIMITS.number),
   name: text(ITEM_LIMITS.name),
   description: text(ITEM_LIMITS.description),

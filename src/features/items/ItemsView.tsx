@@ -27,12 +27,12 @@ function suggestedItemNumber(): string {
   return (pattern && nextFreeNumber(pattern, [...items.values()].map((i) => i.number))) || '';
 }
 
-export function ItemsView() {
+export function ItemsView({ onImport }: { onImport: () => void }) {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const back = () => setMode({ kind: 'list' });
   switch (mode.kind) {
     case 'list':
-      return <ItemList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} />;
+      return <ItemList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} onImport={onImport} />;
     case 'new':
       return <ItemEditor item={null} onDone={back} />;
     case 'edit':
@@ -51,7 +51,7 @@ function EditExisting({ id, onDone }: { id: ItemId; onDone: () => void }) {
 
 /* ---------- List ---------- */
 
-function ItemList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: ItemId) => void }) {
+function ItemList({ onNew, onOpen, onImport }: { onNew: () => void; onOpen: (id: ItemId) => void; onImport: () => void }) {
   const all = useApp((s) => s.items);
   const smallBusiness = useSmallBusiness();
   const [query, setQuery] = useState('');
@@ -64,6 +64,9 @@ function ItemList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: ItemId) =
       <header className="top">
         <h1>{t('items.title')}</h1>
         <span className="sp" />
+        <button type="button" className="btn" onClick={onImport}>
+          {t('import.button')}
+        </button>
         <ExportCsvButton kind="items" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />

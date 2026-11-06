@@ -20,6 +20,8 @@ export type DunningId = Brand<string, 'DunningId'>;
 export type QuoteStatusId = Brand<string, 'QuoteStatusId'>;
 /** An expense: what the business paid for */
 export type ExpenseId = Brand<string, 'ExpenseId'>;
+/** One import of contacts or items from a file: the records it made carry its ID, so the batch can be taken back */
+export type ImportBatchId = Brand<string, 'ImportBatchId'>;
 
 /** Adds a brand to a string that has been checked by the caller. The one place where the brand is added. */
 export const brandId = <B extends string>(value: string): Brand<string, B> => value as Brand<string, B>;
@@ -33,6 +35,7 @@ export const newPaymentId = (): PaymentId => brandId<'PaymentId'>(crypto.randomU
 export const newDunningId = (): DunningId => brandId<'DunningId'>(crypto.randomUUID());
 export const newQuoteStatusId = (): QuoteStatusId => brandId<'QuoteStatusId'>(crypto.randomUUID());
 export const newExpenseId = (): ExpenseId => brandId<'ExpenseId'>(crypto.randomUUID());
+export const newImportBatchId = (): ImportBatchId => brandId<'ImportBatchId'>(crypto.randomUUID());
 
 /**
  * The ID of the cancellation of an invoice: a UUID made from the invoice's ID (name-based with SHA-256, version 8 of

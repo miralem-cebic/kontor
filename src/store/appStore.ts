@@ -5,7 +5,7 @@ import type { ExpenseProfile } from '../domain/expense';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
 import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
 import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
@@ -199,9 +199,9 @@ function putContact(contact: ContactFile) {
   set((s) => ({ contacts: new Map(s.contacts).set(contact.id, contact) }));
 }
 
-/** A new contact from a checked profile (the form's draft is never stored). Returns its ID. */
-export function addContact(profile: ContactProfile): ContactId {
-  const contact = makeContact(profile);
+/** A new contact from a checked profile (the form's draft is never stored). `importBatchId`: the import it comes from, if any. Returns its ID. */
+export function addContact(profile: ContactProfile, importBatchId: ImportBatchId | null = null): ContactId {
+  const contact = makeContact(profile, importBatchId);
   putContact(contact);
   return contact.id;
 }
@@ -221,6 +221,13 @@ export function deleteContact(id: ContactId) {
   putContact(withChanges<ContactMergeableField, ContactFile>(current, { deletedAt: at }, at));
 }
 
+/** Takes back an import: every contact of the batch is removed (a soft delete). Returns how many were removed. */
+export function undoContactImport(batch: ImportBatchId): number {
+  const ids = [...get().contacts.values()].filter((c) => c.importBatchId === batch && !c.deletedAt).map((c) => c.id);
+  for (const id of ids) deleteContact(id);
+  return ids.length;
+}
+
 /** Like `integrateWrittenCompany`, for one contact */
 export function integrateWrittenContact(sent: ContactFile, written: ContactFile) {
   const current = get().contacts.get(written.id);
@@ -234,9 +241,9 @@ function putItem(item: ItemFile) {
   set((s) => ({ items: new Map(s.items).set(item.id, item) }));
 }
 
-/** A new item from a checked profile (the form's draft is never stored). Returns its ID. */
-export function addItem(profile: ItemProfile): ItemId {
-  const item = makeItem(profile);
+/** A new item from a checked profile (the form's draft is never stored). `importBatchId`: the import it comes from, if any. Returns its ID. */
+export function addItem(profile: ItemProfile, importBatchId: ImportBatchId | null = null): ItemId {
+  const item = makeItem(profile, importBatchId);
   putItem(item);
   return item.id;
 }
@@ -254,6 +261,13 @@ export function deleteItem(id: ItemId) {
   if (!current || current.deletedAt) return;
   const at = nowIso();
   putItem(withChanges<ItemMergeableField, ItemFile>(current, { deletedAt: at }, at));
+}
+
+/** Takes back an import: every item of the batch is removed (a soft delete). Returns how many were removed. */
+export function undoItemImport(batch: ImportBatchId): number {
+  const ids = [...get().items.values()].filter((i) => i.importBatchId === batch && !i.deletedAt).map((i) => i.id);
+  for (const id of ids) deleteItem(id);
+  return ids.length;
 }
 
 /** Like `integrateWrittenCompany`, for one item */

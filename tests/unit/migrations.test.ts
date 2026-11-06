@@ -29,8 +29,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(14);
-    expect(migrate('company', company()).schemaVersion).toBe(14);
+    expect(SCHEMA_VERSION).toBe(15);
+    expect(migrate('company', company()).schemaVersion).toBe(15);
   });
 
   it('a file without version counts as version 1', () => {
@@ -313,6 +313,52 @@ describe('version 13 → 14: the import of contacts and items', () => {
   });
 });
 
+describe('version 14 → 15: receipts of expenses', () => {
+  const asV14 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 14 }) as Record<string, unknown>;
+  const expenseV14 = (): Record<string, unknown> => {
+    const raw = asV14(makeExpense({ date: '2026-10-28', supplier: 'Telekom', reference: '', gross: cents(4_999), taxTreatment: 'domestic', vatRate: STANDARD_RATE, category: 'Telefon', accountId: null, note: '' }));
+    delete raw['receipt'];
+    return raw;
+  };
+  const EXPENSE = '0f8fad5b-d9cb-469f-a165-70867728950e';
+  const fileReceipt = (over: Record<string, unknown> = {}) => ({ kind: 'file', year: '2026', name: `${EXPENSE}-Telekom.pdf`, type: 'application/pdf', size: 1234, sha256: 'a'.repeat(64), ...over });
+
+  it('an expense of version 14 has no receipt', () => {
+    expect(migrate('expense', expenseV14())).toMatchObject({ receipt: null, schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('a file receipt is read with its checks', () => {
+    expect(migrate('expense', { ...expenseV14(), receipt: fileReceipt() }).receipt).toEqual(fileReceipt());
+  });
+
+  it('a file receipt with a name that is not a receipt name, a wrong checksum, an unknown type or a bad year is refused', () => {
+    for (const bad of [fileReceipt({ name: '../x.pdf' }), fileReceipt({ sha256: 'xyz' }), fileReceipt({ type: 'text/html' }), fileReceipt({ year: '26' })]) {
+      expect(() => migrate('expense', { ...expenseV14(), receipt: bad })).toThrow(InvalidFileError);
+    }
+  });
+
+  it('a link receipt must be an http or https link', () => {
+    expect(migrate('expense', { ...expenseV14(), receipt: { kind: 'link', url: 'https://cloud.example/x.pdf' } }).receipt).toEqual({ kind: 'link', url: 'https://cloud.example/x.pdf' });
+    expect(() => migrate('expense', { ...expenseV14(), receipt: { kind: 'link', url: 'javascript:alert(1)' } })).toThrow(InvalidFileError);
+  });
+
+  it('the other kinds of version 14 stay as they are', () => {
+    const files = {
+      company: asV14(sampleCompany()),
+      contact: asV14(makeContact(sampleContact())),
+      item: asV14(makeItem(sampleItem())),
+      numbering: asV14({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+    };
+    for (const [kind, raw] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, raw)).toEqual({ ...raw, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 14 refuses an expense with a receipt, so it never drops one', () => {
+    expect(() => upgrade('expense', { ...expenseV14(), receipt: fileReceipt(), schemaVersion: 15 }, MIGRATIONS.expense, 14)).toThrow(NewerSchemaError);
+  });
+});
+
 describe('version 6 → 7: payments', () => {
   const invoiceId = makeInvoice(makeContact(sampleContact()).id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null).id;
   const payment = makePayment(invoiceId, { date: '2026-10-31', amount: cents(11_900), accountId: sampleCompany().bank.defaultAccountId, note: '' });
@@ -589,11 +635,11 @@ describe('version 8 → 9: the language of the documents (F05)', () => {
 
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 14 → 15, not in use)', () => {
+describe('migration template (version 15 → 16, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 14,
+      from: 15,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, footerParts: ['address', 'contact', 'tax', 'bank'] } };
@@ -602,13 +648,13 @@ describe('migration template (version 14 → 15, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 15);
-    expect(doc['schemaVersion']).toBe(15);
+    const doc = upgrade('company', company(), steps, 16);
+    expect(doc['schemaVersion']).toBe(16);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 15);
+    const doc = upgrade('company', companyV1(), steps, 16);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['footerParts']).toEqual(['address', 'contact', 'tax', 'bank']);
@@ -616,10 +662,10 @@ describe('migration template (version 14 → 15, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(14)], 15)).toEqual({ ...raw, schemaVersion: 15 });
+    expect(upgrade('company', raw, [unchanged(15)], 16)).toEqual({ ...raw, schemaVersion: 16 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 15)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 16)).toThrow(InvalidFileError);
   });
 });

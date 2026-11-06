@@ -62,6 +62,11 @@ const E2E_COUNTER = 'kontor.e2e.counter';
 let e2eNextFolder: string | null = null;
 
 let repo: FsRepository | null = null;
+
+/** The folder of the open company, for the actions that write to it (receipts, app/receipts.ts); null without one */
+export function currentRepository(): FsRepository | null {
+  return repo;
+}
 let persister: Persister | null = null;
 let entries: CompanyEntry[] = [];
 let handleStore: HandleStore | null = null;

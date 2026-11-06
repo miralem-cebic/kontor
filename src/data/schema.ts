@@ -40,7 +40,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const nowIso = (): string => stampNow();
 
@@ -147,5 +147,5 @@ export function makeExpense(profile: Omit<ExpenseProfile, 'accountId'> & { accou
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>> = {};
   for (const f of EXPENSE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, receipt: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

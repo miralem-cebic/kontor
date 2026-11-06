@@ -135,6 +135,8 @@ src/
 
 ## Data format (schema version 15)
 
+The format is described for people who keep their data, in [docs/data-format.md](docs/data-format.md). What follows is the detail for the code.
+
 kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `expenses/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
 ```text

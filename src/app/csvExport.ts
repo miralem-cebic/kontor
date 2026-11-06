@@ -195,6 +195,15 @@ function tableOf(kind: ExportKind): Table | null {
   }
 }
 
+/** Every list as a table, for the exit archive (F12): the name of the list is the kind, without .csv */
+export function allListTables(): { name: string; header: string[]; rows: Cell[][] }[] {
+  const kinds: ExportKind[] = ['contacts', 'items', 'quotes', 'invoices', 'expenses'];
+  return kinds.flatMap((kind) => {
+    const table = tableOf(kind);
+    return table ? [{ name: kind, header: table.header, rows: table.rows }] : [];
+  });
+}
+
 /** Saves one list as an Excel file (.xlsx) through the browser's download (F37). */
 export async function exportXlsx(kind: ExportKind): Promise<void> {
   const table = tableOf(kind);

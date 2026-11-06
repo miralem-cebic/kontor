@@ -9,6 +9,7 @@ import { errorText } from '../../lib/labels';
 import { showToast, updateCompany, useApp } from '../../store/appStore';
 import { InvoiceFields, LogoField, MasterFields, TaxFields, thisYear, type FieldsProps } from '../company/CompanyFields';
 import { BankAccountsCard } from './BankAccountsCard';
+import { ExitCard } from './ExitCard';
 
 // Settings: the fields of the setup assistant, one section at a time. A side panel on the right lists the sections
 // and shows one of them. A section is edited as a draft and applied with "Save" after its check; issued documents keep their
@@ -85,6 +86,7 @@ export function SettingsView() {
             <h2 id="settings-app">{t('settings.app')}</h2>
             <LanguageSelect />
             <FolderInfo />
+            <ExitCard />
           </section>
         </div>
       </div>

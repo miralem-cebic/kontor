@@ -44,6 +44,8 @@ export interface Repository {
   /** Writes assets/<name>. An existing file of that name is kept: asset names contain their hash. */
   writeAsset(asset: Asset): Promise<Result<void, StorageError>>;
   readAsset(name: string): Promise<Result<File, StorageError>>;
+  /** Every file of the folder, nested ones included, with its path and its bytes; hidden and temporary files are left out (F12) */
+  listFolder(): Promise<Result<{ path: string; data: Uint8Array }[], StorageError>>;
   /** Writes belege/<year>/<name>. The same content under that name is kept; other content is a conflict: a receipt is never overwritten. */
   writeReceipt(year: string, name: string, data: Uint8Array): Promise<Result<void, StorageError>>;
   /** Reads belege/<year>/<name>; the year and the name come from the expense file, so they are checked first */

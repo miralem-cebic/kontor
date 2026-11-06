@@ -215,7 +215,7 @@ Before the work starts:
 | F08 | **Fixed assets and depreciation** | asset register, immediate write-off of low-value assets (GWG), straight-line depreciation (AfA), Anlage AVEÜR. Limits and rates from `tax/params`; also needed for R3 | L |
 | F09 | **Special cases of the EÜR** | business meals (partly deductible), trips with the mileage allowance, home office allowance, gifts, private use of a car: as categories with rules from `tax/params`; also needed for R3 | M |
 | F11 | **Search and reports** | global search; turnover per customer and month, open items, expenses per category, comparison with the previous year | M |
-| F12 | **Exit at any time** | documented data format (`docs/data-format.md`), a ZIP of the whole folder, every list as CSV. A visible sign of trust | S |
+| F12 | **Exit at any time** | documented data format (`docs/data-format.md`), a ZIP of the whole folder, every list as CSV. A visible sign of trust. **Done on 6 November 2026**: the ZIP of the folder as it is, the lists as CSV under `listen/`, a readme, and the format in `docs/data-format.md` | S |
 
 ### Phase 5: recurring income and expenses (1.x)
 

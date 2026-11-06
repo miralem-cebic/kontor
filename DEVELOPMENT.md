@@ -155,7 +155,7 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
   belege/<year>/…         receipt files                                            (planned)
   eingang/                inbox: files waiting to be assigned (F06)                 (planned)
   audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue' | 'cancel' | 'issueQuote' | 'recordPayment' | 'deletePayment' | 'dunning' | 'send' | 'quoteDecision' | 'deleteQuoteDecision', documentId, number, files, device, payment?, dunning?, send? }), only appended; `payment` is { id, date, amount } for the two payment actions, `dunning` is { id, level, date, amount } for a dunning, where amount is what it adds to the claim; `quoteDecision` and `deleteQuoteDecision` are { id, decision, date } for a decision on a quote recorded or removed (F21); `send` is { kind, channel, to, dunningId } for a mail that was prepared (`kind`: invoice, cancellation, quote or dunning; `channel`: eml or mailto), and `files` names the PDF it attached with its SHA-256 (a letter has none). The audit lines have no schema version and nothing reads them back in the app, so the new action needs no migration
-  exports/                generated exports                                        (planned)
+  exports/                generated exports, such as the ZIP of the company folder (F12, planned). The CSV export of the lists (F35) is a download and writes nothing to the folder.
 ```
 
 `company.json` in detail (types in `src/domain/company.ts`, `src/domain/bankAccount.ts` and `src/data/types.ts`):

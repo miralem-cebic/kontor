@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { ExportCsvButton } from '../export/ExportCsvButton';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import { isoDateOf } from '../../domain/dates';
 import { documentTotals, draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
@@ -161,6 +162,7 @@ function QuoteList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Document
       <header className="top">
         <h1>{t('quotes.title')}</h1>
         <span className="sp" />
+        <ExportCsvButton kind="quotes" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />
           {t('quotes.new')}

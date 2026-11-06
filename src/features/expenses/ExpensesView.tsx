@@ -1,14 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { ExportCsvButton } from '../export/ExportCsvButton';
 import type { ExpenseId } from '../../data/ids';
 import type { ExpenseFile } from '../../data/types';
 import { isoDateOf } from '../../domain/dates';
 import { draftFromExpense, emptyExpenseDraft, EXPENSE_LIMITS, EXPENSE_TAX_TREATMENTS, expenseMatches, expenseVat, readExpense, type ExpenseDraft, type ExpenseField, type ExpenseFieldError, type ExpenseTaxTreatment } from '../../domain/expense';
 import { formatCents, formatRate } from '../../domain/money';
 import { VAT_RATES } from '../../domain/vat';
-import { currentLang, t, type MessageKey } from '../../i18n';
-import { accountDetail, accountName, fieldError } from '../../lib/labels';
+import { currentLang, t } from '../../i18n';
+import { accountDetail, accountName, expenseTreatmentText, fieldError } from '../../lib/labels';
 import { addExpense, deleteExpense, showToast, updateExpense, useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
 
@@ -16,13 +17,6 @@ import { formatDate } from '../documents/common';
 // puts the checked expense into the store (and the persister writes it). A receipt is not part of this version.
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; id: ExpenseId };
-
-const TREATMENT_KEY: Record<ExpenseTaxTreatment, MessageKey> = {
-  domestic: 'expenses.treatmentDomestic',
-  euReverseCharge: 'expenses.treatmentEuReverseCharge',
-  thirdCountry: 'expenses.treatmentThirdCountry',
-  noVat: 'expenses.treatmentNoVat',
-};
 
 /** Newest first, then by supplier */
 const byNewest = (a: ExpenseFile, b: ExpenseFile): number => b.date.localeCompare(a.date) || a.supplier.localeCompare(b.supplier, 'de', { sensitivity: 'base' });
@@ -64,6 +58,7 @@ function ExpenseList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Expens
       <header className="top">
         <h1>{t('expenses.title')}</h1>
         <span className="sp" />
+        <ExportCsvButton kind="expenses" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />
           {t('expenses.new')}
@@ -179,7 +174,7 @@ function ExpenseEditor({ expense, onDone }: { expense: ExpenseFile | null; onDon
     onDone();
   };
 
-  const treatmentOptions = EXPENSE_TAX_TREATMENTS.map((v) => ({ value: v, label: t(TREATMENT_KEY[v]) }));
+  const treatmentOptions = EXPENSE_TAX_TREATMENTS.map((v) => ({ value: v, label: expenseTreatmentText(v) }));
   const rateOptions = VAT_RATES.map((r) => ({ value: String(r), label: formatRate(r, lang) }));
   // a removed account stays selectable, so that the expense shows it; the check then asks for another one
   const accountOptions = [

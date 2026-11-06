@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CheckGroup, Choice, Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { ExportCsvButton } from '../export/ExportCsvButton';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import {
   byContactName,
@@ -92,6 +93,7 @@ function ContactList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Contac
       <header className="top">
         <h1>{t('contacts.title')}</h1>
         <span className="sp" />
+        <ExportCsvButton kind="contacts" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />
           {t('contacts.new')}

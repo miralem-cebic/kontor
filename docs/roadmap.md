@@ -209,6 +209,7 @@ Before the work starts:
 - Profit of the current year, open receivables, small business limits (previous year 25,000 €, current year 100,000 €, from the tax parameters). The limits count the turnover of all companies of the same person that are known to this browser, because VAT treats them as one business (see Scope).
 - Reserve per month: income tax, solidarity surcharge, church tax if any, trade tax and the VAT payable.
 - Every number links to the bookings behind it.
+- **Overview (done on 6 November 2026):** the start page shows the calendar year: income (the net part of the payments received), expenses (without the VAT that comes back), an estimate of the surplus, what is open and overdue on issued invoices, the twelve months, and the turnover against the small business limits, which are kept in `tax/params/<year>.ts` with their source. Not yet: the reserve per month (income tax, solidarity surcharge, church tax, trade tax and the VAT payable), the links from each number to its bookings, and the turnover of other companies of the same person.
 
 | ID | Feature | Content | Effort |
 | --- | --- | --- | --- |

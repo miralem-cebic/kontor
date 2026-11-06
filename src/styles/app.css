@@ -291,3 +291,7 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
   .line-sub{padding-left:0}
   .line-no{display:none}
 }
+
+/* overview (Wo stehe ich?): the figures in a row that wraps on a narrow window */
+.overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.overview-figure .overview-value{font-size:22px;font-weight:600;margin:0}

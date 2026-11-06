@@ -35,7 +35,7 @@ kontor cannot offer a live bank connection, direct ELSTER submission, AI receipt
 | Release | Content |
 | --- | --- |
 | **1.0** | Phases 1, 2, 3, 3.5 and 4 with all Must features (F01–F12, F21–F23, F25, I1–I7), plus R1, R3, R4 and R5 |
-| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13–F17, F24 |
+| 1.x | Phase 5 (recurring income and expenses), Phase 6 (Excel export), F13, F14, F16, F17, F24 |
 | 2.x | Time tracking, F18–F20, R7 |
 
 Priorities: **Must** = needed for 1.0, **Should** = 1.x, **Could** = 2.x, **Won't** = deliberately not. Effort: S, M, L.
@@ -49,6 +49,7 @@ Priorities: **Must** = needed for 1.0, **Should** = 1.x, **Could** = 2.x, **Won'
 | Stock and inventory | not needed by the target group |
 | Native mobile app | the File System Access API is not available on smartphones; the inbox folder covers capture on the go (F06) |
 | AI categorisation | needs a model or a service; deterministic rules instead (F07) |
+| Foreign currencies (F15) | all amounts are in euro, also for customers abroad, so there is no currency per document, no exchange rate and no conversion for the EÜR |
 
 ## Phases
 
@@ -111,7 +112,7 @@ Proposed on 4 November 2026, not agreed yet (a special case: the feature is only
 
 | ID | Feature | Content | Effort |
 | --- | --- | --- | --- |
-| F34 | **AWV report for payments from abroad** (special case) | a payment received from abroad above 12,500 € must be reported to the Deutsche Bundesbank under the Außenwirtschaftsverordnung (AWV) for the balance-of-payments statistics. The obligation lies with the German recipient, not with the bank, and the report is filed electronically through the Allgemeines Meldeportal Statistik (AMS). kontor cannot send it (no network), so it prepares the values as a filling aid, like R1: the country of the payer, the amount in euros, the date, and the Kennzahl with its description, each with a copy button, plus a list of the cases as PDF and CSV. Services (software licences, consulting, patents) are reportable; goods imports are not. **Shown only when it applies:** a hint on the payment in `PaymentsCard` and an entry in the list of reports, both only for a payment above the threshold from a payer outside Germany. Nothing is shown otherwise, and there is no menu entry. The threshold, the deadline and the exemptions live in `tax/params/<year>.ts` with their source, not in the code. The Kennzahl is chosen from a list, checked against the current Bundesbank catalogue. The hint is a filling aid, not tax or legal advice (see the scope above). **Before building, to decide:** (1) how the payer's country is known: the country of the customer's address, or a new field on the payment (a schema change); (2) whether the threshold applies per payment or per invoice; (3) how an amount in a foreign currency is converted, which depends on F15; (4) the current threshold, deadline and exemptions, checked with the Bundesbank, since the figures in this entry come from a summary and are not yet verified | M |
+| F34 | **AWV report for payments from abroad** (special case) | a payment received from abroad above 12,500 € must be reported to the Deutsche Bundesbank under the Außenwirtschaftsverordnung (AWV) for the balance-of-payments statistics. The obligation lies with the German recipient, not with the bank, and the report is filed electronically through the Allgemeines Meldeportal Statistik (AMS). kontor cannot send it (no network), so it prepares the values as a filling aid, like R1: the country of the payer, the amount in euros, the date, and the Kennzahl with its description, each with a copy button, plus a list of the cases as PDF and CSV. Services (software licences, consulting, patents) are reportable; goods imports are not. **Shown only when it applies:** a hint on the payment in `PaymentsCard` and an entry in the list of reports, both only for a payment above the threshold from a payer outside Germany. Nothing is shown otherwise, and there is no menu entry. The threshold, the deadline and the exemptions live in `tax/params/<year>.ts` with their source, not in the code. The Kennzahl is chosen from a list, checked against the current Bundesbank catalogue. The hint is a filling aid, not tax or legal advice (see the scope above). **Before building, to decide:** (1) how the payer's country is known: the country of the customer's address, or a new field on the payment (a schema change); (2) whether the threshold applies per payment or per invoice; (3) how an amount in a foreign currency is converted, now that foreign currencies (F15) are not planned (see Won't) and kontor knows only the amount in euro; (4) the current threshold, deadline and exemptions, checked with the Bundesbank, since the figures in this entry come from a summary and are not yet verified | M |
 
 Proposed on 6 November 2026, not agreed yet. The export (F35) has to include expenses, so it comes after the expense form. The import and export items reuse the rules of Phase 3.5 and the CSV/XLSX rules of Phase 6.
 
@@ -237,7 +238,6 @@ Before the work starts:
 | --- | --- | --- |
 | F13 | **Read-only mode for the tax advisor** | open a folder without write permission; no editing, exports still work |
 | F14 | **Cash book** | cash income and expenses in a running sequence, corrections only by a counter entry, cash report. Strict GoBD rules; needs its own ADR |
-| F15 | **Foreign currencies** | currency per document and receipt, exchange rate entered by hand (no network), conversion for the EÜR |
 | F16 | **Projects and cost centres** | a tag per booking and document, reports per project. The basis for time tracking |
 | F17 | **Time tracking earlier** | time tracking is a reason to switch at Papierkram and sevDesk. **Open decision:** move it from 2.x to 1.x |
 | F24 | **Tax office from the Steuernummer** | while typing the Steuernummer, show the state and the responsible tax office (for example "Finanzamt Hanau") with what is needed to deal with it: address, PO box, phone, email, opening hours and bank accounts for payments; and convert the number to the 13-digit ELSTER format. The data comes from the official directory of the tax offices (BZSt) as a JSON file in the repository with its source and date, checked when it is read in like any other input and updated once a year. Under `file://` with `connect-src 'none'` the app cannot load a file at run time, so the JSON is bundled into the build (it adds to the size of `dist/index.html`) |

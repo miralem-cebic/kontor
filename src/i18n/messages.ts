@@ -1079,6 +1079,8 @@ const MESSAGES_SRC = {
     en: 'Goods to a business in another EU state (§ 4 Nr. 1 Buchst. b, § 6a UStG). Both VAT IDs are shown on the invoice.',
   },
   'invoices.taxNotTaxable': { de: 'Nicht im Inland steuerbar', en: 'Not taxable in Germany' },
+  'invoices.taxSmallBusiness': { de: 'Kleinunternehmer (§ 19 UStG)', en: 'Small business (§ 19 UStG)' },
+  'invoices.taxSmallBusinessHint': { de: 'Es wird keine Umsatzsteuer berechnet. Die Rechnung trägt den Hinweis nach § 19 UStG.', en: 'No VAT is charged. The invoice carries the note under § 19 UStG.' },
   'invoices.taxNotTaxableHint': {
     de: 'Leistungen, deren Leistungsort im Ausland liegt (§ 3a UStG), z. B. Beratung für ein Unternehmen außerhalb der EU. Die Rechnung weist keine Umsatzsteuer aus.',
     en: 'Services whose place of supply is abroad (§ 3a UStG), e.g. consulting for a business outside the EU. The invoice shows no VAT.',

@@ -20,6 +20,7 @@ import {
   issueProblems,
   readInvoice,
   TAX_TREATMENTS,
+  effectiveTaxTreatment,
   taxTreatmentHint,
   vatNote,
   type InvoiceDraft,
@@ -299,7 +300,14 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
 
   const customer = findContact(draft.customerId);
   const account = findAccount(draft.accountId);
-  const treatment: TaxTreatment = smallBusiness ? 'standard' : draft.taxTreatment;
+  const treatment = effectiveTaxTreatment(draft.taxTreatment, smallBusiness);
+  // a small business chooses between no VAT (§ 19) and a service not taxable in Germany; a regular business has every treatment
+  const treatmentOptions = smallBusiness
+    ? [
+        { value: 'standard' as const, label: t('invoices.taxSmallBusiness'), hint: t('invoices.taxSmallBusinessHint') },
+        { value: 'notTaxable' as const, ...taxTreatmentText('notTaxable') },
+      ]
+    : TAX_TREATMENTS.map((v) => ({ value: v, ...taxTreatmentText(v) }));
   const note = vatNote(treatment, smallBusiness);
   const totals = draftTotals(draft.lines, lang, note !== null, draft);
   // a negative sum shows up while it is typed, not only on "Save"
@@ -313,7 +321,8 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
     accountActive: !!account && !account.deletedAt,
   });
   const due = draftDueDate(draft);
-  const treatmentHint = taxTreatmentHint(draft.taxTreatment, customer?.address?.country ?? null);
+  // a small business has no VAT to explain; the hint is for a service not taxable in Germany
+  const treatmentHint = smallBusiness && treatment === 'standard' ? null : taxTreatmentHint(treatment, customer?.address?.country ?? null);
   const options = customerOptions(contacts, draft.customerId);
   const accountOptions = company.bank.accounts
     .filter((a) => !a.deletedAt || a.id === draft.accountId)
@@ -324,7 +333,7 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
   const sections: JumpSection[] = [
     { id: 'invoice-sec-head', title: t('invoices.sectionInvoice'), icon: 'invoice' },
     { id: 'invoice-sec-lines', title: t('lines.title'), icon: 'item' },
-    ...(smallBusiness ? [] : [{ id: 'invoice-sec-tax', title: t('invoices.sectionTax'), icon: 'tax' } as const]),
+    { id: 'invoice-sec-tax', title: t('invoices.sectionTax'), icon: 'tax' } as const,
     { id: 'invoice-sec-payment', title: t('invoices.sectionPayment'), icon: 'expense' },
     { id: 'invoice-sec-closing', title: t('documents.closingText'), icon: 'text' },
     { id: 'invoice-sec-issue', title: t('invoices.sectionIssue'), icon: 'check' },
@@ -454,20 +463,18 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
             <Totals totals={totals} note={note} />
           </section>
 
-          {!smallBusiness && (
-            <section className="card" id="invoice-sec-tax" aria-labelledby="invoice-tax">
-              <h2 id="invoice-tax" tabIndex={-1}>
-                {t('invoices.sectionTax')}
-              </h2>
-              <Choice<TaxTreatment>
-                label={t('invoices.taxTreatment')}
-                hint={treatmentHint ? taxTreatmentHintText(treatmentHint) : undefined}
-                value={draft.taxTreatment}
-                options={TAX_TREATMENTS.map((v) => ({ value: v, ...taxTreatmentText(v) }))}
-                onChange={(taxTreatment) => set({ taxTreatment })}
-              />
-            </section>
-          )}
+          <section className="card" id="invoice-sec-tax" aria-labelledby="invoice-tax">
+            <h2 id="invoice-tax" tabIndex={-1}>
+              {t('invoices.sectionTax')}
+            </h2>
+            <Choice<TaxTreatment>
+              label={t('invoices.taxTreatment')}
+              hint={treatmentHint ? taxTreatmentHintText(treatmentHint) : undefined}
+              value={treatment}
+              options={treatmentOptions}
+              onChange={(taxTreatment) => set({ taxTreatment })}
+            />
+          </section>
 
           <section className="card" id="invoice-sec-payment" aria-labelledby="invoice-payment">
             <h2 id="invoice-payment" tabIndex={-1}>

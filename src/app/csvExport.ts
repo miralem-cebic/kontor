@@ -3,7 +3,8 @@
 // them. Amounts are numbers with a decimal comma and no grouping ("1250,00"), rates are plain numbers ("19"), dates are
 // ISO dates. Text cells are protected against formulas by the encoder (src/data/export/csv.ts).
 
-import { encodeCsv, num, type Cell, type NumberCell } from '../data/export/csv';
+import { date, encodeCsv, num, type Cell, type NumberCell } from '../data/export/csv';
+import { tableToXlsx } from '../data/export/xlsx';
 import { cancellationOf, isInvoice, isQuote, type BankAccount, type ContactFile, type DocumentFile, type ExpenseFile, type ItemFile } from '../data/types';
 import type { ContactRoles } from '../domain/contact';
 import type { ContactId, AccountId } from '../data/ids';
@@ -118,7 +119,7 @@ export function expensesTable(expenses: readonly ExpenseFile[], accounts: readon
     rows: expenses
       .filter((e) => !e.deletedAt)
       .sort((a, b) => byDate(a, b) || a.supplier.localeCompare(b.supplier, 'de', { sensitivity: 'base' }))
-      .map((e) => [e.date, e.supplier, e.reference, e.category, amount(e.gross), expenseTreatmentText(e.taxTreatment), percent(e.vatRate), amount(expenseVat(e)), accountText(e.accountId), e.note]),
+      .map((e) => [date(e.date), e.supplier, e.reference, e.category, amount(e.gross), expenseTreatmentText(e.taxTreatment), percent(e.vatRate), amount(expenseVat(e)), accountText(e.accountId), e.note]),
   };
 }
 
@@ -134,7 +135,7 @@ export function quotesTable(documents: readonly DocumentFile[], smallBusiness: b
     header: [t('csv.quote.number'), t('csv.quote.date'), t('csv.quote.validUntil'), t('csv.quote.customer'), t('csv.quote.subject'), t('csv.quote.status'), t('csv.quote.net'), t('csv.quote.gross')],
     rows: quotes.map((q) => {
       const totals = documentTotals(q.lines, smallBusinessFor(q, smallBusiness), q.discount);
-      return [q.issued?.number ?? '', q.date, q.validUntil, customerName(q, contacts), q.subject, q.issued ? t('csv.status.final') : t('quotes.draft'), amount(totals.net), amount(totals.gross)];
+      return [q.issued?.number ?? '', date(q.date), date(q.validUntil), customerName(q, contacts), q.subject, q.issued ? t('csv.status.final') : t('quotes.draft'), amount(totals.net), amount(totals.gross)];
     }),
   };
 }
@@ -161,11 +162,11 @@ export function invoicesTable(documents: readonly DocumentFile[], smallBusiness:
       const status = inv.cancels ? t('csv.status.cancellation') : !issued ? t('invoices.draft') : cancelled ? t('invoices.cancelled') : t('invoices.issued');
       return [
         issued?.number ?? '',
-        inv.date,
+        date(inv.date),
         customerName(inv, contacts),
         inv.subject,
         status,
-        inv.cancels ? '' : dueDate(inv),
+        inv.cancels ? '' : date(dueDate(inv)),
         amount(totals.net),
         amount(totals.tax),
         amount(totals.gross),
@@ -192,6 +193,13 @@ function tableOf(kind: ExportKind): Table | null {
     case 'expenses':
       return expensesTable([...expenses.values()], company.bank.accounts);
   }
+}
+
+/** Saves one list as an Excel file (.xlsx) through the browser's download (F37). */
+export async function exportXlsx(kind: ExportKind): Promise<void> {
+  const table = tableOf(kind);
+  if (!table) return;
+  saveFile(await tableToXlsx(table), `kontor-${kind}-${isoDateOf(new Date())}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
 /** Saves one list as a CSV file through the browser's download. The name says the list and the day. */

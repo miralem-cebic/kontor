@@ -9,3 +9,4 @@ Each record describes one decision: the context, what was decided, and what foll
 | [0003](0003-money-as-integer-cents.md) | Money as integer cents | Accepted |
 | [0004](0004-invoice-finalization-and-numbering.md) | Invoice finalization and numbering | Accepted |
 | [0005](0005-e-invoice-library.md) | Library for e-invoices | Accepted |
+| [0006](0006-agent-access-to-the-company-folder.md) | Access for an AI agent to the company folder | Proposed |

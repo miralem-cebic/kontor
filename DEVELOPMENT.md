@@ -133,7 +133,7 @@ src/
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the number patterns (they produce file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
 - `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
 
-## Data format (schema version 13)
+## Data format (schema version 14)
 
 kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `expenses/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
@@ -176,6 +176,8 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
 A contact file (`contacts/<id>.json`, types in `src/domain/contact.ts`) has `kind` (`company` or `person`), `roles` (`customer`, `supplier`), `name`, `nameLine2`, `contactPerson`, `customerNumber` (unique among active contacts), `address` (`null` or complete), `contact` (`email`, `phone`), `vatId` (EU), `leitwegId`, `orderReference` (default PO number), `language` (`de` or `en`, the language of its documents; `de` by default, F05), `paymentTermDays` (`null` = company default), `notes`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. Contacts were added in schema version 1 as a new kind of file; no existing file changed, so the version stayed.
 
 An item file (`items/<id>.json`, types in `src/domain/item.ts`) has `number` (unique among active items, may be empty), `name`, `description`, `unit` (a code of UN/ECE Recommendation 20 from `src/domain/units.ts`, for example `HUR` for hour), `netPrice` (integer cents, not negative), `vatRate` (basis points: `1900`, `700` or `0`), `createdAt`, `deletedAt` and `fieldUpdatedAt`. Items were added in schema version 2 as a new kind of file; an app that does not know them leaves the folder alone. A new unit code or rate is a format change: older apps would refuse the file.
+
+A contact or an item that an import made carries `importBatchId` (schema version 14): the ID of the import, `null` for a record typed in. An import is taken back by removing every record with its ID (`undoContactImport`, `undoItemImport`: a soft delete each). The importer (`src/data/import/`) reads CSV and Excel with the limits of the roadmap's importer rules; the rules that map columns to fields and check each row are in `src/domain/import.ts` and use the checks of the forms.
 
 An expense file (`expenses/<id>.json`, type `ExpenseFile` in `src/data/types.ts`, the rules in `src/domain/expense.ts`) is what the business paid for. It has `date` (`YYYY-MM-DD`, the day it was paid: the EÜR counts expenses when they are paid), `supplier` (free text), `reference` (the receipt number of the supplier, may be empty), `gross` (integer cents, more than 0, VAT included), `taxTreatment` (`domestic`, `euReverseCharge`, `thirdCountry` or `noVat`), `vatRate` (`1900`, `700` or `0`; always `0` unless the treatment is `domestic`), `category` (free text, may be empty), `accountId` (an account of `company.json`, which may have been removed since, or `null` for cash or another payment), `note`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. It is edited like an item: every field is merged one by one, and a deletion wins. The VAT inside the gross amount is the difference to the net amount, rounded once (`splitGross`), and only for `domestic`. Expenses were added in schema version 13 as a new kind of file; the receipt files and their links are planned.
 
@@ -222,6 +224,7 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | 9 | Contacts get the language of their documents (`language`, `de` for existing contacts). The customer in the snapshot of an issued document gets it too (`de` for existing documents). No other file changes; every other kind gets `unchanged(8)`. An app of version 8 refuses a contact or a document with a language instead of dropping it. |
 | 8 | Dunnings: a new kind of file (`dunnings/`). No existing file changes; every kind gets `unchanged(7)`. An app of version 7 refuses a dunning file instead of dropping it. The daily backup holds the dunnings as well. |
 | 13 | Expenses: a new kind of file (`expenses/`). No existing file changes; every other kind gets `unchanged(12)`. An app of version 12 refuses an expense instead of dropping it. The daily backup holds the expenses as well. |
+| 14 | Contacts and items get `importBatchId`, the import they came from (`null` for records typed in). Every other kind gets `unchanged(13)`. An app of version 13 refuses a contact or an item of version 14, so it never drops a batch. |
 
 ## Tests
 

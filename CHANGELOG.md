@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Import of contacts and items (F36) from a CSV or an Excel file. The columns are matched to the fields, with the matches suggested from the header line; the decimal style of the prices is chosen. Each row is checked like a typed one, and the preview shows which rows are fine and why the others are not. Only the rows that are fine are imported, as one batch that can be taken back as a whole; the file itself is not kept. A row without a customer or item number gets the next free one of the pattern. A CSV file is read in UTF-8 or Windows-1252 and may be at most 5 MB with 5,000 rows.
+- Excel export (F37): every list can be exported as an `.xlsx` file next to the CSV file, with amounts as numbers and dates as dates. Excel files are read and written without a library; the app reads the ZIP archive and the XML itself, with limits on size, number of parts and file names.
+- ADR 0006, proposed: how an AI agent on the desktop gets access to the company folder (F38). Nothing of it is built yet.
 - CSV export of the lists (F35): contacts, items, quotes, invoices and expenses, each as a file for a spreadsheet. The file has a header line, `;` as the separator and a byte order mark, so that umlauts show up in Excel; amounts have a decimal comma (`1250,00`), rates are plain numbers (`19`), dates are ISO dates. A text that a spreadsheet could read as a formula (for example `=`, `+`, `-` or `@` at the start) is written with a leading apostrophe. The file is downloaded; the company folder does not change. Payments have no list of their own yet.
 - Expenses (first part of Phase 3): what the business paid for, with date, supplier, receipt number, gross amount, the VAT as the receipt shows it (German VAT at 19 %, 7 % or 0 %, reverse charge, a supplier outside the EU, or no VAT), category, the account it was paid from and a note. The list shows the newest first with the VAT inside each amount and searches by supplier, receipt number, category and note. A removed expense stays in its file. Receipt files follow.
 - Decisions of the customer on a finalized quote (F21): a quote is accepted or declined, with its date, on its page. Each decision is a file of its own; the quote does not change. A wrong decision is removed, and both are logged. The list shows whether a quote is open, accepted or declined, and filters by it.
@@ -44,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- All files of a company folder have schema version 14: contacts and items carry the import they came from (`importBatchId`, `null` for records typed in); no other file changes.
 - All files of a company folder have schema version 13: expenses are a new kind of file (`expenses/`); no other file changes.
 - For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.
 - All files of a company folder have schema version 12: quotes and invoices have discounts on their lines and on the whole document; a document of version 11 has none. No other file changes.

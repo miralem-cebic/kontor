@@ -12,7 +12,7 @@ import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -82,6 +82,8 @@ export type ContactMergeableField = keyof ContactProfile | 'deletedAt';
 export interface ContactFile extends ContactProfile {
   schemaVersion: number;
   id: ContactId;
+  /** The import this contact came from; null when it was typed in. Set once, never changed. */
+  importBatchId: ImportBatchId | null;
   createdAt: string;
   /** Soft delete: a deleted contact stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -105,6 +107,8 @@ export type ItemMergeableField = keyof ItemProfile | 'deletedAt';
 export interface ItemFile extends ItemProfile {
   schemaVersion: number;
   id: ItemId;
+  /** The import this item came from; null when it was typed in. Set once, never changed. */
+  importBatchId: ImportBatchId | null;
   createdAt: string;
   /** Soft delete: a deleted item stays in its file and is hidden in the app */
   deletedAt: string | null;

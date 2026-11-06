@@ -43,12 +43,12 @@ function suggestedContactNumber(): string {
 /** The languages the documents of a contact can be made in, named in their own language */
 const LANGUAGE_OPTIONS = DOCUMENT_LANGUAGES.map((value) => ({ value, label: LANG_NAMES[value] }));
 
-export function ContactsView() {
+export function ContactsView({ onImport }: { onImport: () => void }) {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const back = () => setMode({ kind: 'list' });
   switch (mode.kind) {
     case 'list':
-      return <ContactList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} />;
+      return <ContactList onNew={() => setMode({ kind: 'new' })} onOpen={(id) => setMode({ kind: 'edit', id })} onImport={onImport} />;
     case 'new':
       return <ContactEditor contact={null} onDone={back} />;
     case 'edit':
@@ -80,7 +80,7 @@ function roleLabel(r: ContactRoles): string {
   return r.customer ? t('contacts.roleCustomer') : t('contacts.roleSupplier');
 }
 
-function ContactList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: ContactId) => void }) {
+function ContactList({ onNew, onOpen, onImport }: { onNew: () => void; onOpen: (id: ContactId) => void; onImport: () => void }) {
   const all = useApp((s) => s.contacts);
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<RoleFilter>('all');
@@ -93,6 +93,9 @@ function ContactList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Contac
       <header className="top">
         <h1>{t('contacts.title')}</h1>
         <span className="sp" />
+        <button type="button" className="btn" onClick={onImport}>
+          {t('import.button')}
+        </button>
         <ExportCsvButton kind="contacts" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />

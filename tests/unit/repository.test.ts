@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
+import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
 import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
@@ -422,5 +423,62 @@ describe('dunnings in the folder', () => {
     must(await repo.writeBackup('2026-10-31', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [a] }));
     const backup = JSON.parse(await text(await root.getDirectoryHandle('backups'), '2026-10-31.json'));
     expect(backup.dunnings).toEqual([JSON.parse(JSON.stringify(a))]);
+  });
+});
+
+describe('receipts', () => {
+  const pdf = new TextEncoder().encode('%PDF-1.4 Beleg Telekom');
+  const bytesOf = async (file: File) => new Uint8Array(await file.arrayBuffer());
+
+  it('writes a receipt into belege/<year>/ and reads it back', async () => {
+    must(await repo.writeReceipt('2026', 'x.pdf', pdf));
+    const file = must(await repo.readReceipt('2026', 'x.pdf'));
+    expect(await bytesOf(file)).toEqual(pdf);
+  });
+
+  it('writing the same receipt again keeps the file, but a file of that name with other content is a conflict', async () => {
+    must(await repo.writeReceipt('2026', 'x.pdf', pdf));
+    must(await repo.writeReceipt('2026', 'x.pdf', pdf));
+    const other = await repo.writeReceipt('2026', 'x.pdf', new TextEncoder().encode('anderer Inhalt'));
+    expect(other.ok ? null : other.error.kind).toBe('conflict');
+    expect(await bytesOf(must(await repo.readReceipt('2026', 'x.pdf')))).toEqual(pdf);
+  });
+
+  it('refuses a year or a name that leaves the folder, before it writes or reads anything', async () => {
+    for (const [year, name] of [
+      ['../2026', 'x.pdf'],
+      ['2026', '../x.pdf'],
+      ['2026', 'a/b.pdf'],
+    ] as const) {
+      expect((await repo.writeReceipt(year, name, pdf)).ok, `${year}/${name}`).toBe(false);
+      expect((await repo.readReceipt(year, name)).ok, `${year}/${name}`).toBe(false);
+    }
+  });
+
+  it('reports a receipt that is not there as not found', async () => {
+    const r = await repo.readReceipt('2026', 'fehlt.pdf');
+    expect(r.ok ? null : r.error.kind).toBe('notFound');
+  });
+});
+
+describe('audit lines of receipts', () => {
+  it('appends a line about a receipt to the audit log of its month and keeps the lines before it', async () => {
+    const expenseId = brandId<'ExpenseId'>('0f8fad5b-d9cb-469f-a165-70867728950e');
+    must(await repo.appendAudit('2026-10', { at: '2026-10-28T10:00:00.000Z', action: 'attachReceipt', expenseId, receipt: { kind: 'link', url: 'https://cloud.example/x.pdf' }, device: 'dev-1' }));
+    must(await repo.appendAudit('2026-10', { at: '2026-10-29T10:00:00.000Z', action: 'detachReceipt', expenseId, receipt: { kind: 'link', url: 'https://cloud.example/x.pdf' }, device: 'dev-1' }));
+    const audit = await (await (await root.getDirectoryHandle('audit')).getFileHandle('2026-10.jsonl')).getFile();
+    const lines = (await audit.text()).trim().split('\n').map((l) => JSON.parse(l) as { action: string });
+    expect(lines.map((l) => l.action)).toEqual(['attachReceipt', 'detachReceipt']);
+  });
+});
+
+describe('listFolder', () => {
+  it('lists every file of the folder with its path and bytes, nested ones included, and skips hidden files', async () => {
+    const pdf = new TextEncoder().encode('%PDF-1.4 Beleg');
+    must(await repo.writeReceipt('2026', 'x.pdf', pdf));
+    await writeFile(root.asHandle(), '.DS_Store', 'versteckt');
+    const files = must(await repo.listFolder());
+    expect(files.map((f) => f.path)).toEqual(['belege/2026/x.pdf', 'company.json']);
+    expect(new TextDecoder().decode(files[0]!.data)).toBe('%PDF-1.4 Beleg');
   });
 });

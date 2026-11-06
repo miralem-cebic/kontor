@@ -28,6 +28,7 @@ import { DOCUMENT_LIMITS, documentTotals, lineNetInRange, type DocumentLine } fr
 import { NO_DISCOUNT, type Discount } from '../domain/discount';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { EXPENSE_LIMITS, EXPENSE_TAX_TREATMENTS } from '../domain/expense';
+import { isReceiptFileName, isReceiptLink, isReceiptYear, receiptTypeOf, RECEIPT_LINK_MAX_LENGTH, RECEIPT_MAX_BYTES, RECEIPT_NAME_MAX_LENGTH, type Receipt } from '../domain/receipt';
 import { ITEM_LIMITS } from '../domain/item';
 import { BASIS_POINTS_PER_UNIT, basisPoints, cents, lineNet, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunning';
@@ -121,6 +122,7 @@ const paymentId = idOf<'PaymentId'>();
 const quoteStatusId = idOf<'QuoteStatusId'>();
 const dunningId = idOf<'DunningId'>();
 const expenseId = idOf<'ExpenseId'>();
+const importBatchId = idOf<'ImportBatchId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -335,6 +337,7 @@ const contactProfileShape = {
 export const validateContact: Check<ContactFile> = objectOf<ContactFile>({
   schemaVersion: num,
   id: contactId,
+  importBatchId: nullable(importBatchId),
   ...contactProfileShape,
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
@@ -347,6 +350,7 @@ const netPrice: Check<Cents> = (v, path) => cents(int(0, ITEM_LIMITS.maxNetPrice
 export const validateItem: Check<ItemFile> = objectOf<ItemFile>({
   schemaVersion: num,
   id: itemId,
+  importBatchId: nullable(importBatchId),
   number: text(ITEM_LIMITS.number),
   name: text(ITEM_LIMITS.name),
   description: text(ITEM_LIMITS.description),
@@ -540,6 +544,29 @@ export const validateQuoteStatus: Check<QuoteStatusFile> = objectOf<QuoteStatusF
   fieldUpdatedAt: fieldTimestamps(QUOTE_STATUS_MERGEABLE_FIELDS),
 });
 
+/**
+ * A receipt of an expense, read from the file: a file of belege/<year>/ whose name is a receipt name of its type, with a
+ * size and a SHA-256 (the name comes from the file, so it is checked before any file is opened), or a link.
+ */
+const receiptOf: Check<Receipt> = (v, path) => {
+  if (!isRecord(v)) return fail(path, `expected an object, got ${describe(v)}`);
+  if (v['kind'] === 'link') {
+    const url = text(RECEIPT_LINK_MAX_LENGTH)(v['url'], `${path}.url`);
+    return isReceiptLink(url) ? { kind: 'link', url } : fail(`${path}.url`, 'expected an http or https link');
+  }
+  if (v['kind'] !== 'file') return fail(`${path}.kind`, `unknown value ${describe(v['kind'])}`);
+  const type = typeof v['type'] === 'string' ? receiptTypeOf(v['type']) : null;
+  if (type === null) return fail(`${path}.type`, `not a receipt type: ${describe(v['type'])}`);
+  const year = text(4)(v['year'], `${path}.year`);
+  if (!isReceiptYear(year)) return fail(`${path}.year`, 'expected a year of four digits');
+  const name = text(RECEIPT_NAME_MAX_LENGTH)(v['name'], `${path}.name`);
+  if (!isReceiptFileName(name, type)) return fail(`${path}.name`, 'not a receipt file name of its type');
+  const size = int(1, RECEIPT_MAX_BYTES)(v['size'], `${path}.size`);
+  const sha256 = text(64)(v['sha256'], `${path}.sha256`);
+  if (!SHA256.test(sha256)) return fail(`${path}.sha256`, 'expected a SHA-256 in hex');
+  return { kind: 'file', year, name, type, size, sha256 };
+};
+
 /** An expense is more than 0 and at most the largest amount a file may hold; the form checks it again when it is saved */
 const expenseAmount: Check<Cents> = (v, path) => cents(int(1, EXPENSE_LIMITS.maxGross)(v, path));
 
@@ -556,6 +583,7 @@ export const validateExpense: Check<ExpenseFile> = objectOf<ExpenseFile>({
   category: text(EXPENSE_LIMITS.category),
   accountId: nullable(accountId),
   note: text(EXPENSE_LIMITS.note),
+  receipt: nullable(receiptOf),
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(EXPENSE_MERGEABLE_FIELDS),

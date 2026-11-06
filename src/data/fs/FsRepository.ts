@@ -5,6 +5,7 @@ import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
 import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, NumberRange, PaymentFile, QuoteStatusFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
+import { isReceiptYear } from '../../domain/receipt';
 import { writeFile, writeJson } from './jsonFile';
 
 // Folder structure (see DEVELOPMENT.md for the planned rest):
@@ -24,7 +25,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', expenses: 'expenses', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', expenses: 'expenses', belege: 'belege', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
 
 /** The folder in documents/ with the PDFs of each number range */
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
@@ -73,6 +74,14 @@ const fileExists = (dir: FileSystemDirectoryHandle, name: string): Promise<boole
 const checkName = (name: string) => {
   if (!isSafeFileName(name)) throw new UnsafeFileNameError(name);
 };
+
+/** A receipt is kept under belege/<year>/: the year is four digits and the name is a single safe file name */
+const checkReceiptPath = (year: string, name: string) => {
+  if (!isReceiptYear(year)) throw new UnsafeFileNameError(year);
+  checkName(name);
+};
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export class FsRepository implements Repository {
   /** Path → lastModified at the last read or write, to notice changes made by someone else */
@@ -353,6 +362,49 @@ export class FsRepository implements Repository {
     checkName(asset.name);
     const dir = await this.root.getDirectoryHandle(DIRS.assets, { create: true });
     if (!(await fileExists(dir, asset.name))) await writeFile(dir, asset.name, asset.data);
+  }
+
+  /** Writes belege/<year>/<name>. The same bytes under that name are kept; other bytes are a conflict, never an overwrite. */
+  writeReceipt(year: string, name: string, data: Uint8Array) {
+    return attempt(() => this.runWriteReceipt(year, name, data));
+  }
+
+  private async runWriteReceipt(year: string, name: string, data: Uint8Array) {
+    checkReceiptPath(year, name);
+    const belege = await this.root.getDirectoryHandle(DIRS.belege, { create: true });
+    const dir = await belege.getDirectoryHandle(year, { create: true });
+    if (await fileExists(dir, name)) {
+      const existing = new Uint8Array(await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer());
+      if (sameBytes(existing, data)) return;
+      throw new ConflictError(`${year}/${name} exists with other content`);
+    }
+    await writeFile(dir, name, new Blob([data.slice()]));
+  }
+
+  readReceipt(year: string, name: string) {
+    return attempt(async () => {
+      checkReceiptPath(year, name);
+      const belege = await this.root.getDirectoryHandle(DIRS.belege);
+      const dir = await belege.getDirectoryHandle(year);
+      return (await dir.getFileHandle(name)).getFile();
+    });
+  }
+
+  /** Every file of the folder with its path and bytes, in path order. Hidden files and the helper files of sync clients are left out. */
+  listFolder() {
+    return attempt(async () => {
+      const files: { path: string; data: Uint8Array }[] = [];
+      const walk = async (dir: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
+        for await (const [name, h] of dir.entries()) {
+          if (name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp')) continue;
+          const path = prefix === '' ? name : `${prefix}/${name}`;
+          if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, path);
+          else files.push({ path, data: new Uint8Array(await (await (h as FileSystemFileHandle).getFile()).arrayBuffer()) });
+        }
+      };
+      await walk(this.root, '');
+      return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    });
   }
 
   readAsset(name: string) {

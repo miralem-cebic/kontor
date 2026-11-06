@@ -5,6 +5,7 @@ import type { SendChannel, SendKind } from '../domain/sending';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { ExpenseProfile } from '../domain/expense';
+import type { Receipt } from '../domain/receipt';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { Cents } from '../domain/money';
@@ -12,7 +13,7 @@ import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -82,6 +83,8 @@ export type ContactMergeableField = keyof ContactProfile | 'deletedAt';
 export interface ContactFile extends ContactProfile {
   schemaVersion: number;
   id: ContactId;
+  /** The import this contact came from; null when it was typed in. Set once, never changed. */
+  importBatchId: ImportBatchId | null;
   createdAt: string;
   /** Soft delete: a deleted contact stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -105,6 +108,8 @@ export type ItemMergeableField = keyof ItemProfile | 'deletedAt';
 export interface ItemFile extends ItemProfile {
   schemaVersion: number;
   id: ItemId;
+  /** The import this item came from; null when it was typed in. Set once, never changed. */
+  importBatchId: ImportBatchId | null;
   createdAt: string;
   /** Soft delete: a deleted item stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -293,7 +298,7 @@ export interface QuoteStatusFile {
 }
 
 /** Expense fields merged one by one; like items, a deletion survives edits made elsewhere */
-const EXPENSE_MERGEABLE: Record<keyof ExpenseProfile | 'deletedAt', true> = {
+const EXPENSE_MERGEABLE: Record<keyof ExpenseProfile | 'receipt' | 'deletedAt', true> = {
   date: true,
   supplier: true,
   reference: true,
@@ -303,10 +308,11 @@ const EXPENSE_MERGEABLE: Record<keyof ExpenseProfile | 'deletedAt', true> = {
   category: true,
   accountId: true,
   note: true,
+  receipt: true,
   deletedAt: true,
 };
 export const EXPENSE_MERGEABLE_FIELDS = keysOf(EXPENSE_MERGEABLE);
-export type ExpenseMergeableField = keyof ExpenseProfile | 'deletedAt';
+export type ExpenseMergeableField = keyof ExpenseProfile | 'receipt' | 'deletedAt';
 
 /**
  * expenses/<id>.json: what the business paid for (domain/expense.ts). Edited like an item; a removed expense stays in its
@@ -316,6 +322,8 @@ export interface ExpenseFile extends Omit<ExpenseProfile, 'accountId'> {
   schemaVersion: number;
   id: ExpenseId;
   accountId: AccountId | null;
+  /** The receipt: a file in belege/<year>/ (type, size, SHA-256) or a link; null when there is none. Set by its own actions, merged field by field. */
+  receipt: Receipt | null;
   createdAt: string;
   /** Soft delete: a deleted expense stays in its file and is hidden in the app */
   deletedAt: string | null;
@@ -394,7 +402,26 @@ export type AuditEntry =
   | (AuditBase & { action: 'dunning'; dunning: AuditDunning })
   | (AuditBase & { action: 'send'; send: AuditSend })
   | (AuditBase & { action: 'quoteDecision'; quoteStatus: AuditQuoteDecision })
-  | (AuditBase & { action: 'deleteQuoteDecision'; quoteStatus: AuditQuoteDecision });
+  | (AuditBase & { action: 'deleteQuoteDecision'; quoteStatus: AuditQuoteDecision })
+  | AuditExpenseEntry;
+
+/** The audit lines about documents (issue, cancel, payments, dunnings, mails, quote decisions); not the ones about receipts */
+export type DocumentAuditEntry = Exclude<AuditEntry, AuditExpenseEntry>;
+
+/** The receipt as an audit line names it: the file in belege/ with its SHA-256, or the link */
+export type AuditReceipt = { kind: 'file'; year: string; name: string; sha256: string } | { kind: 'link'; url: string };
+
+/**
+ * A line of audit/<YYYY-MM>.jsonl about the receipt of an expense: `attachReceipt` for a file or a link that was attached,
+ * `detachReceipt` for the one that was removed. The file of a removed receipt stays in the folder (it is kept).
+ */
+export interface AuditExpenseEntry {
+  at: string;
+  action: 'attachReceipt' | 'detachReceipt';
+  expenseId: ExpenseId;
+  receipt: AuditReceipt;
+  device: string;
+}
 
 /**
  * The mail a line of the audit log is about (`send`): what it is for, the channel it was prepared with and the recipient.

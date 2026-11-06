@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ImportKind } from '../../domain/import';
 import { retrySave } from '../../app/session';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { Icon, type IconName } from '../../components/Icon';
@@ -8,6 +9,7 @@ import { errorText } from '../../lib/labels';
 import { useApp } from '../../store/appStore';
 import { ContactsView } from '../contacts/ContactsView';
 import { ExpensesView } from '../expenses/ExpensesView';
+import { ImportView } from '../import/ImportView';
 import { HomeView } from '../home/HomeView';
 import { InvoicesView } from '../invoices/InvoicesView';
 import { ItemsView } from '../items/ItemsView';
@@ -18,7 +20,7 @@ import { CompanySwitcher } from './CompanySwitcher';
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'quotes' | 'invoices' | 'expenses' | 'contacts' | 'items' | 'settings';
+type View = 'home' | 'quotes' | 'invoices' | 'expenses' | 'contacts' | 'items' | 'import' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
@@ -36,6 +38,13 @@ export function Shell() {
   const [view, setView] = useState<View>('home');
   // "Create invoice" in a quote: the invoices open with a new invoice for it
   const [fromQuote, setFromQuote] = useState<DocumentId | null>(null);
+  // the import of contacts or items: its view goes back to the list of that kind
+  const [importKind, setImportKind] = useState<ImportKind>('contacts');
+  const importInto = (kind: ImportKind) => {
+    setFromQuote(null);
+    setImportKind(kind);
+    setView('import');
+  };
   const open = (next: View) => {
     setFromQuote(null);
     setView(next);
@@ -76,14 +85,28 @@ export function Shell() {
       </ErrorBoundary>
       <main className="main">
         <ErrorBoundary name="main">
-          <MainView view={view} fromQuote={fromQuote} onCreateInvoice={createInvoice} />
+          <MainView view={view} fromQuote={fromQuote} onCreateInvoice={createInvoice} importKind={importKind} onImport={importInto} onImported={() => setView(importKind === 'contacts' ? 'contacts' : 'items')} />
         </ErrorBoundary>
       </main>
     </div>
   );
 }
 
-function MainView({ view, fromQuote, onCreateInvoice }: { view: View; fromQuote: DocumentId | null; onCreateInvoice: (quoteId: DocumentId) => void }) {
+function MainView({
+  view,
+  fromQuote,
+  onCreateInvoice,
+  importKind,
+  onImport,
+  onImported,
+}: {
+  view: View;
+  fromQuote: DocumentId | null;
+  onCreateInvoice: (quoteId: DocumentId) => void;
+  importKind: ImportKind;
+  onImport: (kind: ImportKind) => void;
+  onImported: () => void;
+}) {
   switch (view) {
     case 'home':
       return <HomeView />;
@@ -95,9 +118,11 @@ function MainView({ view, fromQuote, onCreateInvoice }: { view: View; fromQuote:
     case 'expenses':
       return <ExpensesView />;
     case 'contacts':
-      return <ContactsView />;
+      return <ContactsView onImport={() => onImport('contacts')} />;
     case 'items':
-      return <ItemsView />;
+      return <ItemsView onImport={() => onImport('items')} />;
+    case 'import':
+      return <ImportView key={importKind} kind={importKind} onDone={onImported} />;
     case 'settings':
       return <SettingsView />;
   }

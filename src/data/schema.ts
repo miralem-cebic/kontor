@@ -8,7 +8,7 @@ import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newExpenseId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newExpenseId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId, type ImportBatchId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
   EXPENSE_MERGEABLE_FIELDS,
@@ -40,7 +40,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 15;
 
 export const nowIso = (): string => stampNow();
 
@@ -56,20 +56,20 @@ export function makeCompany(profile: CompanyProfile, account: AccountDetails): C
 /** A new account of a company */
 export const makeAccount = (details: AccountDetails): BankAccount => ({ id: newAccountId(), ...details, deletedAt: null });
 
-/** A new contact file. Every field counts as changed at creation time. */
-export function makeContact(profile: ContactProfile): ContactFile {
+/** A new contact file. Every field counts as changed at creation time. `importBatchId` is the import it comes from, if any. */
+export function makeContact(profile: ContactProfile, importBatchId: ImportBatchId | null = null): ContactFile {
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<ContactMergeableField, string>> = {};
   for (const f of CONTACT_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newContactId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newContactId(), ...profile, importBatchId, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }
 
-/** A new item of the catalogue. Every field counts as changed at creation time. */
-export function makeItem(profile: ItemProfile): ItemFile {
+/** A new item of the catalogue. Every field counts as changed at creation time. `importBatchId` is the import it comes from, if any. */
+export function makeItem(profile: ItemProfile, importBatchId: ImportBatchId | null = null): ItemFile {
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<ItemMergeableField, string>> = {};
   for (const f of ITEM_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newItemId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newItemId(), ...profile, importBatchId, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }
 
 /** A new quote, a draft; `revises` makes it a new version of a finalized quote (nextVersionOf). Every field counts as changed at creation time. */
@@ -147,5 +147,5 @@ export function makeExpense(profile: Omit<ExpenseProfile, 'accountId'> & { accou
   const at = nowIso();
   const fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>> = {};
   for (const f of EXPENSE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
-  return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
+  return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, receipt: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

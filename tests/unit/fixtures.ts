@@ -5,6 +5,7 @@ import { emptyContactDraft, type ContactDraft, type ContactProfile } from '../..
 import type { DocumentLine } from '../../src/domain/document';
 import { NO_DISCOUNT } from '../../src/domain/discount';
 import type { InvoiceContent, IssuedInfo } from '../../src/domain/invoice';
+import type { ExpenseProfile } from '../../src/domain/expense';
 import type { ItemProfile } from '../../src/domain/item';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import type { QuoteContent } from '../../src/domain/quote';
@@ -97,6 +98,20 @@ export const sampleItem = (over: Partial<ItemProfile> = {}): ItemProfile => ({
 });
 
 /** A line of 12.5 hours at 85 € and 19 % */
+/** An expense of 49.99 € from a telephone bill, paid without an account of the company */
+export const sampleExpense = (over: Partial<ExpenseProfile> = {}): ExpenseProfile => ({
+  date: '2026-10-28',
+  supplier: 'Telekom',
+  reference: '',
+  gross: cents(4_999),
+  taxTreatment: 'domestic',
+  vatRate: basisPoints(1900),
+  category: 'Telefon',
+  accountId: null,
+  note: '',
+  ...over,
+});
+
 export const sampleLine = (over: Partial<DocumentLine> = {}): DocumentLine => ({
   name: 'Webdesign',
   description: '',

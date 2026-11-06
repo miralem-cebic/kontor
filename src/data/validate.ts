@@ -27,6 +27,7 @@ import { isIsoDate } from '../domain/dates';
 import { DOCUMENT_LIMITS, documentTotals, lineNetInRange, type DocumentLine } from '../domain/document';
 import { NO_DISCOUNT, type Discount } from '../domain/discount';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
+import { EXPENSE_LIMITS, EXPENSE_TAX_TREATMENTS } from '../domain/expense';
 import { ITEM_LIMITS } from '../domain/item';
 import { BASIS_POINTS_PER_UNIT, basisPoints, cents, lineNet, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
 import { DUNNING_LEVELS, type Debtor, type DunningLevel } from '../domain/dunning';
@@ -53,6 +54,8 @@ import {
   type ContactFile,
   type DocumentFile,
   type DunningFile,
+  EXPENSE_MERGEABLE_FIELDS,
+  type ExpenseFile,
   type InvoiceFile,
   type ItemFile,
   NUMBER_RANGES,
@@ -117,6 +120,7 @@ const documentId = idOf<'DocumentId'>();
 const paymentId = idOf<'PaymentId'>();
 const quoteStatusId = idOf<'QuoteStatusId'>();
 const dunningId = idOf<'DunningId'>();
+const expenseId = idOf<'ExpenseId'>();
 
 const text =
   (max: number = MAX_TEXT): Check<string> =>
@@ -534,6 +538,27 @@ export const validateQuoteStatus: Check<QuoteStatusFile> = objectOf<QuoteStatusF
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(QUOTE_STATUS_MERGEABLE_FIELDS),
+});
+
+/** An expense is more than 0 and at most the largest amount a file may hold; the form checks it again when it is saved */
+const expenseAmount: Check<Cents> = (v, path) => cents(int(1, EXPENSE_LIMITS.maxGross)(v, path));
+
+/** What the business paid for, read with the limits of its form (expenses/, F-Phase 3) */
+export const validateExpense: Check<ExpenseFile> = objectOf<ExpenseFile>({
+  schemaVersion: num,
+  id: expenseId,
+  date: isoDate,
+  supplier: text(EXPENSE_LIMITS.supplier),
+  reference: text(EXPENSE_LIMITS.reference),
+  gross: expenseAmount,
+  taxTreatment: oneOf(EXPENSE_TAX_TREATMENTS),
+  vatRate,
+  category: text(EXPENSE_LIMITS.category),
+  accountId: nullable(accountId),
+  note: text(EXPENSE_LIMITS.note),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(EXPENSE_MERGEABLE_FIELDS),
 });
 
 /** A dunning claims an amount in cents: not negative, at most the largest amount a file may hold */

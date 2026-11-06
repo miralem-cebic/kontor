@@ -1,13 +1,14 @@
 import { create } from 'zustand';
 import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
+import type { ExpenseProfile } from '../domain/expense';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeAccount, makeContact, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
+import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
 import type {
   BankAccount,
   Banking,
@@ -15,6 +16,8 @@ import type {
   ContactFile,
   ContactMergeableField,
   DocumentFile,
+  ExpenseFile,
+  ExpenseMergeableField,
   InvoiceFile,
   InvoiceMergeableField,
   ItemFile,
@@ -53,13 +56,15 @@ export interface AppState {
   dunnings: ReadonlyMap<DunningId, DunningFile>;
   /** Decisions of the customer on quotes by ID, removed ones included (they count as no decision) */
   quoteStatuses: ReadonlyMap<QuoteStatusId, QuoteStatusFile>;
+  /** Expenses by ID, removed ones included (they are hidden in the UI) */
+  expenses: ReadonlyMap<ExpenseId, ExpenseFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -81,15 +86,16 @@ export interface CompanyRecords {
   payments: readonly PaymentFile[];
   dunnings: readonly DunningFile[];
   quoteStatuses: readonly QuoteStatusFile[];
+  expenses: readonly ExpenseFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), expenses: byId(expenses), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
@@ -99,6 +105,7 @@ export function applyRecovered(company: CompanyFile, { contacts, items, document
     payments: payments.length ? new Map([...s.payments, ...byId(payments)]) : s.payments,
     dunnings: dunnings.length ? new Map([...s.dunnings, ...byId(dunnings)]) : s.dunnings,
     quoteStatuses: quoteStatuses.length ? new Map([...s.quoteStatuses, ...byId(quoteStatuses)]) : s.quoteStatuses,
+    expenses: expenses.length ? new Map([...s.expenses, ...byId(expenses)]) : s.expenses,
   }));
 }
 
@@ -254,6 +261,50 @@ export function integrateWrittenItem(sent: ItemFile, written: ItemFile) {
   const current = get().items.get(written.id);
   if (!current) return;
   putItem(current === sent ? written : mergeItem(current, written));
+}
+
+/* ---------- Expenses ---------- */
+
+function putExpense(expense: ExpenseFile) {
+  set((s) => ({ expenses: new Map(s.expenses).set(expense.id, expense) }));
+}
+
+/**
+ * The account of the company as its own ID. A removed account is still found, so that the expense keeps it; the form
+ * has checked the ID against the active accounts already.
+ */
+function accountIdOf(id: string | null): AccountId | null {
+  if (id === null) return null;
+  return get().company?.bank.accounts.find((a) => a.id === id)?.id ?? null;
+}
+
+/** A new expense from a checked profile (the form's draft is never stored). Returns its ID. */
+export function addExpense(profile: ExpenseProfile): ExpenseId {
+  const expense = makeExpense({ ...profile, accountId: accountIdOf(profile.accountId) });
+  putExpense(expense);
+  return expense.id;
+}
+
+export function updateExpense(id: ExpenseId, profile: ExpenseProfile) {
+  const current = get().expenses.get(id);
+  if (!current || current.deletedAt) return;
+  const next = withChanges<ExpenseMergeableField, ExpenseFile>(current, { ...profile, accountId: accountIdOf(profile.accountId) });
+  if (next !== current) putExpense(next);
+}
+
+/** Soft delete: the file stays, the expense is hidden */
+export function deleteExpense(id: ExpenseId) {
+  const current = get().expenses.get(id);
+  if (!current || current.deletedAt) return;
+  const at = nowIso();
+  putExpense(withChanges<ExpenseMergeableField, ExpenseFile>(current, { deletedAt: at }, at));
+}
+
+/** Like `integrateWrittenItem`, for one expense */
+export function integrateWrittenExpense(sent: ExpenseFile, written: ExpenseFile) {
+  const current = get().expenses.get(written.id);
+  if (!current) return;
+  putExpense(current === sent ? written : mergeExpense(current, written));
 }
 
 /* ---------- Quotes and invoices ---------- */

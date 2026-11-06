@@ -112,15 +112,15 @@ describe('FsRepository', () => {
   });
 
   it('writes, lists and removes backups', async () => {
-    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [] }));
-    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [] }));
+    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] }));
+    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] }));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21', '2026-10-20']);
     const backups = await root.getDirectoryHandle('backups');
     const backup = JSON.parse(await text(backups, '2026-10-21.json'));
     expect(backup).toMatchObject({ schemaVersion: SCHEMA_VERSION, company: { id: company.id } });
     must(await repo.removeBackup('2026-10-20'));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21']);
-    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [] })).ok).toBe(false);
+    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] })).ok).toBe(false);
   });
 });
 

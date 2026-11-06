@@ -8,7 +8,7 @@ import { makePayment, nowIso } from '../../src/data/schema';
 import { cents } from '../../src/domain/money';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -24,7 +24,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [] });
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] });
   persister = new Persister(repo);
   persister.start();
 });
@@ -218,6 +218,49 @@ describe('Persister with items', () => {
     repo.saveItem = orig;
     await persister.retry();
     expect((await itemsOnDisk()).map((i) => i.name)).toEqual(['Unsaved']);
+  });
+});
+
+describe('Persister with expenses', () => {
+  const expensesOnDisk = async () => must(await new FsRepository(root.asHandle()).loadExpenses()).expenses;
+
+  it('writes a new expense, its changes and its deletion', async () => {
+    const id = A.addExpense(sampleExpense());
+    await persister.flush();
+    expect((await expensesOnDisk()).map((e) => e.supplier)).toEqual(['Telekom']);
+
+    A.updateExpense(id, sampleExpense({ supplier: 'Telekom AG' }));
+    const stamped = A.useApp.getState().expenses.get(id)!;
+    expect(stamped.fieldUpdatedAt.supplier! > stamped.createdAt).toBe(true);
+    expect(stamped.fieldUpdatedAt.gross).toBe(stamped.createdAt);
+    await persister.flush();
+    expect((await expensesOnDisk())[0]?.supplier).toBe('Telekom AG');
+
+    A.deleteExpense(id);
+    await persister.flush();
+    const [deleted] = await expensesOnDisk();
+    expect(deleted?.deletedAt).toBeTruthy();
+    expect(deleted?.fieldUpdatedAt.deletedAt).toBe(deleted?.deletedAt);
+  });
+
+  it('keeps the account of the company the money left, so that the file names it', async () => {
+    const accountId = A.useApp.getState().company!.bank.defaultAccountId;
+    A.addExpense(sampleExpense({ accountId }));
+    await persister.flush();
+    expect((await expensesOnDisk())[0]?.accountId).toBe(accountId);
+  });
+
+  it('keeps unsaved expenses in the emergency copy', async () => {
+    const orig = repo.saveExpense.bind(repo);
+    repo.saveExpense = async () => err({ kind: 'quota', cause: new Error('full') });
+    const id = A.addExpense(sampleExpense({ supplier: 'Unsaved' }));
+    await persister.flush();
+    const company = A.useApp.getState().company!;
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    expect(copy.expenses.map((e: { id: string }) => e.id)).toEqual([id]);
+    repo.saveExpense = orig;
+    await persister.retry();
+    expect((await expensesOnDisk()).map((e) => e.supplier)).toEqual(['Unsaved']);
   });
 });
 

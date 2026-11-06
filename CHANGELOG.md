@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Expenses (first part of Phase 3): what the business paid for, with date, supplier, receipt number, gross amount, the VAT as the receipt shows it (German VAT at 19 %, 7 % or 0 %, reverse charge, a supplier outside the EU, or no VAT), category, the account it was paid from and a note. The list shows the newest first with the VAT inside each amount and searches by supplier, receipt number, category and note. A removed expense stays in its file. Receipt files follow.
 - Decisions of the customer on a finalized quote (F21): a quote is accepted or declined, with its date, on its page. Each decision is a file of its own; the quote does not change. A wrong decision is removed, and both are logged. The list shows whether a quote is open, accepted or declined, and filters by it.
 - Setup assistant for the first start and for "Add company": browser check, folder, company details with logo (PNG, JPG or SVG up to 1 MB), tax settings (small business scheme, cash or accrual VAT, return period, permanent extension, freelance or trade with multiplier), bank account with IBAN check, invoice number format with preview, payment term and footer, and a summary. Every step is checked; nothing is written before "Finish".
 - Several companies, each in its own folder. A switcher in the sidebar lists them and adds new ones; the last opened company opens again after a restart.
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- All files of a company folder have schema version 13: expenses are a new kind of file (`expenses/`); no other file changes.
 - For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.
 - All files of a company folder have schema version 12: quotes and invoices have discounts on their lines and on the whole document; a document of version 11 has none. No other file changes.
 - All files of a company folder have schema version 11: decisions of the customer on a quote are a new kind of file (`quoteStatus/`); no other file changes.

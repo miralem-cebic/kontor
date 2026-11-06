@@ -1,5 +1,6 @@
 import {
   CONTACT_MERGEABLE_FIELDS,
+  EXPENSE_MERGEABLE_FIELDS,
   INVOICE_MERGEABLE_FIELDS,
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
@@ -9,6 +10,7 @@ import {
   type CompanyFile,
   type ContactFile,
   type DocumentFile,
+  type ExpenseFile,
   type ItemFile,
   type PaymentFile,
   type QuoteStatusFile,
@@ -41,6 +43,9 @@ export const mergeCompany = (local: CompanyFile, remote: CompanyFile): CompanyFi
 export const mergeContact = (local: ContactFile, remote: ContactFile): ContactFile => mergeFields(local, remote, CONTACT_MERGEABLE_FIELDS);
 
 export const mergeItem = (local: ItemFile, remote: ItemFile): ItemFile => mergeFields(local, remote, ITEM_MERGEABLE_FIELDS);
+
+/** Expenses are edited like items: every field is merged one by one, and a deletion wins like any other change */
+export const mergeExpense = (local: ExpenseFile, remote: ExpenseFile): ExpenseFile => mergeFields(local, remote, EXPENSE_MERGEABLE_FIELDS);
 
 /** A payment changes only by its deletion, which wins over the older state of another device */
 export const mergePayment = (local: PaymentFile, remote: PaymentFile): PaymentFile => mergeFields(local, remote, PAYMENT_MERGEABLE_FIELDS);

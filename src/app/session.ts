@@ -8,7 +8,7 @@ import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany, mergeContact, mergeDocument, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
 import { emergencyKey, Persister } from '../data/persister';
 import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
@@ -173,6 +173,8 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   if (!loadedDunnings.ok) return set({ phase: 'failed', error: loadedDunnings.error.kind, currentId: company.id });
   const loadedQuoteStatuses = await r.loadQuoteStatuses();
   if (!loadedQuoteStatuses.ok) return set({ phase: 'failed', error: loadedQuoteStatuses.error.kind, currentId: company.id });
+  const loadedExpenses = await r.loadExpenses();
+  if (!loadedExpenses.ok) return set({ phase: 'failed', error: loadedExpenses.error.kind, currentId: company.id });
   const records: CompanyRecords = {
     contacts: loadedContacts.value.contacts,
     items: loadedItems.value.items,
@@ -180,6 +182,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     payments: loadedPayments.value.payments,
     dunnings: loadedDunnings.value.dunnings,
     quoteStatuses: loadedQuoteStatuses.value.quoteStatuses,
+    expenses: loadedExpenses.value.expenses,
   };
   repo = r;
   loadCompany(company, records);
@@ -195,6 +198,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
     { issues: loadedDunnings.value.issues, toast: 'toast.unreadableDunnings' },
     { issues: loadedQuoteStatuses.value.issues, toast: 'toast.unreadableQuoteStatuses' },
+    { issues: loadedExpenses.value.issues, toast: 'toast.unreadableExpenses' },
   ] as const;
   for (const { issues, toast } of unreadable) {
     if (!issues.length) continue;
@@ -259,14 +263,15 @@ function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ 
   // a dunning is never changed: the copy's version of one that the folder holds is not used
   const dunnings = recoverRecords(copy['dunnings'], loaded.dunnings, (raw) => migrate('dunning', raw), (local) => local);
   const quoteStatuses = recoverRecords(copy['quoteStatuses'], loaded.quoteStatuses, (raw) => migrate('quoteStatus', raw), mergeQuoteStatus);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length) return null;
+  const expenses = recoverRecords(copy['expenses'], loaded.expenses, (raw) => migrate('expense', raw), mergeExpense);
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length && !expenses.length) return null;
   showToast(t('toast.recovered'));
-  return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses };
+  return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses, expenses };
 }
 
 /** Daily backup of the state in the store. Errors here must not disturb the work. */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents, payments, dunnings, quoteStatuses } = useApp.getState();
+  const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses } = useApp.getState();
   if (!company) return;
   const res = await dailyBackup(r, {
     company,
@@ -276,6 +281,7 @@ async function maintenance(r: FsRepository) {
     payments: [...payments.values()],
     dunnings: [...dunnings.values()],
     quoteStatuses: [...quoteStatuses.values()],
+    expenses: [...expenses.values()],
   });
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }

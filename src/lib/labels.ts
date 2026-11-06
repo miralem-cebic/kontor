@@ -18,6 +18,7 @@ import type { QuoteProblem } from '../domain/quote';
 import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import { t, tIn, type Lang, type MessageKey } from '../i18n';
+import type { ExpenseTaxTreatment } from '../domain/expense';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
 
@@ -124,6 +125,15 @@ export const unitText = (u: UnitCode): string => t(UNIT_KEY[u]);
 
 /** The name of a unit in a given language, for example on a document */
 export const unitTextIn = (lang: Lang, u: UnitCode): string => tIn(lang, UNIT_KEY[u]);
+
+const EXPENSE_TREATMENT_KEY: Record<ExpenseTaxTreatment, MessageKey> = {
+  domestic: 'expenses.treatmentDomestic',
+  euReverseCharge: 'expenses.treatmentEuReverseCharge',
+  thirdCountry: 'expenses.treatmentThirdCountry',
+  noVat: 'expenses.treatmentNoVat',
+};
+/** The VAT treatment of an expense in words, as the form and the CSV export show it */
+export const expenseTreatmentText = (v: ExpenseTaxTreatment): string => t(EXPENSE_TREATMENT_KEY[v]);
 
 /** A discount in words: "10 %" or "20,00 €", or "no discount" */
 export const discountText = (d: Discount, lang: Lang): string => {

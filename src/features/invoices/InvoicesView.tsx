@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Choice, Row, SelectField, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
+import { ExportCsvButton } from '../export/ExportCsvButton';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
 import { isoDateOf } from '../../domain/dates';
 import { draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
@@ -178,6 +179,7 @@ function InvoiceList({ onNew, onOpen }: { onNew: () => void; onOpen: (id: Docume
       <header className="top">
         <h1>{t('invoices.title')}</h1>
         <span className="sp" />
+        <ExportCsvButton kind="invoices" />
         <button type="button" className="btn primary" onClick={onNew}>
           <Icon n="plus" s={14} />
           {t('invoices.new')}

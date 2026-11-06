@@ -132,6 +132,15 @@ const snapshotNumberPatterns: Migration = {
 };
 
 /**
+ * Version 15: an expense has a receipt, a file in belege/ or a link (null when there is none). The expenses of version 14
+ * have none; the receipt is read with its checks like the rest of the expense.
+ */
+const expenseReceipt: Migration = {
+  from: 14,
+  up: (raw) => ('receipt' in raw ? raw : { ...raw, receipt: null }),
+};
+
+/**
  * Version 14: a contact or an item of version 13 was typed in, not imported, so it gets no import (`importBatchId`: null).
  * An import can be taken back as a whole, which needs the batch of each record.
  */
@@ -195,11 +204,12 @@ const snapshotLanguage: Migration = {
  * Version 12 adds discounts to quotes and invoices, on their lines and on the whole document; the other files do not change.
  * Version 13 adds expenses, a new kind of file (expenses/); no existing file changes.
  * Version 14 gives contacts and items the import they came from (`importBatchId`, null for records typed in); no other file changes.
+ * Version 15 gives expenses a receipt (`receipt`, null when there is none); no other file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14)],
   document: [
     unchanged(1),
     unchanged(2),
@@ -214,12 +224,13 @@ export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
     documentDiscounts,
     unchanged(12),
     unchanged(13),
+    unchanged(14),
   ],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
-  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
-  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13)],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
+  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
+  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), expenseReceipt],
 };
 
 export class NewerSchemaError extends Error {

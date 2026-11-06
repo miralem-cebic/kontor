@@ -133,7 +133,8 @@ Proposed on 6 November 2026, not agreed yet. The export (F35) has to include exp
 ### Phase 3: expenses and receipts
 
 - Expense: date, gross amount, VAT rate and input tax, category, supplier, payment method, note.
-- **Expense form (done on 6 November 2026):** date, supplier, receipt number, gross amount, VAT treatment and rate, category, account and note, one file each (`expenses/`), edited like an item and removed by soft delete. The VAT inside each amount is shown. Not yet: the receipt file (`belege/<year>/`, with SHA-256) and its link, and the audit entries for them.
+- **Expense form (done on 6 November 2026):** date, supplier, receipt number, gross amount, VAT treatment and rate, category, account and note, one file each (`expenses/`), edited like an item and removed by soft delete. The VAT inside each amount is shown. The receipts follow below.
+- **Receipts (done on 6 November 2026):** a receipt is a PDF, PNG or JPEG of up to 10 MB, copied into `belege/<year>/` under the expense ID and the original name (never overwritten), or an https link to the place where the receipt is kept; the UI says so. Opening checks the SHA-256 first, removing a receipt keeps its file, and every change is written to the audit log (`attachReceipt`, `detachReceipt`). Not yet: the inbox folder that assigns files to expenses (F06).
 - Receipt as a file copied into the company folder (`belege/<year>/<id>-<name>`, with SHA-256) or as a link (`https://…` to SharePoint, Nextcloud or OneDrive; only http and https). With a link, keeping the receipt is up to its storage location; the UI says so.
 - Categories map to an Anlage EÜR line and to SKR03/SKR04 accounts (for the DATEV export).
 - CSV import of existing bookings with column mapping.

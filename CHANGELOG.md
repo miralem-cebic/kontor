@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Receipts of expenses (Phase 3): a PDF, PNG or JPEG of up to 10 MB is copied into the company folder under `belege/<year>/`, named after the expense and never overwritten, or a https link to the place where the receipt is kept is saved. The receipt can be downloaded (its checksum is checked first), replaced or removed; the file of a removed receipt stays in the folder. Every change is written to the audit log.
 - Import of contacts and items (F36) from a CSV or an Excel file. The columns are matched to the fields, with the matches suggested from the header line; the decimal style of the prices is chosen. Each row is checked like a typed one, and the preview shows which rows are fine and why the others are not. Only the rows that are fine are imported, as one batch that can be taken back as a whole; the file itself is not kept. A row without a customer or item number gets the next free one of the pattern. A CSV file is read in UTF-8 or Windows-1252 and may be at most 5 MB with 5,000 rows.
 - Excel export (F37): every list can be exported as an `.xlsx` file next to the CSV file, with amounts as numbers and dates as dates. Excel files are read and written without a library; the app reads the ZIP archive and the XML itself, with limits on size, number of parts and file names.
 - ADR 0006, proposed: how an AI agent on the desktop gets access to the company folder (F38). Nothing of it is built yet.
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- All files of a company folder have schema version 15: expenses have a receipt (`receipt`, `null` when there is none); no other file changes.
 - All files of a company folder have schema version 14: contacts and items carry the import they came from (`importBatchId`, `null` for records typed in); no other file changes.
 - All files of a company folder have schema version 13: expenses are a new kind of file (`expenses/`); no other file changes.
 - For a private person the contact form hides the VAT ID, the Leitweg-ID, the order number and the contact person; the section with the payment term and the notes is called "Payment and notes". What is typed for a private person in these fields is not saved, and the form says so.

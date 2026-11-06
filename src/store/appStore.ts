@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
+import type { Receipt } from '../domain/receipt';
 import type { ExpenseProfile } from '../domain/expense';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
@@ -312,6 +313,14 @@ export function deleteExpense(id: ExpenseId) {
   if (!current || current.deletedAt) return;
   const at = nowIso();
   putExpense(withChanges<ExpenseMergeableField, ExpenseFile>(current, { deletedAt: at }, at));
+}
+
+/** The receipt of an expense (or none): a field of its own, merged like the others. The file is written by app/receipts.ts first. */
+export function setExpenseReceipt(id: ExpenseId, receipt: Receipt | null) {
+  const current = get().expenses.get(id);
+  if (!current || current.deletedAt) return;
+  const next = withChanges<ExpenseMergeableField, ExpenseFile>(current, { receipt }, nowIso());
+  if (next !== current) putExpense(next);
 }
 
 /** Like `integrateWrittenItem`, for one expense */

@@ -12,7 +12,7 @@ import { makeCancellation, SCHEMA_VERSION } from '../data/schema';
 import {
   cancellationOf,
   isQuote,
-  type AuditEntry,
+  type DocumentAuditEntry,
   type BankAccount,
   type CompanyFile,
   type ContactFile,
@@ -233,7 +233,7 @@ export async function issueQuote(id: DocumentId, ctx: IssueContext): Promise<Iss
 }
 
 /** What the audit log says about the document: issued, a cancellation, or a finalized quote */
-function auditEntry(doc: DocumentFile, base: Omit<AuditEntry, 'action' | 'cancels'>): AuditEntry {
+function auditEntry(doc: DocumentFile, base: Omit<DocumentAuditEntry, 'action' | 'cancels'>): DocumentAuditEntry {
   switch (doc.kind) {
     case 'quote':
       return { ...base, action: 'issueQuote' };

@@ -12,6 +12,7 @@ import { currentLang, t } from '../../i18n';
 import { accountDetail, accountName, expenseTreatmentText, fieldError } from '../../lib/labels';
 import { addExpense, deleteExpense, showToast, updateExpense, useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
+import { ReceiptCard } from './ReceiptCard';
 
 // The expenses: a searchable list, and a form for a new or an existing expense. The form edits a draft; only "Save"
 // puts the checked expense into the store (and the persister writes it). A receipt is not part of this version.
@@ -259,6 +260,7 @@ function ExpenseEditor({ expense, onDone }: { expense: ExpenseFile | null; onDon
           </div>
         </form>
       </div>
+      {expense && <ReceiptCard expense={expense} />}
     </div>
   );
 }

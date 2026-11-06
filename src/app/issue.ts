@@ -1,7 +1,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import { invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
+import { effectiveTaxTreatment, invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
 import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
 import { quoteProblems } from '../domain/quote';
@@ -190,7 +190,7 @@ export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueRes
   const problems = issueProblems({
     lineCount: inv.lines.length,
     gross: invoiceTotals(inv, smallBusiness).gross,
-    taxTreatment: smallBusiness ? 'standard' : inv.taxTreatment,
+    taxTreatment: effectiveTaxTreatment(inv.taxTreatment, smallBusiness),
     customer: customer ?? null,
     ownVatId: company.tax.vatId,
     accountActive: !!account && !account.deletedAt,

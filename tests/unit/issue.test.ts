@@ -8,8 +8,9 @@ import { err, must } from '../../src/data/result';
 import { makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
 import { nextVersionOf, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type QuoteFile } from '../../src/data/types';
 import { invoiceTotals } from '../../src/domain/invoice';
+import { cents, quantity } from '../../src/domain/money';
 import { sha256Hex } from '../../src/lib/sha256';
-import { sampleCompany, sampleContact, sampleInvoice, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleLine, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -116,6 +117,15 @@ describe('issue', () => {
     const inv = await draft({ lines: [] });
     expect(await issue(inv.id, ctx())).toEqual({ ok: false, failure: 'notReady' });
     expect(must(await repo.readNumbering('invoice'))).toBeNull();
+    expect(must(await repo.listIssuedFiles('invoice'))).toEqual([]);
+  });
+
+  it('checks a service not taxable in Germany of a small business as the editor does: no small amount invoice without an address', async () => {
+    company = sampleCompany({ tax: { taxNumber: '12/345/67890', vatId: '', vat: { kind: 'smallBusiness' }, business: { kind: 'freelance' } } });
+    customer = makeContact(sampleContact({ address: null }));
+    // 100 € without VAT: a small amount invoice (§ 33 UStDV) only for "no VAT, § 19", not for § 3a UStG
+    const inv = await draft({ taxTreatment: 'notTaxable', lines: [sampleLine({ quantity: quantity(1000), unitPrice: cents(10_000) })] });
+    expect(await issue(inv.id, ctx())).toEqual({ ok: false, failure: 'notReady' });
     expect(must(await repo.listIssuedFiles('invoice'))).toEqual([]);
   });
 

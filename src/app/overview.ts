@@ -48,7 +48,7 @@ function overviewInvoices(company: CompanyFile, docs: readonly DocumentFile[]): 
 }
 
 const overviewPayments = (payments: ReadonlyMap<string, PaymentFile>): OverviewPayment[] =>
-  [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
+  [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ id: p.id, invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
 
 /**
  * The parts of the Gesamtumsatz of this company (§ 19 Abs. 2 UStG): the net part of each payment on the day it arrived.

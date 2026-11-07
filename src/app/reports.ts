@@ -72,7 +72,7 @@ export function reportInput(company: CompanyFile, docs: readonly DocumentFile[],
         taxableInGermany: inv.taxTreatment !== 'notTaxable',
       };
     });
-  const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
+  const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ id: p.id, invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
   const expenseRows: ReportExpense[] = [...expenses.values()].filter((e) => e.deletedAt === null).map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e), category: e.category }));
   const payoutRows: ReportPayout[] = [...payouts.values()].filter((p) => p.deletedAt === null).map((p) => ({ date: p.date, amount: p.amount, vat: payoutVat(p), payerId: p.payerId }));
   return { year, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows, payouts: payoutRows };

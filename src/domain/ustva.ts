@@ -15,7 +15,8 @@
 // - The Kennzahlen come from `tax/params/<year>.ts`. Bases are entered in whole euros (`wholeEuros`), taxes in euros and cents.
 // https://www.gesetze-im-internet.de/ustg_1980/__13.html, https://www.gesetze-im-internet.de/ustg_1980/__20.html
 
-import { divideRounded, cents, subtract, sum, type BasisPoints, type Cents } from './money';
+import { cents, subtract, sum, type BasisPoints, type Cents } from './money';
+import { comparePayments, proportion } from './payment';
 import type { ExpenseTaxTreatment } from './expense';
 import type { TaxTreatment } from './invoice';
 import { addDays } from './dates';
@@ -200,8 +201,8 @@ function partsOf(inv: UstvaInvoice): Part[] {
   }
 }
 
-/** `amount` × `paid` ÷ `gross`, rounded once; `gross` is positive */
-const shareOf = (amount: Cents, paid: Cents, gross: Cents): Cents => cents(Number(divideRounded(BigInt(amount) * BigInt(paid), BigInt(gross))));
+/** `amount` × `paid` ÷ `gross`, rounded once; `gross` is positive (the same cumulative rule as `netPartsOf` in payment.ts) */
+const shareOf = proportion;
 
 const inPeriod = (date: string, p: UstvaPeriod): boolean => periodStart(p) <= date && date <= periodEnd(p);
 
@@ -218,7 +219,7 @@ function recognized(input: UstvaInput): Part[] {
     const parts = partsOf(inv);
     const gross = sum(parts.flatMap((p) => [p.net, p.tax]));
     if (gross <= 0) continue;
-    const mine = payments.filter((p) => p.invoiceId === inv.id).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    const mine = payments.filter((p) => p.invoiceId === inv.id).sort(comparePayments);
     let paid = 0;
     for (const payment of mine) {
       const before = Math.min(paid, gross);

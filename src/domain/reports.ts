@@ -6,7 +6,8 @@
 
 import { daysBetween } from './dates';
 import { cents, subtract, sum, type Cents } from './money';
-import { expenseNet, netShareOf, overview, payoutIncome, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from './overview';
+import { netPartsOf } from './payment';
+import { expenseNet, overview, payoutIncome, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from './overview';
 
 /** An invoice as the reports need it: the overview's row, with its number and its customer */
 export interface ReportInvoice extends OverviewInvoice {
@@ -83,12 +84,13 @@ function group(items: readonly { key: string; month: number; amount: Cents }[]):
 /** The income of the year per customer: the net part of each payment and the income of each payout, in the month the money arrived */
 export function turnoverByCustomer(input: ReportInput): GroupReport {
   const byId = new Map(input.invoices.map((i) => [i.id, i]));
-  const paid = input.payments
-    .filter((p) => inYear(p.date, input.year))
-    .map((p) => {
-      const inv = byId.get(p.invoiceId);
-      return { key: inv?.customerId ?? '', month: monthIndex(p.date), amount: inv ? netShareOf(p.amount, inv.net, inv.gross) : p.amount };
-    });
+  // the net parts come from the cumulative amount paid per invoice (all years), then the payments of the year are grouped
+  const parts = netPartsOf(byId, input.payments);
+  const paid: { key: string; month: number; amount: Cents }[] = [];
+  input.payments.forEach((p, i) => {
+    if (!inYear(p.date, input.year)) return;
+    paid.push({ key: byId.get(p.invoiceId)?.customerId ?? '', month: monthIndex(p.date), amount: parts[i] as Cents });
+  });
   const paidOut = input.payouts.filter((p) => inYear(p.date, input.year)).map((p) => ({ key: p.payerId, month: monthIndex(p.date), amount: payoutIncome(p) }));
   return group([...paid, ...paidOut]);
 }

@@ -41,6 +41,19 @@ const payout = (over: Partial<ReportPayout> = {}): ReportPayout => ({ date: '202
 
 const pay = (invoiceId: string, date: string, amount: number): OverviewPayment => ({ invoiceId, date, amount: cents(amount) });
 
+describe('turnoverByCustomer: part payments (cumulative shares)', () => {
+  it('a fully paid invoice paid in four parts counts exactly its net amount, as the overview and the comparison do', () => {
+    const data = input({
+      invoices: [invoice({ net: cents(1_000), gross: cents(1_190) })],
+      payments: [297, 297, 297, 299].map((a, i) => ({ id: `p${i}`, invoiceId: 'r1', date: `2026-04-0${i + 1}`, amount: cents(a) })),
+    });
+    const report = turnoverByCustomer(data);
+    expect(report.total).toBe(1_000);
+    expect(overview(data).income).toBe(1_000);
+    expect(yearComparison(data).current.income).toBe(1_000);
+  });
+});
+
 describe('turnoverByCustomer: income per customer and month, on the cash basis', () => {
   it('counts the net part of each payment in the month it arrived', () => {
     const report = turnoverByCustomer(

@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { cents } from '../../src/domain/money';
 import { netShareOf, overview, smallBusinessLimitState, turnoverEntries, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from '../../src/domain/overview';
@@ -160,5 +161,71 @@ describe('the small business limits (§ 19 UStG, as an orientation)', () => {
       previousAbove: false,
       currentAbove: true,
     });
+  });
+});
+
+const sumMonths = (months: readonly { income: number }[]): number => months.reduce((a, m) => a + m.income, 0);
+
+describe('the net parts of part payments add up to the net amount of the invoice (cumulative shares)', () => {
+  const small = (): OverviewInvoice => invoice({ net: cents(1_000), gross: cents(1_190) });
+  const parts = (...amounts: number[]): OverviewPayment[] => amounts.map((a, i) => ({ id: `p${i}`, invoiceId: 'r1', date: `2026-04-0${i + 1}`, amount: cents(a) }));
+
+  it('a fully paid invoice of 10.00 € net / 11.90 € gross paid in four parts counts exactly 10.00 € (not 10.01 €)', () => {
+    const o = run({ invoices: [small()], payments: parts(297, 297, 297, 299) });
+    expect(o.income).toBe(1_000);
+    expect(sumMonths(o.months)).toBe(1_000);
+  });
+
+  it('puts each part in the month it arrived, with the rounding difference in the part that causes it', () => {
+    const payments: OverviewPayment[] = [
+      { id: 'a', invoiceId: 'r1', date: '2026-04-01', amount: cents(297) },
+      { id: 'b', invoiceId: 'r1', date: '2026-05-01', amount: cents(297) },
+      { id: 'c', invoiceId: 'r1', date: '2026-06-01', amount: cents(297) },
+      { id: 'd', invoiceId: 'r1', date: '2026-07-01', amount: cents(299) },
+    ];
+    const o = run({ invoices: [small()], payments });
+    // cumulative: 297 -> 250, 594 -> 499, 891 -> 749, 1190 -> 1000
+    expect(o.months.slice(3, 7).map((m) => m.income)).toEqual([250, 249, 250, 251]);
+  });
+
+  it('does not depend on the order the payments are listed in (date, then ID decides)', () => {
+    const list = parts(297, 297, 297, 299);
+    const a = run({ invoices: [small()], payments: list });
+    const b = run({ invoices: [small()], payments: [...list].reverse() });
+    expect(b.months.map((m) => m.income)).toEqual(a.months.map((m) => m.income));
+  });
+
+  it('counts a payment above the gross amount only up to the net amount', () => {
+    const o = run({ payments: parts(11_900, 500) });
+    expect(o.income).toBe(10_000);
+  });
+
+  it('property: for any split of the gross amount into payments, the net parts add up to the net amount', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 5_000_000 }),
+        fc.constantFrom(0, 700, 1900),
+        fc.array(fc.integer({ min: 1, max: 1_000_000 }), { minLength: 1, maxLength: 12 }),
+        fc.array(fc.integer({ min: 1, max: 28 }), { minLength: 12, maxLength: 12 }),
+        (net, rate, weights, days) => {
+          const gross = net + Math.round((net * rate) / 10_000);
+          // split the gross amount in proportion to the weights; the last part takes the rest, so that the parts add up
+          const total = weights.reduce((a, b) => a + b, 0);
+          const amounts: number[] = [];
+          let given = 0;
+          weights.forEach((w, i) => {
+            const part = i === weights.length - 1 ? gross - given : Math.floor((gross * w) / total);
+            amounts.push(part);
+            given += part;
+          });
+          const payments = amounts.flatMap((amount, i): OverviewPayment[] =>
+            amount > 0 ? [{ id: `p${i}`, invoiceId: 'r1', date: `2026-03-${String(days[i]).padStart(2, '0')}`, amount: cents(amount) }] : [],
+          );
+          const o = run({ invoices: [invoice({ net: cents(net), gross: cents(gross) })], payments });
+          expect(o.income).toBe(net);
+          expect(sumMonths(o.months)).toBe(net);
+        },
+      ),
+    );
   });
 });

@@ -3,7 +3,8 @@
 // maps the records of the folder into the rows below. Every figure is an estimate for orientation, not tax advice.
 
 import { taxParams } from './tax/params';
-import { cents, divideRounded, subtract, sum, type Cents } from './money';
+import { cents, subtract, sum, type Cents } from './money';
+import { netPartsOf, netShareOf } from './payment';
 import { turnoverOfYear, type TurnoverEntry } from './smallBusiness';
 
 /** An invoice as the overview needs it: a draft is not counted; a cancellation counts with its negative amounts */
@@ -27,6 +28,8 @@ export interface OverviewInvoice {
 
 /** A payment of an invoice, on the day the money arrived */
 export interface OverviewPayment {
+  /** Decides the order of two payments of one day; the net parts of an invoice follow that order (see `netPartsOf`) */
+  id?: string;
   invoiceId: string;
   date: string;
   amount: Cents;
@@ -76,17 +79,7 @@ export interface Overview {
   turnover: Cents;
 }
 
-/**
- * The net part of a payment: the share of its invoice that the amount pays, amount × net ÷ gross, rounded once. A payment
- * on an invoice without VAT counts with its whole amount. The sums of a cancellation are negative: the fraction is
- * expanded by −1, so the share stays the same and the divisor positive.
- */
-export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
-  if (gross === 0) return amount;
-  const product = BigInt(amount) * BigInt(net);
-  const share = gross > 0 ? divideRounded(product, BigInt(gross)) : divideRounded(-product, -BigInt(gross));
-  return cents(Number(share));
-}
+export { netShareOf };
 
 /**
  * The parts of the Gesamtumsatz (§ 19 Abs. 2 UStG): "nach vereinnahmten Entgelten", so each payment counts on the day the
@@ -94,14 +87,16 @@ export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
  * is not taxable in Germany are left out. A payment of an invoice that is not in the list counts with its whole amount,
  * like in the income.
  */
-export function turnoverEntries(invoices: readonly OverviewInvoice[], payments: readonly OverviewPayment[]): TurnoverEntry[] {
+export function turnoverEntries(invoices: readonly OverviewInvoice[], payments: readonly OverviewPayment[], netParts?: readonly Cents[]): TurnoverEntry[] {
   const byId = new Map(invoices.map((i) => [i.id, i]));
+  // the net part of a payment comes from the cumulative amount paid per invoice (netPartsOf), as in the income
+  const parts = netParts ?? netPartsOf(byId, payments);
   const entries: TurnoverEntry[] = [];
-  for (const p of payments) {
+  payments.forEach((p, i) => {
     const inv = byId.get(p.invoiceId);
-    if (inv && !inv.taxableInGermany) continue;
-    entries.push({ date: p.date, amount: inv ? netShareOf(p.amount, inv.net, inv.gross) : p.amount });
-  }
+    if (inv && !inv.taxableInGermany) return;
+    entries.push({ date: p.date, amount: parts[i] as Cents });
+  });
   return entries;
 }
 
@@ -119,19 +114,20 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
   const { year, today, smallBusiness, invoices, payments, expenses, payouts } = input;
   const byId = new Map(invoices.map((i) => [i.id, i]));
 
-  const incomeOf = (p: OverviewPayment): Cents => {
-    const inv = byId.get(p.invoiceId);
-    return inv ? netShareOf(p.amount, inv.net, inv.gross) : p.amount;
-  };
+  // the net part of each payment, from the cumulative amount paid per invoice, so that the parts add up to the net amount
+  const netParts = netPartsOf(byId, payments);
+  const yearIncomes: { date: string; income: Cents }[] = [];
+  payments.forEach((p, i) => {
+    if (inYear(p.date, year)) yearIncomes.push({ date: p.date, income: netParts[i] as Cents });
+  });
   const expenseOf = (e: OverviewExpense): Cents => expenseNet(e, smallBusiness);
 
-  const yearPayments = payments.filter((p) => inYear(p.date, year));
   const yearExpenses = expenses.filter((e) => inYear(e.date, year));
   const yearPayouts = payouts.filter((p) => inYear(p.date, year));
   const months: MonthFigures[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: cents(0), expenses: cents(0), profit: cents(0) }));
-  for (const p of yearPayments) {
+  for (const p of yearIncomes) {
     const m = months[monthOf(p.date) - 1];
-    if (m) m.income = cents(m.income + incomeOf(p));
+    if (m) m.income = cents(m.income + p.income);
   }
   for (const p of yearPayouts) {
     const m = months[monthOf(p.date) - 1];
@@ -158,7 +154,7 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
     }
   }
 
-  const income = cents(sum(yearPayments.map(incomeOf)) + sum(yearPayouts.map(payoutIncome)));
+  const income = cents(sum(yearIncomes.map((p) => p.income)) + sum(yearPayouts.map(payoutIncome)));
   const expenseSum = sum(yearExpenses.map(expenseOf));
   return {
     year,
@@ -169,7 +165,7 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
     overdueReceivables: cents(overdueReceivables),
     overdueCount,
     months,
-    turnover: turnoverOfYear(turnoverEntries(invoices, payments), year),
+    turnover: turnoverOfYear(turnoverEntries(invoices, payments, netParts), year),
   };
 }
 

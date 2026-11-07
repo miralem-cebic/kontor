@@ -7,7 +7,7 @@
 import { err, ok, type Result } from '../data/result';
 import { Checker, type FieldError } from './check';
 import { addDays, daysBetween, isIsoDate } from './dates';
-import { BASE_RATES } from './tax/params/baseRate';
+import { BASE_RATES, baseRatesKnownUntil } from './tax/params/baseRate';
 import { BASIS_POINTS_PER_UNIT, cents, divideRounded, formatDecimal, MAX_FEE, parseCents, type Cents, type MoneyLocale } from './money';
 
 /** The dunning levels in their order: the payment reminder, then the three dunning levels */
@@ -46,7 +46,8 @@ export function nextLevel(prior: readonly PriorDunning[]): DunningLevel | null {
 
 /**
  * The interest on `open` for the days from `first` to `last` (both included), at the base rate of each day plus the
- * spread. Each part at one base rate is rounded once, half away from zero. Null when a day has no known base rate.
+ * spread. Each part at one base rate is rounded once, half away from zero. Null when a day has no known base rate, also
+ * a day after the half year of the last rate in the table (baseRatesKnownUntil): that rate is not carried on.
  */
 export function interestOn(open: Cents, first: string, last: string, spreadBp: number): { amount: Cents; days: number } | null {
   const days = daysBetween(first, last) + 1;
@@ -56,7 +57,8 @@ export function interestOn(open: Cents, first: string, last: string, spreadBp: n
   BASE_RATES.forEach((step, i) => {
     const next = BASE_RATES[i + 1]?.from;
     const lo = step.from > first ? step.from : first;
-    const hi = next !== undefined && addDays(next, -1) < last ? addDays(next, -1) : last;
+    const end = next !== undefined ? addDays(next, -1) : baseRatesKnownUntil();
+    const hi = end < last ? end : last;
     if (lo > hi) return;
     const partDays = daysBetween(lo, hi) + 1;
     counted += partDays;

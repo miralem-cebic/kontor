@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { baseRateOn } from '../../src/domain/tax/params/baseRate';
+import { baseRateOn, baseRatesKnownUntil, BASE_RATES } from '../../src/domain/tax/params/baseRate';
 import { cents } from '../../src/domain/money';
 import { claimTotal, interestOn, nextLevel, planDunning, type DunningFacts, type PriorDunning } from '../../src/domain/dunning';
 import { fcParams as params } from './fixtures';
@@ -18,9 +18,25 @@ describe('base rate (§ 247 BGB)', () => {
     ['2026-01-01', 127],
     ['2026-06-30', 127],
     ['2026-07-01', 152],
-    ['2030-01-01', 152],
+    ['2026-12-31', 152],
+    // the table ends with the half year of its last announcement: later days have no known rate
+    ['2027-01-01', null],
+    ['2030-01-01', null],
   ])('on %s the rate is %s basis points', (date, rate) => {
     expect(baseRateOn(date) ?? null).toBe(rate);
+  });
+});
+
+describe('the end of the base rate table', () => {
+  it('is the last day of the half year of the last known rate, derived from the table so that it cannot be forgotten', () => {
+    expect(BASE_RATES[BASE_RATES.length - 1]?.from).toBe('2026-07-01');
+    expect(baseRatesKnownUntil()).toBe('2026-12-31');
+  });
+
+  it('interest over days after it is not stated: no stale rate is carried on', () => {
+    expect(interestOn(cents(100_000), '2026-12-31', '2026-12-31', 900)).toEqual({ amount: 29, days: 1 });
+    expect(interestOn(cents(100_000), '2026-12-31', '2027-01-01', 900)).toBeNull();
+    expect(interestOn(cents(100_000), '2027-02-01', '2027-02-10', 900)).toBeNull();
   });
 });
 
@@ -43,13 +59,13 @@ describe('interest on an open amount', () => {
     expect(interestOn(cents(100_000), '2023-12-30', '2024-01-02', 900)).toBeNull();
   });
 
-  it('the interest is the same whichever way a period is split in two (property, up to the rounding of the parts)', () => {
+  it('the interest is the same whichever way a period is split in two (property within the table, up to the rounding of the parts)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 10_000_000 }),
-        fc.integer({ min: 0, max: 1000 }),
-        fc.integer({ min: 2, max: 500 }),
-        fc.integer({ min: 0, max: 499 }),
+        fc.integer({ min: 0, max: 600 }),
+        fc.integer({ min: 2, max: 490 }),
+        fc.integer({ min: 0, max: 488 }),
         (open, startOffset, length, splitAt) => {
           const start = new Date(Date.UTC(2024, 0, 1) + startOffset * 86_400_000).toISOString().slice(0, 10);
           const endMs = Date.UTC(2024, 0, 1) + (startOffset + length - 1) * 86_400_000;
@@ -138,6 +154,17 @@ describe('planning a dunning', () => {
 
   it('a period without a known base rate is refused, so that no interest is stated that cannot be checked', () => {
     expect(planDunning(facts({ due: '2023-12-01', date: '2023-12-20', today: '2023-12-20' }))).toEqual({ ok: false, error: ['rateUnknown'] });
+  });
+});
+
+describe('a dunning after the last known base rate', () => {
+  it('is refused with rateUnknown: an invoice due 2026-12-15 dunned on 2027-02-01', () => {
+    expect(planDunning(facts({ due: '2026-12-15', date: '2027-02-01', today: '2027-02-01' }))).toEqual({ ok: false, error: ['rateUnknown'] });
+  });
+
+  it('is planned as long as every day of its interest has a known rate', () => {
+    const plan = planDunning(facts({ due: '2026-12-15', date: '2026-12-31', today: '2026-12-31' }));
+    expect(plan.ok).toBe(true);
   });
 });
 

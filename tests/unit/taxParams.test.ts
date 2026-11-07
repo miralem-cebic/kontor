@@ -38,7 +38,11 @@ describe('minimum trade tax multiplier (§ 16 Abs. 4 Satz 2 GewStG)', () => {
 describe('small business limits (§ 19 Abs. 1 UStG)', () => {
   it('25,000 € turnover in the previous year and 100,000 € in the current year, in both known years', () => {
     for (const year of [2026, 2027]) {
-      expect(taxParams(year).smallBusiness).toEqual({ previousYearLimit: 2_500_000, currentYearLimit: 10_000_000 });
+      expect(taxParams(year).smallBusiness).toMatchObject({ previousYearLimit: 2_500_000, currentYearLimit: 10_000_000 });
     }
+  });
+
+  it('the waiver (§ 19 Abs. 3 UStG) binds for at least five calendar years, in both known years', () => {
+    for (const year of [2026, 2027]) expect(taxParams(year).smallBusiness.waiverBindingYears).toBe(5);
   });
 });

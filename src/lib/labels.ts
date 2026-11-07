@@ -176,9 +176,12 @@ const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
   customerVatId: 'issue.customerVatId',
   ownVatId: 'issue.ownVatId',
   accountRemoved: 'issue.accountRemoved',
+  smallBusinessLimit: 'smallBusiness.issueLimit',
+  smallBusinessPreviousYear: 'smallBusiness.issuePreviousYear',
 };
 
-export const issueProblemText = (p: IssueProblem): string => t(ISSUE_PROBLEM_KEY[p]);
+/** `values` fill the placeholders of the small business texts: the crossing `date` and the `limit` of the previous year */
+export const issueProblemText = (p: IssueProblem, values?: Record<string, string | number>): string => t(ISSUE_PROBLEM_KEY[p], values);
 
 const QUOTE_PROBLEM_KEY: Record<QuoteProblem, MessageKey> = {
   noCustomer: 'issue.noCustomer',

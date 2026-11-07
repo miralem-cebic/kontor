@@ -4,6 +4,7 @@
 
 import { taxParams } from './tax/params';
 import { cents, divideRounded, subtract, sum, type Cents } from './money';
+import { turnoverOfYear, type TurnoverEntry } from './smallBusiness';
 
 /** An invoice as the overview needs it: a draft is not counted; a cancellation counts with its negative amounts */
 export interface OverviewInvoice {
@@ -17,6 +18,11 @@ export interface OverviewInvoice {
   gross: Cents;
   /** The day the invoice is due (YYYY-MM-DD); empty for a cancellation */
   dueDate: string;
+  /**
+   * A supply taxable in Germany (§ 1 Abs. 1 Nr. 1 UStG). False for a service whose place of supply is abroad
+   * (`notTaxable`): it is no part of the Gesamtumsatz of the small business limits (§ 19 Abs. 2 UStG).
+   */
+  taxableInGermany: boolean;
 }
 
 /** A payment of an invoice, on the day the money arrived */
@@ -55,7 +61,7 @@ export interface Overview {
   overdueReceivables: Cents;
   overdueCount: number;
   months: MonthFigures[];
-  /** The net turnover of the issued invoices of the year (cancellations count negative) */
+  /** The Gesamtumsatz of the year for the small business limits (§ 19 Abs. 2 UStG): see `turnoverEntries` */
   turnover: Cents;
 }
 
@@ -69,6 +75,23 @@ export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
   const product = BigInt(amount) * BigInt(net);
   const share = gross > 0 ? divideRounded(product, BigInt(gross)) : divideRounded(-product, -BigInt(gross));
   return cents(Number(share));
+}
+
+/**
+ * The parts of the Gesamtumsatz (§ 19 Abs. 2 UStG): "nach vereinnahmten Entgelten", so each payment counts on the day the
+ * money arrived, with its net part, whatever the invoice date or the way VAT is accounted for. Payments of a supply that
+ * is not taxable in Germany are left out. A payment of an invoice that is not in the list counts with its whole amount,
+ * like in the income.
+ */
+export function turnoverEntries(invoices: readonly OverviewInvoice[], payments: readonly OverviewPayment[]): TurnoverEntry[] {
+  const byId = new Map(invoices.map((i) => [i.id, i]));
+  const entries: TurnoverEntry[] = [];
+  for (const p of payments) {
+    const inv = byId.get(p.invoiceId);
+    if (inv && !inv.taxableInGermany) continue;
+    entries.push({ date: p.date, amount: inv ? netShareOf(p.amount, inv.net, inv.gross) : p.amount });
+  }
+  return entries;
 }
 
 /** What an expense counts: its gross amount for a small business, otherwise without the VAT that comes back */
@@ -116,7 +139,6 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
     }
   }
 
-  const turnover = invoices.filter((i) => i.issued && inYear(i.date, year)).reduce((total, i) => total + i.net, 0);
   const income = sum(yearPayments.map(incomeOf));
   const expenseSum = sum(yearExpenses.map(expenseOf));
   return {
@@ -128,7 +150,7 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
     overdueReceivables: cents(overdueReceivables),
     overdueCount,
     months,
-    turnover: cents(turnover),
+    turnover: turnoverOfYear(turnoverEntries(invoices, payments), year),
   };
 }
 

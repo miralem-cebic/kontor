@@ -5,12 +5,13 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { cancellationId, type DocumentId } from '../../src/data/ids';
 import { err, must } from '../../src/data/result';
-import { makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
+import { makeContact, makeInvoice, makePayment, makeQuote } from '../../src/data/schema';
 import { nextVersionOf, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type QuoteFile } from '../../src/data/types';
 import { invoiceTotals } from '../../src/domain/invoice';
-import { cents, quantity } from '../../src/domain/money';
+import { basisPoints, cents, quantity } from '../../src/domain/money';
+import type { PaymentFile } from '../../src/data/types';
 import { sha256Hex } from '../../src/lib/sha256';
-import { sampleCompany, sampleContact, sampleInvoice, sampleLine, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleLine, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -32,6 +33,7 @@ const ctx = (over: Partial<IssueContext> = {}): IssueContext => ({
   company,
   contacts: new Map([[customer.id, customer]]),
   documents,
+  payments: new Map(),
   logo: null,
   device: 'device-1',
   now: new Date('2026-10-31T10:00:00Z'),
@@ -374,5 +376,60 @@ describe('issueQuote', () => {
     expect((await finalizeOk(a.id)).issued?.number).toBe('AN-2026-0001-2');
     expect(await issueQuote(b.id, ctx())).toEqual({ ok: false, failure: 'notReady' });
     expect(must(await repo.listIssuedFiles('quote'))).toEqual(['AN-2026-0001.pdf', 'AN-2026-0001-2.pdf']);
+  });
+});
+
+describe('issuing for a small business after the 100,000 € limit was crossed (§ 19 Abs. 1 UStG)', () => {
+  const SMALL_TAX = { taxNumber: '12/345/67890', vatId: '', vat: { kind: 'smallBusiness' as const }, business: { kind: 'freelance' as const } };
+  let payments: Map<string, PaymentFile>;
+
+  /** An invoice of 100,000.01 € without VAT, issued earlier and paid on the given day: the limit is crossed that day */
+  const crossOn = (day: string) => {
+    const big = {
+      ...makeInvoice(customer.id, company.bank.defaultAccountId, sampleInvoice({ date: '2026-03-01', lines: [sampleLine({ quantity: quantity(1000), unitPrice: cents(10_000_001), vatRate: basisPoints(0) })] }), null),
+      issued: sampleIssued('RE-2026-0001'),
+    };
+    documents.set(big.id, big);
+    const p = makePayment(big.id, { date: day, amount: cents(10_000_001), accountId: company.bank.defaultAccountId, note: '' });
+    payments.set(p.id, p);
+  };
+
+  beforeEach(() => {
+    company = sampleCompany({ tax: SMALL_TAX });
+    payments = new Map();
+  });
+
+  it('refuses a draft dated after the crossing day, and writes nothing', async () => {
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-06-03' });
+    expect(await issue(inv.id, ctx({ payments }))).toEqual({ ok: false, failure: 'notReady' });
+    expect(must(await repo.readNumbering('invoice'))).toBeNull();
+    expect(must(await repo.listIssuedFiles('invoice'))).toEqual([]);
+  });
+
+  it('issues a draft dated before the crossing, also when it is issued late', async () => {
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-05-20' });
+    const done = await issue(inv.id, ctx({ payments }));
+    expect(done.ok).toBe(true);
+  });
+
+  it('issues a service not taxable in Germany after the crossing: it shows no VAT either way', async () => {
+    crossOn('2026-06-02');
+    customer = makeContact(sampleContact({ address: { street: 'Main St 1', postalCode: '10001', city: 'New York', country: 'US' } }));
+    const inv = await draft({ date: '2026-06-03', taxTreatment: 'notTaxable' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
+  });
+
+  it('does not refuse a company with regular VAT, which charges VAT', async () => {
+    company = sampleCompany();
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-06-03' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
+  });
+
+  it('issues without payments, as before', async () => {
+    const inv = await draft({ date: '2026-06-03' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
   });
 });

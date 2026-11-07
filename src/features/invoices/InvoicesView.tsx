@@ -3,7 +3,8 @@ import { Choice, Row, SelectField, TextArea, TextField } from '../../components/
 import { Icon } from '../../components/Icon';
 import { ExportCsvButton } from '../export/ExportCsvButton';
 import { JumpNav, type JumpSection } from '../../components/JumpNav';
-import { isoDateOf } from '../../domain/dates';
+import { isIsoDate, isoDateOf } from '../../domain/dates';
+import { taxParams } from '../../domain/tax/params';
 import { draftTotals, hasNegativeRate, type LineFieldPath } from '../../domain/document';
 import {
   byInvoiceDate,
@@ -19,6 +20,7 @@ import {
   invoiceTotals,
   issueProblems,
   readInvoice,
+  smallBusinessRefusalOf,
   TAX_TREATMENTS,
   effectiveTaxTreatment,
   taxTreatmentHint,
@@ -34,6 +36,7 @@ import { isOverdue, paidAmount, paymentStateOf, type PaymentState } from '../../
 import type { DocumentId } from '../../data/ids';
 import { isInvoice, isQuote, type CompanyFile, type InvoiceFile, type PaymentFile, type QuoteFile } from '../../data/types';
 import { issueInvoice } from '../../app/issue';
+import { companyTurnoverEntries } from '../../app/overview';
 import { currentLang, t, type MessageKey } from '../../i18n';
 import { accountDetail, accountName, fieldError, issueFailureText, issueProblemText, problemText, taxTreatmentHintText, taxTreatmentText } from '../../lib/labels';
 import { addInvoice, deleteDocument, showToast, updateInvoice, useApp } from '../../store/appStore';
@@ -270,6 +273,8 @@ interface EditorProps {
 
 function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: EditorProps) {
   const contacts = useApp((s) => s.contacts);
+  const documents = useApp((s) => s.documents);
+  const allPayments = useApp((s) => s.payments);
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const lang = currentLang();
   const [draft, setDraft] = useState<InvoiceDraft>(start);
@@ -310,6 +315,9 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
     : TAX_TREATMENTS.map((v) => ({ value: v, ...taxTreatmentText(v) }));
   const note = vatNote(treatment, smallBusiness);
   const totals = draftTotals(draft.lines, lang, note !== null, draft);
+  // after the 100,000 € limit was crossed (or a previous year above 25,000 €) a small business may not date an invoice without VAT
+  const turnover = useMemo(() => (smallBusiness ? companyTurnoverEntries(company, documents, allPayments) : []), [smallBusiness, company, documents, allPayments]);
+  const refusal = isIsoDate(draft.date) ? smallBusinessRefusalOf({ date: draft.date, taxTreatment: treatment }, smallBusiness, turnover) : null;
   // a negative sum shows up while it is typed, not only on "Save"
   const lineError = (path: LineFieldPath | 'lines') => e(path) ?? (path === 'lines' && hasNegativeRate(totals) ? problemText('negativeTotal') : undefined);
   const problems = issueProblems({
@@ -319,6 +327,7 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
     customer: customer ?? null,
     ownVatId: company.tax.vatId,
     accountActive: !!account && !account.deletedAt,
+    smallBusinessRefusal: refusal,
   });
   const due = draftDueDate(draft);
   // a small business has no VAT to explain; the hint is for a service not taxable in Germany
@@ -540,7 +549,7 @@ function InvoiceEditor({ company, invoice, quote, copyOf, start, onDone }: Edito
                   {problems.map((p) => (
                     <li key={p} className="bad">
                       <Icon n="alert" s={14} />
-                      {issueProblemText(p)}
+                      {issueProblemText(p, { date: formatDate(refusal?.from ?? draft.date), limit: formatCents(taxParams(Number(draft.date.slice(0, 4))).smallBusiness.previousYearLimit, lang) })}
                     </li>
                   ))}
                 </ul>

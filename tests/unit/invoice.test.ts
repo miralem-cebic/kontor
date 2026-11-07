@@ -16,6 +16,7 @@ import {
   invoiceTotals,
   issueProblems,
   readInvoice,
+  smallBusinessRefusalOf,
   SMALL_AMOUNT_LIMIT,
   TAX_TREATMENTS,
   taxTreatmentHint,
@@ -232,6 +233,7 @@ describe('issueProblems', () => {
     customer: sampleContact(),
     ownVatId: 'DE136695976',
     accountActive: true,
+    smallBusinessRefusal: null,
     ...over,
   });
   const noAddress = sampleContact({ address: null });
@@ -239,6 +241,11 @@ describe('issueProblems', () => {
 
   it('a complete draft can be issued', () => {
     expect(issueProblems(facts())).toEqual([]);
+  });
+
+  it('refuses the small business treatment when the exemption has ended, with the reason', () => {
+    expect(issueProblems(facts({ smallBusinessRefusal: { reason: 'currentYear', from: '2026-06-02' } }))).toEqual(['smallBusinessLimit']);
+    expect(issueProblems(facts({ smallBusinessRefusal: { reason: 'previousYear', from: '2027-01-01' } }))).toEqual(['smallBusinessPreviousYear']);
   });
 
   it('needs a customer, a line and an active account', () => {
@@ -283,5 +290,27 @@ describe('lists', () => {
   it('newest first', () => {
     const invoices = [sampleInvoice({ date: '2026-10-01' }), sampleInvoice({ date: '2026-10-31', subject: 'B' }), sampleInvoice({ date: '2026-10-31', subject: 'A' })];
     expect(invoices.sort(byInvoiceDate).map((i) => `${i.date} ${i.subject}`)).toEqual(['2026-10-31 A', '2026-10-31 B', '2026-10-01 Website-Relaunch']);
+  });
+});
+
+describe('smallBusinessRefusalOf: the small business treatment of an invoice after the limit', () => {
+  const crossed = [
+    { date: '2026-03-01', amount: cents(6_000_000) },
+    { date: '2026-06-02', amount: cents(4_000_001) },
+  ];
+  const inv = (date: string, taxTreatment: 'standard' | 'notTaxable' = 'standard') => ({ date, taxTreatment });
+
+  it('refuses a small business invoice dated after the crossing day, and only that', () => {
+    expect(smallBusinessRefusalOf(inv('2026-06-03'), true, crossed)).toEqual({ reason: 'currentYear', from: '2026-06-02' });
+    expect(smallBusinessRefusalOf(inv('2026-06-02'), true, crossed)).toBeNull();
+    expect(smallBusinessRefusalOf(inv('2026-05-30'), true, crossed)).toBeNull();
+  });
+
+  it('does not touch a regular business, whose invoices charge VAT', () => {
+    expect(smallBusinessRefusalOf(inv('2026-06-03'), false, crossed)).toBeNull();
+  });
+
+  it('does not touch a service not taxable in Germany: it shows no VAT after the crossing either', () => {
+    expect(smallBusinessRefusalOf(inv('2026-06-03', 'notTaxable'), true, crossed)).toBeNull();
   });
 });

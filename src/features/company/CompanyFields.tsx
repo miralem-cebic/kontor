@@ -9,6 +9,7 @@ import { normalizeIban } from '../../domain/iban';
 import { normalizeVatId } from '../../domain/taxIds';
 import { footerColumns } from '../../pdf/content';
 import { formatNumber, nextFreeNumber, patternProblem } from '../../domain/numbering';
+import { taxParams } from '../../domain/tax/params';
 import { upcomingMinimum } from '../../domain/tax/tradeTax';
 import { currentLang, t, type MessageKey } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
@@ -62,6 +63,14 @@ export function TaxFields({ draft, set, errors }: FieldsProps) {
         <TextField label={t('tax.taxNumber')} hint={t('tax.taxNumberHint')} value={draft.taxNumber} onChange={(taxNumber) => set({ taxNumber })} error={e('taxNumber')} maxLength={40} />
         <TextField label={t('tax.vatId')} hint={t('tax.vatIdHint')} value={draft.vatId} onChange={(vatId) => set({ vatId })} error={e('vatId')} maxLength={20} />
       </Row>
+      <div className="note" role="note" aria-label={t('smallBusiness.waiverTitle')}>
+        <p>
+          <strong>{t('smallBusiness.waiverTitle')}</strong>
+        </p>
+        <p>{t('smallBusiness.waiverText')}</p>
+        <p>{t('smallBusiness.waiverBinding', { years: taxParams(thisYear()).smallBusiness.waiverBindingYears })}</p>
+        <p>{t('smallBusiness.waiverNo')}</p>
+      </div>
       <Choice
         label={t('tax.smallBusiness')}
         hint={t('tax.smallBusinessHint')}

@@ -34,8 +34,10 @@ test('the setup assistant checks each step and writes the company folder', async
   // tax: regular VAT with its follow-up questions, trade with multiplier
   await expect(page.getByRole('heading', { name: 'Steuer' })).toBeVisible();
   // who kontor is for, and that VAT covers all businesses of one person
-  await expect(page.getByRole('note')).toContainText('kontor ist für Einzelunternehmen');
-  await expect(page.getByRole('note')).toContainText('Kleinunternehmerregelung und Voranmeldung gelten für alle Betriebe zusammen');
+  await expect(page.getByRole('note').first()).toContainText('kontor ist für Einzelunternehmen');
+  await expect(page.getByRole('note').first()).toContainText('Kleinunternehmerregelung und Voranmeldung gelten für alle Betriebe zusammen');
+  // the waiver of the small business scheme is explained before it is chosen
+  await expect(page.getByRole('note', { name: 'Verzicht auf die Kleinunternehmerregelung' })).toContainText('mindestens 5 Kalenderjahre');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Bitte die Steuernummer oder die USt-IdNr. angeben.')).toBeVisible();
   // the assistant moves the focus to the first invalid field in the next frame; typing before that could land there

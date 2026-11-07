@@ -41,6 +41,12 @@ export type FieldProblem =
   | 'date'
   | 'validUntil'
   | 'periodEnd'
+  | 'payerRemoved'
+  | 'payerVatId'
+  | 'vatForSmallBusiness'
+  | 'smallBusinessOnly'
+  | 'httpsLink'
+  | 'month'
   | `iban.${IbanProblem}`
   | `pattern.${PatternProblem}`
   /** The quote pattern is the invoice pattern: a quote and an invoice would get the same numbers */

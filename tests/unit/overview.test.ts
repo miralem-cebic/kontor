@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cents } from '../../src/domain/money';
-import { netShareOf, overview, smallBusinessLimitState, type OverviewExpense, type OverviewInvoice, type OverviewPayment } from '../../src/domain/overview';
+import { netShareOf, overview, smallBusinessLimitState, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from '../../src/domain/overview';
 
 const TODAY = '2026-06-01';
 
@@ -17,8 +17,8 @@ const invoice = (over: Partial<OverviewInvoice> = {}): OverviewInvoice => ({
   ...over,
 });
 
-const run = (over: { invoices?: OverviewInvoice[]; payments?: OverviewPayment[]; expenses?: OverviewExpense[]; smallBusiness?: boolean; year?: number } = {}) =>
-  overview({ year: over.year ?? 2026, today: TODAY, smallBusiness: over.smallBusiness ?? false, invoices: over.invoices ?? [invoice()], payments: over.payments ?? [], expenses: over.expenses ?? [] });
+const run = (over: { invoices?: OverviewInvoice[]; payments?: OverviewPayment[]; expenses?: OverviewExpense[]; payouts?: OverviewPayout[]; smallBusiness?: boolean; year?: number } = {}) =>
+  overview({ year: over.year ?? 2026, today: TODAY, smallBusiness: over.smallBusiness ?? false, invoices: over.invoices ?? [invoice()], payments: over.payments ?? [], expenses: over.expenses ?? [], payouts: over.payouts ?? [] });
 
 describe('netShareOf: the net part of a payment', () => {
   it('takes the share of the invoice that the amount pays, rounded once', () => {
@@ -85,6 +85,41 @@ describe('overview of a small business', () => {
       expenses: [{ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900) }],
     });
     expect(o).toMatchObject({ income: 5_950, expenses: 11_900, profit: -5_950, turnover: 11_900 });
+  });
+});
+
+describe('overview with payouts (income without an invoice)', () => {
+  const payout = (over: Partial<OverviewPayout> = {}): OverviewPayout => ({ date: '2026-11-03', amount: cents(123_456), vat: cents(0), ...over });
+
+  it('counts the whole amount of a payout without German VAT in the month the money arrived', () => {
+    const o = run({ invoices: [], payouts: [payout()] });
+    expect(o).toMatchObject({ income: 123_456, expenses: 0, profit: 123_456 });
+    expect(o.months[10]).toEqual({ month: 11, income: 123_456, expenses: 0, profit: 123_456 });
+  });
+
+  it('counts a domestic payout without the VAT inside it', () => {
+    const o = run({ invoices: [], payouts: [payout({ amount: cents(11_900), vat: cents(1_900) })] });
+    expect(o.income).toBe(10_000);
+  });
+
+  it('adds payouts to the payments of invoices', () => {
+    const o = run({ payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }], payouts: [payout({ amount: cents(1_000) })], expenses: [{ date: '2026-05-01', gross: cents(400), vat: cents(0) }] });
+    expect(o).toMatchObject({ income: 6_000, expenses: 400, profit: 5_600 });
+  });
+
+  it('counts only the payouts of the year', () => {
+    const o = run({ invoices: [], payouts: [payout({ date: '2025-12-31' }), payout({ date: '2027-01-01' }), payout({ date: '2026-01-01', amount: cents(500) })] });
+    expect(o.income).toBe(500);
+  });
+
+  it('a payout is no invoice: it is neither receivable nor part of the turnover compared with the small business limits (open question 2 of #30)', () => {
+    const o = run({ invoices: [], payouts: [payout()] });
+    expect(o).toMatchObject({ openReceivables: 0, overdueReceivables: 0, turnover: 0 });
+  });
+
+  it('counts the same for a small business (no VAT inside, whole amount)', () => {
+    const o = run({ smallBusiness: true, invoices: [], payouts: [payout()] });
+    expect(o.income).toBe(123_456);
   });
 });
 

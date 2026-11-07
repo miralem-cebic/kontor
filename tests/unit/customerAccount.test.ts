@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { cents } from '../../src/domain/money';
-import { customerAccount, type AccountInvoice, type AccountPayment } from '../../src/domain/customerAccount';
+import { customerAccount, type AccountInvoice, type AccountPayment, type AccountPayout } from '../../src/domain/customerAccount';
 import { fcParams as params } from './fixtures';
 
 const TODAY = '2026-10-31';
@@ -76,7 +76,7 @@ describe('customer account: entries and balance', () => {
   });
 
   it('nothing to show: an empty account with a balance of 0', () => {
-    expect(customerAccount([], [], TODAY)).toEqual({ entries: [], invoiced: 0, paid: 0, balance: 0, overdue: 0 });
+    expect(customerAccount([], [], TODAY)).toEqual({ entries: [], invoiced: 0, paid: 0, balance: 0, overdue: 0, payouts: [], payoutsReceived: 0, payoutsIncome: 0 });
   });
 });
 
@@ -93,6 +93,46 @@ describe('customer account: overdue', () => {
 
   it('a cancelled invoice is never overdue', () => {
     expect(customerAccount([invoice({ cancelled: true })], [], TODAY).overdue).toBe(0);
+  });
+});
+
+describe('customer account: payouts without an invoice', () => {
+  const payout = (over: Partial<AccountPayout> = {}): AccountPayout => ({ id: 'po-1', date: '2026-10-20', period: '2026-09', amount: cents(50_000), income: cents(50_000), ...over });
+
+  it('lists the payouts by date and adds up what was received, without changing the balance', () => {
+    const base = customerAccount([invoice()], [payment()], TODAY);
+    const account = customerAccount([invoice()], [payment()], TODAY, [payout({ id: 'po-2', date: '2026-10-25', amount: cents(1_000), income: cents(1_000) }), payout()]);
+    expect(account.payouts.map((p) => p.id)).toEqual(['po-1', 'po-2']);
+    expect(account.payoutsReceived).toBe(51_000);
+    expect(account.balance).toBe(base.balance);
+    expect(account.entries).toEqual(base.entries);
+    expect(account.paid).toBe(base.paid);
+    expect(account.overdue).toBe(base.overdue);
+  });
+
+  it('an account with payouts only has a balance of 0', () => {
+    const account = customerAccount([], [], TODAY, [payout()]);
+    expect(account).toMatchObject({ balance: 0, invoiced: 0, paid: 0, payoutsReceived: 50_000 });
+    expect(account.entries).toEqual([]);
+  });
+
+  it('adds up the income as well as the amounts', () => {
+    const account = customerAccount([], [], TODAY, [payout({ amount: cents(11_900), income: cents(10_000) })]);
+    expect(account.payoutsReceived).toBe(11_900);
+    expect(account.payoutsIncome).toBe(10_000);
+  });
+
+  it('payouts never change the balance (property)', () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 1, max: 1_000_000 }), { maxLength: 8 }), (amounts) => {
+        const payouts = amounts.map((a, i) => payout({ id: `po-${i}`, amount: cents(a), income: cents(a) }));
+        const base = customerAccount([invoice()], [payment()], TODAY);
+        const account = customerAccount([invoice()], [payment()], TODAY, payouts);
+        expect(account.balance).toBe(base.balance);
+        expect(account.payoutsReceived).toBe(amounts.reduce((s, a) => s + a, 0));
+      }),
+      params,
+    );
   });
 });
 

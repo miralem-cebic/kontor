@@ -29,6 +29,8 @@ import { DOCUMENT_LIMITS, documentTotals, lineNetInRange, type DocumentLine } fr
 import { NO_DISCOUNT, type Discount } from '../domain/discount';
 import { INVOICE_LIMITS, TAX_TREATMENTS, type IssuedInfo, type IssueSnapshot, type ServicePeriod, type TaxTreatment } from '../domain/invoice';
 import { EXPENSE_LIMITS, EXPENSE_TAX_TREATMENTS } from '../domain/expense';
+import { isHttpsUrl } from '../domain/links';
+import { PAYOUT_LIMITS, PAYOUT_TAX_TREATMENTS } from '../domain/payout';
 import { isReceiptFileName, isReceiptLink, isReceiptYear, receiptTypeOf, RECEIPT_LINK_MAX_LENGTH, RECEIPT_MAX_BYTES, RECEIPT_NAME_MAX_LENGTH, type Receipt } from '../domain/receipt';
 import { ITEM_LIMITS } from '../domain/item';
 import { BASIS_POINTS_PER_UNIT, basisPoints, cents, lineNet, quantity, type BasisPoints, type Cents, type Quantity } from '../domain/money';
@@ -63,6 +65,8 @@ import {
   NUMBER_RANGES,
   type NumberingFile,
   PAYMENT_MERGEABLE_FIELDS,
+  PAYOUT_MERGEABLE_FIELDS,
+  type PayoutFile,
   QUOTE_STATUS_MERGEABLE_FIELDS,
   type PaymentFile,
   type QuoteStatusFile,
@@ -123,6 +127,7 @@ const paymentId = idOf<'PaymentId'>();
 const quoteStatusId = idOf<'QuoteStatusId'>();
 const dunningId = idOf<'DunningId'>();
 const expenseId = idOf<'ExpenseId'>();
+const payoutId = idOf<'PayoutId'>();
 const importBatchId = idOf<'ImportBatchId'>();
 
 const text =
@@ -591,6 +596,39 @@ export const validateExpense: Check<ExpenseFile> = objectOf<ExpenseFile>({
   createdAt: dateTime,
   deletedAt: nullable(dateTime),
   fieldUpdatedAt: fieldTimestamps(EXPENSE_MERGEABLE_FIELDS),
+});
+
+/** A payout is more than 0 and at most the largest amount a file may hold; the form checks it again when it is saved */
+const payoutAmount: Check<Cents> = (v, path) => cents(int(1, PAYOUT_LIMITS.maxAmount)(v, path));
+
+/** The month a payout covers (YYYY-MM), or empty */
+const payoutPeriod: Check<string> = (v, path) => {
+  const s = text(7)(v, path);
+  return s === '' || /^\d{4}-(0[1-9]|1[0-2])$/.test(s) ? s : fail(path, 'expected a month (YYYY-MM) or nothing');
+};
+
+/** The link to the statement of a payout: https only (it may become an href), or empty */
+const statementLink: Check<string> = (v, path) => {
+  const s = text(PAYOUT_LIMITS.statementUrl)(v, path);
+  return s === '' || isHttpsUrl(s) ? s : fail(path, 'expected an https link or nothing');
+};
+
+/** Income without an invoice of kontor, read with the limits of its form (payouts/) */
+export const validatePayout: Check<PayoutFile> = objectOf<PayoutFile>({
+  schemaVersion: num,
+  id: payoutId,
+  date: isoDate,
+  accountId,
+  amount: payoutAmount,
+  payerId: contactId,
+  period: payoutPeriod,
+  taxTreatment: oneOf(PAYOUT_TAX_TREATMENTS),
+  vatRate,
+  statementUrl: statementLink,
+  note: text(PAYOUT_LIMITS.note),
+  createdAt: dateTime,
+  deletedAt: nullable(dateTime),
+  fieldUpdatedAt: fieldTimestamps(PAYOUT_MERGEABLE_FIELDS),
 });
 
 /** A dunning claims an amount in cents: not negative, at most the largest amount a file may hold */

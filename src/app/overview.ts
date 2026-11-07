@@ -3,12 +3,13 @@
 // that a change of the company later does not change a figure of an issued invoice.
 
 import type { DocumentId } from '../data/ids';
-import type { CompanyFile, DocumentFile, ExpenseFile, PaymentFile } from '../data/types';
+import type { CompanyFile, DocumentFile, ExpenseFile, PaymentFile, PayoutFile } from '../data/types';
 import { cancellationOf, isInvoice } from '../data/types';
 import { expenseVat } from '../domain/expense';
 import { isoDateOf } from '../domain/dates';
 import { dueDate, invoiceTotals } from '../domain/invoice';
-import { overview as computeOverview, smallBusinessLimitState, type Overview, type OverviewExpense, type OverviewInvoice, type OverviewPayment } from '../domain/overview';
+import { payoutVat } from '../domain/payout';
+import { overview as computeOverview, smallBusinessLimitState, type Overview, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from '../domain/overview';
 
 export interface OverviewView {
   figures: Overview;
@@ -18,7 +19,7 @@ export interface OverviewView {
 }
 
 /** The overview of the calendar year of `now`, from the records of the open company; null without a company */
-export function buildOverview(company: CompanyFile | null, documents: ReadonlyMap<DocumentId, DocumentFile>, payments: ReadonlyMap<string, PaymentFile>, expenses: ReadonlyMap<string, ExpenseFile>, now: Date): OverviewView | null {
+export function buildOverview(company: CompanyFile | null, documents: ReadonlyMap<DocumentId, DocumentFile>, payments: ReadonlyMap<string, PaymentFile>, expenses: ReadonlyMap<string, ExpenseFile>, payouts: ReadonlyMap<string, PayoutFile>, now: Date): OverviewView | null {
   if (!company) return null;
   const today = isoDateOf(now);
   const year = now.getFullYear();
@@ -45,7 +46,8 @@ export function buildOverview(company: CompanyFile | null, documents: ReadonlyMa
     });
   const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
   const expenseRows: OverviewExpense[] = [...expenses.values()].filter((e) => e.deletedAt === null).map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e) }));
-  const input = (y: number) => ({ year: y, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows });
+  const payoutRows: OverviewPayout[] = [...payouts.values()].filter((p) => p.deletedAt === null).map((p) => ({ date: p.date, amount: p.amount, vat: payoutVat(p) }));
+  const input = (y: number) => ({ year: y, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows, payouts: payoutRows });
 
   const figures = computeOverview(input(year));
   const previous = computeOverview(input(year - 1));

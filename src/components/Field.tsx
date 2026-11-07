@@ -44,7 +44,7 @@ export function TextField({
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
-  type?: 'text' | 'email' | 'tel' | 'date';
+  type?: 'text' | 'email' | 'tel' | 'date' | 'month';
   autoComplete?: string;
   inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'tel';
   maxLength?: number;

@@ -1,8 +1,8 @@
-import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenQuoteStatus, setSaveStatus, useApp, type AppState } from '../store/appStore';
+import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenPayout, integrateWrittenQuoteStatus, setSaveStatus, useApp, type AppState } from '../store/appStore';
 import type { CompanyId } from './ids';
 import { classifyError, type Repository, type StorageError } from './repository';
 import { err, ok, type Result } from './result';
-import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, PaymentFile, QuoteStatusFile } from './types';
+import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, PaymentFile, PayoutFile, QuoteStatusFile } from './types';
 
 // Watches the app state and writes what changed, debounced. Objects that come from the folder or were already
 // written are kept in `clean` and do not trigger another write. When a write fails, the change stays in the queue
@@ -25,7 +25,7 @@ export class Persister {
 
   /** Starts watching; the state at this moment counts as saved */
   start() {
-    const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses } = useApp.getState();
+    const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts } = useApp.getState();
     if (company) this.clean.add(company);
     for (const c of contacts.values()) this.clean.add(c);
     for (const i of items.values()) this.clean.add(i);
@@ -34,6 +34,7 @@ export class Persister {
     for (const d of dunnings.values()) this.clean.add(d);
     for (const q of quoteStatuses.values()) this.clean.add(q);
     for (const e of expenses.values()) this.clean.add(e);
+    for (const p of payouts.values()) this.clean.add(p);
     this.unsubscribe = useApp.subscribe((next, prev) => this.diff(next, prev));
     window.addEventListener('beforeunload', this.onUnload);
   }
@@ -64,6 +65,7 @@ export class Persister {
     this.diffRecords(next.dunnings, prev.dunnings, (d) => this.enqueueDunning(d));
     this.diffRecords(next.quoteStatuses, prev.quoteStatuses, (q) => this.enqueueQuoteStatus(q));
     this.diffRecords(next.expenses, prev.expenses, (e) => this.enqueueExpense(e));
+    this.diffRecords(next.payouts, prev.payouts, (p) => this.enqueuePayout(p));
     const company = next.company;
     if (!company || company === prev.company || this.clean.has(company)) return;
     this.enqueue('company', async () => {
@@ -94,6 +96,16 @@ export class Persister {
       if (!r.ok) return r;
       this.clean.add(r.value);
       if (r.value !== expense) integrateWrittenExpense(expense, r.value);
+      return ok(undefined);
+    });
+  }
+
+  private enqueuePayout(payout: PayoutFile) {
+    this.enqueue(`payout:${payout.id}`, async () => {
+      const r = await this.repo.savePayout(payout);
+      if (!r.ok) return r;
+      this.clean.add(r.value);
+      if (r.value !== payout) integrateWrittenPayout(payout, r.value);
       return ok(undefined);
     });
   }
@@ -209,7 +221,7 @@ export class Persister {
 
   /** Copy of the unsaved company and records in the browser, in case the folder cannot be reached (also after a crash) */
   writeEmergencyCopy() {
-    const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses } = useApp.getState();
+    const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts } = useApp.getState();
     if (!company) return;
     const dirty = <T extends object>(records: ReadonlyMap<unknown, T>) => [...records.values()].filter((r) => !this.clean.has(r));
     const copy: EmergencyCopy = {
@@ -222,8 +234,9 @@ export class Persister {
       dunnings: dirty(dunnings),
       quoteStatuses: dirty(quoteStatuses),
       expenses: dirty(expenses),
+      payouts: dirty(payouts),
     };
-    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length && !copy.quoteStatuses.length && !copy.expenses.length) return;
+    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length && !copy.quoteStatuses.length && !copy.expenses.length && !copy.payouts.length) return;
     try {
       localStorage.setItem(emergencyKey(company.id), JSON.stringify(copy));
     } catch {
@@ -242,7 +255,7 @@ export class Persister {
   }
 }
 
-/** What the emergency copy holds. Copies written before contacts, items, documents, payments or expenses existed lack those lists. */
+/** What the emergency copy holds. Copies written before contacts, items, documents, payments, expenses or payouts existed lack those lists. */
 export interface EmergencyCopy {
   at: string;
   /** null when only records were unsaved */
@@ -254,4 +267,5 @@ export interface EmergencyCopy {
   dunnings: DunningFile[];
   quoteStatuses: QuoteStatusFile[];
   expenses: ExpenseFile[];
+  payouts: PayoutFile[];
 }

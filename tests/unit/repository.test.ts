@@ -3,11 +3,11 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
-import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeDunning, makeInvoice, makeItem, makePayment, makePayout, makeQuote, nowIso, SCHEMA_VERSION } from '../../src/data/schema';
 import { brandId } from '../../src/data/ids';
 import type { CompanyFile } from '../../src/data/types';
 import { cents } from '../../src/domain/money';
-import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, samplePayout, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -113,15 +113,15 @@ describe('FsRepository', () => {
   });
 
   it('writes, lists and removes backups', async () => {
-    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] }));
-    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] }));
+    must(await repo.writeBackup('2026-10-20', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] }));
+    must(await repo.writeBackup('2026-10-21', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] }));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21', '2026-10-20']);
     const backups = await root.getDirectoryHandle('backups');
     const backup = JSON.parse(await text(backups, '2026-10-21.json'));
     expect(backup).toMatchObject({ schemaVersion: SCHEMA_VERSION, company: { id: company.id } });
     must(await repo.removeBackup('2026-10-20'));
     expect(must(await repo.listBackups()).map((b) => b.name)).toEqual(['2026-10-21']);
-    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] })).ok).toBe(false);
+    expect((await repo.writeBackup('../x', { company, contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] })).ok).toBe(false);
   });
 });
 
@@ -458,6 +458,60 @@ describe('receipts', () => {
   it('reports a receipt that is not there as not found', async () => {
     const r = await repo.readReceipt('2026', 'fehlt.pdf');
     expect(r.ok ? null : r.error.kind).toBe('notFound');
+  });
+});
+
+describe('payouts in the folder', () => {
+  const payer = makeContact(sampleContact({ name: 'Apple Distribution International' }));
+  const payout = () => makePayout({ ...samplePayout(company.bank.defaultAccountId, payer.id) });
+
+  it('saves and loads payouts, deleted ones included', async () => {
+    const a = payout();
+    const b = { ...payout(), deletedAt: nowIso() };
+    must(await repo.savePayout(a));
+    must(await repo.savePayout(b));
+    const { payouts, issues } = must(await new FsRepository(root.asHandle()).loadPayouts());
+    expect(issues).toEqual([]);
+    expect(payouts.map((p) => p.id).sort()).toEqual([a.id, b.id].sort());
+    expect(JSON.parse(await text(await root.getDirectoryHandle('payouts'), `${a.id}.json`)).schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it('a broken payout file is reported, the others still load', async () => {
+    const good = payout();
+    must(await repo.savePayout(good));
+    const dir = await root.getDirectoryHandle('payouts');
+    const broken = payout();
+    ((await dir.getFileHandle(`${broken.id}.json`, { create: true })) as MemFile).content = new Blob([JSON.stringify({ ...broken, taxTreatment: 'guess' })]);
+    const { payouts, issues } = must(await new FsRepository(root.asHandle()).loadPayouts());
+    expect(payouts.map((p) => p.id)).toEqual([good.id]);
+    expect(issues.map((i) => i.file)).toEqual([`payouts/${broken.id}.json`]);
+  });
+
+  it('merges a payout changed on another device, and a deletion survives a later edit elsewhere', async () => {
+    const p = payout();
+    must(await repo.savePayout(p));
+    const other = new FsRepository(root.asHandle());
+    const [theirs] = must(await other.loadPayouts()).payouts;
+    const at = nowIso();
+    must(await other.savePayout({ ...theirs!, deletedAt: at, fieldUpdatedAt: { ...theirs!.fieldUpdatedAt, deletedAt: at } }));
+    const mine = { ...p, note: 'later note', fieldUpdatedAt: { ...p.fieldUpdatedAt, note: nowIso() } };
+    const written = must(await repo.savePayout(mine));
+    expect(written.note).toBe('later note');
+    expect(written.deletedAt).not.toBeNull();
+  });
+});
+
+describe('audit lines of payouts', () => {
+  it('appends the lines about a payout to the audit log of its month', async () => {
+    const id = brandId<'PayoutId'>('0f8fad5b-d9cb-469f-a165-70867728950e');
+    const payerId = brandId<'ContactId'>('1f8fad5b-d9cb-469f-a165-70867728950e');
+    const payout = { id, date: '2026-11-03', amount: cents(123_456), payerId, taxTreatment: 'euB2bNotTaxable' } as const;
+    must(await repo.appendAudit('2026-11', { at: '2026-11-03T10:00:00.000Z', action: 'bookPayout', payout, device: 'dev-1' }));
+    must(await repo.appendAudit('2026-11', { at: '2026-11-04T10:00:00.000Z', action: 'deletePayout', payout, device: 'dev-1' }));
+    const audit = await (await (await root.getDirectoryHandle('audit')).getFileHandle('2026-11.jsonl')).getFile();
+    const lines = (await audit.text()).trim().split('\n').map((l) => JSON.parse(l) as { action: string; payout: { id: string } });
+    expect(lines.map((l) => l.action)).toEqual(['bookPayout', 'deletePayout']);
+    expect(lines[0]?.payout.id).toBe(id);
   });
 });
 

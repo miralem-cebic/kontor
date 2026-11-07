@@ -5,7 +5,7 @@
 
 import { date, encodeCsv, num, type Cell, type NumberCell } from '../data/export/csv';
 import { tableToXlsx } from '../data/export/xlsx';
-import { cancellationOf, isInvoice, isQuote, type BankAccount, type ContactFile, type DocumentFile, type ExpenseFile, type ItemFile } from '../data/types';
+import { cancellationOf, isInvoice, isQuote, type BankAccount, type ContactFile, type DocumentFile, type ExpenseFile, type ItemFile, type PayoutFile } from '../data/types';
 import type { ContactRoles } from '../domain/contact';
 import type { ContactId, AccountId } from '../data/ids';
 import { isoDateOf } from '../domain/dates';
@@ -14,8 +14,9 @@ import { toDecimalString, type BasisPoints, type Cents } from '../domain/money';
 import { dueDate, invoiceTotals } from '../domain/invoice';
 import { documentTotals } from '../domain/document';
 import { expenseVat } from '../domain/expense';
+import { payoutNet, payoutVat } from '../domain/payout';
 import { t } from '../i18n';
-import { accountName, expenseTreatmentText, unitText } from '../lib/labels';
+import { accountName, expenseTreatmentText, payoutTreatmentText, unitText } from '../lib/labels';
 import { saveFile } from '../lib/browser';
 import { useApp } from '../store/appStore';
 
@@ -25,7 +26,7 @@ export interface Table {
   rows: Cell[][];
 }
 
-export type ExportKind = 'contacts' | 'items' | 'quotes' | 'invoices' | 'expenses';
+export type ExportKind = 'contacts' | 'items' | 'quotes' | 'invoices' | 'expenses' | 'payouts';
 
 /** An amount in euros as a spreadsheet reads it: a decimal comma, no grouping, "-12,50" for a negative amount */
 export const amount = (c: Cents): NumberCell => num(toDecimalString(c).replace('.', ','));
@@ -123,6 +124,33 @@ export function expensesTable(expenses: readonly ExpenseFile[], accounts: readon
   };
 }
 
+export function payoutsTable(payouts: readonly PayoutFile[], contacts: ReadonlyMap<ContactId, ContactFile>, accounts: readonly BankAccount[]): Table {
+  const accountText = (id: AccountId): string => {
+    const account = accounts.find((a) => a.id === id);
+    return account ? accountName(account) : '';
+  };
+  const payerName = (p: PayoutFile): string => contacts.get(p.payerId)?.name ?? '';
+  return {
+    header: [
+      t('payouts.csvDate'),
+      t('payouts.csvPayer'),
+      t('payouts.csvPeriod'),
+      t('payouts.csvAmount'),
+      t('payouts.csvTreatment'),
+      t('payouts.csvVatRate'),
+      t('payouts.csvVat'),
+      t('payouts.csvIncome'),
+      t('payouts.csvAccount'),
+      t('payouts.csvStatement'),
+      t('payouts.csvNote'),
+    ],
+    rows: payouts
+      .filter((p) => !p.deletedAt)
+      .sort((a, b) => byDate(a, b) || payerName(a).localeCompare(payerName(b), 'de', { sensitivity: 'base' }))
+      .map((p) => [date(p.date), payerName(p), p.period, amount(p.amount), payoutTreatmentText(p.taxTreatment), percent(p.vatRate), amount(payoutVat(p)), amount(payoutNet(p)), accountText(p.accountId), p.statementUrl, p.note]),
+  };
+}
+
 /** The contact's name as the document says it: the snapshot of an issued document, the current contact otherwise */
 const customerName = (d: DocumentFile, contacts: ReadonlyMap<ContactId, ContactFile>): string => (d.issued ? d.issued.snapshot.customer.name : (contacts.get(d.customerId)?.name ?? ''));
 
@@ -178,7 +206,7 @@ export function invoicesTable(documents: readonly DocumentFile[], smallBusiness:
 
 /** The table of one list, from the state of the open company */
 function tableOf(kind: ExportKind): Table | null {
-  const { company, contacts, items, documents, expenses } = useApp.getState();
+  const { company, contacts, items, documents, expenses, payouts } = useApp.getState();
   if (!company) return null;
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   switch (kind) {
@@ -192,12 +220,14 @@ function tableOf(kind: ExportKind): Table | null {
       return invoicesTable([...documents.values()], smallBusiness, contacts);
     case 'expenses':
       return expensesTable([...expenses.values()], company.bank.accounts);
+    case 'payouts':
+      return payoutsTable([...payouts.values()], contacts, company.bank.accounts);
   }
 }
 
 /** Every list as a table, for the exit archive (F12): the name of the list is the kind, without .csv */
 export function allListTables(): { name: string; header: string[]; rows: Cell[][] }[] {
-  const kinds: ExportKind[] = ['contacts', 'items', 'quotes', 'invoices', 'expenses'];
+  const kinds: ExportKind[] = ['contacts', 'items', 'quotes', 'invoices', 'expenses', 'payouts'];
   return kinds.flatMap((kind) => {
     const table = tableOf(kind);
     return table ? [{ name: kind, header: table.header, rows: table.rows }] : [];

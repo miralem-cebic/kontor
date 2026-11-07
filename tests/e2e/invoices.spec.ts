@@ -137,7 +137,7 @@ test('invoices: defaults from the customer, period of service, tax treatment, pa
 
   const [file] = await readDocuments(page);
   expect(file).toMatchObject({
-    schemaVersion: 16,
+    schemaVersion: 17,
     kind: 'invoice',
     quoteId: null,
     date: isoToday(),

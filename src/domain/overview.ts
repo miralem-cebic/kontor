@@ -33,6 +33,17 @@ export interface OverviewExpense {
   vat: Cents;
 }
 
+/**
+ * A payout: income without an invoice of kontor, on the day the money arrived. `vat` is the German VAT inside the amount
+ * (0 for every treatment but `domesticTaxed`); the rest is income. A payout is not turnover of an invoice and not an open
+ * item: whether it counts toward the small business limits is an open question (epic #30, question 2).
+ */
+export interface OverviewPayout {
+  date: string;
+  amount: Cents;
+  vat: Cents;
+}
+
 export interface MonthFigures {
   /** 1 for January */
   month: number;
@@ -43,7 +54,7 @@ export interface MonthFigures {
 
 export interface Overview {
   year: number;
-  /** The net part of the payments of the year */
+  /** The net part of the payments of the year, and of the payouts without an invoice */
   income: Cents;
   /** The expenses of the year, without the VAT that comes back (a small business has none to take off) */
   expenses: Cents;
@@ -74,12 +85,15 @@ export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
 /** What an expense counts: its gross amount for a small business, otherwise without the VAT that comes back */
 export const expenseNet = (e: OverviewExpense, smallBusiness: boolean): Cents => (smallBusiness ? e.gross : subtract(e.gross, e.vat));
 
+/** What a payout counts as income: its amount without the VAT inside it */
+export const payoutIncome = (p: OverviewPayout): Cents => subtract(p.amount, p.vat);
+
 const inYear = (date: string, year: number): boolean => date.startsWith(`${year}-`);
 const monthOf = (date: string): number => Number(date.slice(5, 7));
 
 /** The overview of a calendar year. `today` decides what is overdue; `smallBusiness` decides what an expense counts. */
-export function overview(input: { year: number; today: string; smallBusiness: boolean; invoices: readonly OverviewInvoice[]; payments: readonly OverviewPayment[]; expenses: readonly OverviewExpense[] }): Overview {
-  const { year, today, smallBusiness, invoices, payments, expenses } = input;
+export function overview(input: { year: number; today: string; smallBusiness: boolean; invoices: readonly OverviewInvoice[]; payments: readonly OverviewPayment[]; expenses: readonly OverviewExpense[]; payouts: readonly OverviewPayout[] }): Overview {
+  const { year, today, smallBusiness, invoices, payments, expenses, payouts } = input;
   const byId = new Map(invoices.map((i) => [i.id, i]));
 
   const incomeOf = (p: OverviewPayment): Cents => {
@@ -90,10 +104,15 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
 
   const yearPayments = payments.filter((p) => inYear(p.date, year));
   const yearExpenses = expenses.filter((e) => inYear(e.date, year));
+  const yearPayouts = payouts.filter((p) => inYear(p.date, year));
   const months: MonthFigures[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, income: cents(0), expenses: cents(0), profit: cents(0) }));
   for (const p of yearPayments) {
     const m = months[monthOf(p.date) - 1];
     if (m) m.income = cents(m.income + incomeOf(p));
+  }
+  for (const p of yearPayouts) {
+    const m = months[monthOf(p.date) - 1];
+    if (m) m.income = cents(m.income + payoutIncome(p));
   }
   for (const e of yearExpenses) {
     const m = months[monthOf(e.date) - 1];
@@ -117,7 +136,7 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
   }
 
   const turnover = invoices.filter((i) => i.issued && inYear(i.date, year)).reduce((total, i) => total + i.net, 0);
-  const income = sum(yearPayments.map(incomeOf));
+  const income = cents(sum(yearPayments.map(incomeOf)) + sum(yearPayouts.map(payoutIncome)));
   const expenseSum = sum(yearExpenses.map(expenseOf));
   return {
     year,

@@ -13,6 +13,7 @@ import { ImportView } from '../import/ImportView';
 import { HomeView } from '../home/HomeView';
 import { InvoicesView } from '../invoices/InvoicesView';
 import { ItemsView } from '../items/ItemsView';
+import { PayoutsView } from '../payouts/PayoutsView';
 import { QuotesView } from '../quotes/QuotesView';
 import { ReportsView } from '../reports/ReportsView';
 import { SettingsView } from '../settings/SettingsView';
@@ -22,13 +23,14 @@ import { CompanySwitcher } from './CompanySwitcher';
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
 
-type View = 'home' | 'quotes' | 'invoices' | 'expenses' | 'contacts' | 'items' | 'reports' | 'import' | 'taxes' | 'settings';
+type View = 'home' | 'quotes' | 'invoices' | 'expenses' | 'payouts' | 'contacts' | 'items' | 'reports' | 'import' | 'taxes' | 'settings';
 
 const AREAS: { key: MessageKey; icon: IconName; view?: View }[] = [
   { key: 'nav.dashboard', icon: 'home', view: 'home' },
   { key: 'nav.quotes', icon: 'quote', view: 'quotes' },
   { key: 'nav.invoices', icon: 'invoice', view: 'invoices' },
   { key: 'nav.expenses', icon: 'expense', view: 'expenses' },
+  { key: 'payouts.nav', icon: 'payout', view: 'payouts' },
   { key: 'nav.contacts', icon: 'contacts', view: 'contacts' },
   { key: 'nav.items', icon: 'item', view: 'items' },
   { key: 'nav.reports', icon: 'chart', view: 'reports' },
@@ -120,6 +122,8 @@ function MainView({
       return <InvoicesView key={fromQuote ?? 'list'} fromQuote={fromQuote} />;
     case 'expenses':
       return <ExpensesView />;
+    case 'payouts':
+      return <PayoutsView />;
     case 'contacts':
       return <ContactsView onImport={() => onImport('contacts')} />;
     case 'items':

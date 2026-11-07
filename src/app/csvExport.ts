@@ -28,7 +28,7 @@ export interface Table {
 export type ExportKind = 'contacts' | 'items' | 'quotes' | 'invoices' | 'expenses';
 
 /** An amount in euros as a spreadsheet reads it: a decimal comma, no grouping, "-12,50" for a negative amount */
-const amount = (c: Cents): NumberCell => num(toDecimalString(c).replace('.', ','));
+export const amount = (c: Cents): NumberCell => num(toDecimalString(c).replace('.', ','));
 
 /** A rate in percent: 1900 → "19" */
 const percent = (r: BasisPoints): NumberCell => num(String(r / 100));

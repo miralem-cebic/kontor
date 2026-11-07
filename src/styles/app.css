@@ -295,3 +295,10 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 /* overview (Wo stehe ich?): the figures in a row that wraps on a narrow window */
 .overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .overview-figure .overview-value{font-size:22px;font-weight:600;margin:0}
+.report-scroll{overflow-x:auto;max-width:100%}
+.report-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.report-table th[scope=row]{text-align:left;font-weight:500;color:var(--text);font-size:inherit;padding:0 10px 0 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+.report-table tfoot th,.report-table tfoot td{font-weight:600;padding:10px;border-top:1px solid var(--line-2);background:var(--surface-2)}
+.report-table tfoot th{text-align:left;padding-left:14px}
+.report-tools .field{min-width:120px}
+.report-tools .seg{flex-wrap:wrap}

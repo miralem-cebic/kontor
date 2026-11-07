@@ -65,6 +65,8 @@ src/
     tax/params/<year>.ts       Values that depend on the tax year, each with its legal source; tax/params/index.ts
                                picks the year (an unknown later year gets the last known one)
     tax/tradeTax.ts            Trade tax: the minimum multiplier of a year
+    smallBusiness.ts           Small business scheme (§ 19 UStG): the day the limit is crossed, when the exemption ends, the refusal by invoice
+                               date, the warning on the overview, the § 13b expense count; what is not verified is listed in its header
     ustva.ts                   Advance VAT return (R1): periods, due date, the fields of the form from invoices, payments and expenses
     numbering.ts               Number patterns of invoices and quotes ("RE-{YYYY}-{NNNN}", "AN-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks

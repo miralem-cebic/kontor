@@ -1,5 +1,6 @@
 # Continuous integration for pull requests and the main branch.
-# The job names below are required status checks for the main branch ruleset,
+# Required status checks for the main branch ruleset: pr-title, markdown-lint, e2e and
+# build / package (job "build" calling build.yml). "conformance" is not required,
 # see "Repository settings" in CONTRIBUTING.md.
 name: CI
 

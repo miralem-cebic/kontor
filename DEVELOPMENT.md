@@ -18,14 +18,52 @@ The project should not live inside a synced folder such as OneDrive, because `no
 | Script | Purpose |
 | --- | --- |
 | `npm run dev` | Vite development server |
-| `npm run build` | Type check and production build into `dist/` |
+| `npm run build` | Type check (`tsc --noEmit`) and production build into `dist/` |
 | `npm run typecheck` | TypeScript check only |
-| `npm run lint` | ESLint (type-aware for `src/`) |
+| `npm run lint` | ESLint over the whole repository, fails on any warning (`--max-warnings 0`); type-aware for `src/` |
+| `npm run lint:md` | markdownlint-cli2 over all Markdown files, with the rules in `.markdownlint.jsonc` (the same tool and rules as the CI job `markdown-lint`) |
 | `npm test` | Unit and property tests (Vitest, `tests/unit`) |
 | `npm run test:e2e` | Build, then Playwright tests against `dist/index.html` via `file://` in the installed Chrome |
 | `npm run check:file` | Build acceptance test: opens `dist/index.html` via `file://` and checks console, secure context, API, font |
+| `npm run verify` | The definition of done: `lint:md`, `lint`, `test`, `build` and `check:file`, in this order, stopping at the first failure. It does not run `typecheck` separately, because `build` does |
+| `npm run verify:full` | `verify`, then `test:e2e`. Needs an installed Chrome and takes longer, which is why e2e is not part of `verify` |
 
 Playwright uses the installed Chrome (`channel: 'chrome'`), so no browsers are downloaded. `HEADED=1` shows the window.
+
+## Lint rules and CI
+
+`eslint.config.js` starts from `@eslint/js` and `typescript-eslint` recommended. On top of that:
+
+- `react-hooks/rules-of-hooks` is an error; `react-hooks/exhaustive-deps` is a warning. Because `npm run lint` runs with `--max-warnings 0`, that warning blocks as well: fix the dependency list, or explain a deliberate exception in a comment next to a disable directive.
+- In `src/`: `no-non-null-assertion` and `no-explicit-any` are errors; type-aware `switch-exhaustiveness-check` and `no-floating-promises` are errors. Tests keep the looser defaults.
+
+CI (`.github/workflows/ci.yml`) runs these jobs for every pull request and for `main`:
+
+| Job | What it runs | Required status check |
+| --- | --- | --- |
+| `pr-title` | Conventional Commits check of the pull request title (cannot be run locally) | yes |
+| `markdown-lint` | markdownlint-cli2 on `**/*.md`; locally `npm run lint:md` | yes |
+| `e2e` | `npm run build`, `npm run check:file`, `npx playwright test` in the Chrome of the runner image; locally `npm run test:e2e` | yes |
+| `build / package` | `.github/workflows/build.yml`: typecheck, lint, tests, build, then `npm audit --omit=dev --audit-level=high`, then the zip with its SHA-256 | yes |
+| `conformance` | Checks the repository against [engineering-baseline](https://github.com/miralem-cebic/engineering-baseline), see below | no |
+
+`npm run verify` covers the Markdown lint and everything in `build / package` except `npm audit` (it needs the network). It does not cover `e2e` (use `npm run verify:full`), `pr-title` or `conformance`. Both workflows read the Node version from `.nvmrc`.
+
+### Conformance (engineering-baseline)
+
+`baseline.json` in the repository root selects the rule set (`ecosystems`, `topology`), names the baseline version and lists the waivers. The `conformance` job runs the baseline checker against the repository and fails on a violated `must` rule (`strict: false`, so `should` rules are reported but do not fail the job). The job and the checker are pinned to a fixed version; the comment above the job in `ci.yml` explains how to update both together with `baseline` in `baseline.json`.
+
+To run it locally after `npm ci` (the ESLint-based rules need `node_modules`):
+
+```bash
+npx github:miralem-cebic/engineering-baseline#v0.1.0 check
+```
+
+If a rule fails, fix the cause. If it cannot be fixed in the same change, add a waiver with a reason and an expiry date to `baseline.json`; once the date has passed the rule fails again:
+
+```json
+"waivers": [{ "rule": "TS-010", "reason": "why this cannot be fixed yet", "expires": "2026-12-31" }]
+```
 
 ## Building for `file://`
 
@@ -139,7 +177,7 @@ src/
 
 - Everything read from a company folder, a backup, IndexedDB or `localStorage` is checked (`validate.ts`, via `migrate`). Wrong types and unknown values are errors; unknown top-level fields are kept and written back. `fieldUpdatedAt` keeps only known keys.
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the number patterns (they produce file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
-- `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
+- `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`), and a promise must be awaited, returned or explicitly discarded with `void` (`@typescript-eslint/no-floating-promises`). Both apply to `src/` and are type-aware.
 
 ## Data format (schema version 16)
 

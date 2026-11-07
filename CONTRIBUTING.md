@@ -61,17 +61,14 @@ Examples:
 
 ## Coding guidelines
 
-Set up the project and run the same checks as CI before you push (see [DEVELOPMENT.md](DEVELOPMENT.md) for details):
+Set up the project and run the checks before you push (see [DEVELOPMENT.md](DEVELOPMENT.md) for details):
 
 ```bash
 npm ci
-npm run typecheck
-npm run lint
-npm test
-npm run build
-npm run check:file
-npm run test:e2e
+npm run verify
 ```
+
+`npm run verify` runs the Markdown lint, ESLint (without warnings), the unit tests, the production build (with the type check) and the `file://` build check. A change is done when it is green. CI additionally runs the browser tests (`npm run test:e2e`, or `npm run verify:full` to run both; needs an installed Chrome), `npm audit` for the production dependencies, the check of the pull request title and the `conformance` job against `baseline.json`. If `conformance` fails on a rule, fix it or add a waiver with a reason and an expiry date, see [DEVELOPMENT.md](DEVELOPMENT.md#conformance-engineering-baseline).
 
 - Keep changes small and focused. Avoid unrelated refactoring in the same pull request.
 - Match the style of the surrounding code and existing naming conventions.

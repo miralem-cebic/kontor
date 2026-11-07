@@ -76,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Issuing, cancelling and finalizing a quote: a PDF left in `documents/` by an interrupted attempt is now recorded only if it is byte for byte what the document gives at the retry (the PDF is made with the time of the reservation as its creation date, so it is reproducible). If the draft was edited in between, or the file is not ours, nothing is issued, the file is not overwritten, and a message explains how to go on. Before, the old PDF was recorded with its hash for the edited draft, so record and PDF disagreed.
 - Issuing and cancelling: a number reserved by an interrupted attempt is used again only while it still fits the document. If the invoice date moved into another year (or another month in a pattern with `{MM}`) before the retry, or a cancellation is retried in the next year, the document gets a new number of its year; the old reservation stays in the range file as a gap. Before, the number kept the old year although the counter restarts by the invoice date (ADR 0004).
 - The hint of the footer field says that address, contact details, tax number and bank details are printed in the footer already, so they are not typed a second time.
 - The window showed a second vertical and a horizontal scroll bar: the hidden file field of the logo stuck out of the content area. Now only the content area scrolls.

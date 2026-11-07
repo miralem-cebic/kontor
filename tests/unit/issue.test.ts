@@ -169,6 +169,36 @@ describe('issue', () => {
     expect((await issueOk((await draft({ date: '2026-12-31' })).id)).issued?.number).toBe('RE-2026-0002');
   });
 
+  it('stops when the draft was edited after an interrupted attempt: the stale PDF is not recorded, and not overwritten', async () => {
+    const inv = await draft();
+    await interrupted(inv.id);
+    const stale = must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'));
+    await edit(inv, { lines: [sampleLine({ unitPrice: cents(1_753_038) })] });
+    expect(await issue(inv.id, ctx({ now: new Date('2026-10-31T10:05:00Z') }))).toEqual({ ok: false, failure: 'fileDiffers' });
+    // nothing changed: the file as it was, no issued record, no audit entry
+    expect(must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'))).toEqual(stale);
+    const [onDisk] = must(await new FsRepository(root.asHandle()).loadDocuments()).documents;
+    expect(onDisk?.issued).toBeNull();
+    await expect(root.getDirectoryHandle('audit')).rejects.toThrow();
+    // putting the draft back as it was lets the retry finish with the file of the first attempt
+    await edit(inv, { lines: inv.lines });
+    const issued = await issueOk(inv.id, { now: new Date('2026-10-31T10:07:00Z') });
+    expect(issued.issued?.pdf.sha256).toBe(await sha256Hex(stale.slice()));
+  });
+
+  it('stops when the file of the number is not a PDF made from this document', async () => {
+    const inv = await draft();
+    await interrupted(inv.id);
+    must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'));
+    const junk = new Uint8Array([1, 2, 3]);
+    const handle = await (await root.getDirectoryHandle('documents')).getDirectoryHandle('issued');
+    const w = await (await handle.getFileHandle('RE-2026-0001.pdf')).createWritable();
+    await w.write(junk);
+    await w.close();
+    expect(await issue(inv.id, ctx())).toEqual({ ok: false, failure: 'fileDiffers' });
+    expect(must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'))).toEqual(junk);
+  });
+
   it('a reservation is not reused when the month of the number moved', async () => {
     company = sampleCompany({ invoiceDefaults: { ...sampleCompany().invoiceDefaults, numberPattern: 'R{YYYY}{MM}-{NNN}', quotePattern: 'A{NNN}', paymentTermDays: 14, footer: '' } });
     const inv = await draft({ date: '2026-10-30' });

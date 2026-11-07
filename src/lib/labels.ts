@@ -195,6 +195,8 @@ export function issueFailureText(f: IssueFailure): string {
       return t('invoices.issueNotReady');
     case 'numberTaken':
       return t('invoices.issueNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':
@@ -212,6 +214,8 @@ export function finalizeFailureText(f: IssueFailure): string {
       return t('quotes.finalizeNotReady');
     case 'numberTaken':
       return t('quotes.finalizeNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':
@@ -229,6 +233,8 @@ export function cancelFailureText(f: IssueFailure): string {
       return t('invoices.cancelNotPossible');
     case 'numberTaken':
       return t('invoices.issueNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':

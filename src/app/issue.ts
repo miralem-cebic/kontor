@@ -39,9 +39,10 @@ import { flushWrites, openRepository } from './session';
 
 /**
  * `notReady`: the draft is incomplete (issueProblems, quoteProblems), or the invoice cannot be cancelled (not issued,
- * or a cancellation itself); `numberTaken`: the next number exists already, the range file fell behind
+ * or a cancellation itself); `numberTaken`: the next number exists already, the range file fell behind;
+ * `fileDiffers`: the PDF of the reserved number, left by an earlier attempt, is not what the document gives now
  */
-export type IssueFailure = 'notReady' | 'numberTaken' | StorageErrorKind;
+export type IssueFailure = 'notReady' | 'numberTaken' | 'fileDiffers' | StorageErrorKind;
 
 type Failed = { ok: false; failure: IssueFailure };
 
@@ -248,6 +249,8 @@ function auditEntry(doc: DocumentFile, base: Omit<DocumentAuditEntry, 'action' |
   }
 }
 
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+
 /** Reserves the number, writes the PDF, saves the document as issued and appends the audit entry */
 async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot, ctx: IssueContext): Promise<IssueResult<D>> {
   const range: NumberRange = doc.kind;
@@ -255,19 +258,21 @@ async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot,
   if (!reserved.ok) return reserved;
   const { number, counter, counterKey: key } = reserved.reservation;
 
-  // the PDF is written once; a file of this number from an earlier attempt of this document is kept
+  // The PDF is written once and never overwritten. It is made with the time of the reservation as its creation date, so
+  // the same document always gives the same bytes. A file of this number from an earlier attempt is recorded only if
+  // it is byte for byte what the document gives now; if the draft was edited since (or the file is not ours), the
+  // record and the PDF would disagree, so nothing is issued and the file stays as it is.
+  // the PDF is in the language of the customer, and stays so
   const file = `${number}.pdf`;
-  let bytes: Uint8Array;
+  const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: snapshot.customer.language, number }, ctx.logo, new Date(reserved.reservation.at));
+  const bytes = pdf.bytes;
   if (reserved.files.includes(file)) {
     const existing = await ctx.repo.readIssuedFile(range, file);
     if (!existing.ok) return fail(existing.error.kind);
-    bytes = existing.value;
+    if (!sameBytes(existing.value, bytes)) return fail('fileDiffers');
   } else {
-    // the PDF is in the language of the customer, and stays so: the file is written once
-    const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: snapshot.customer.language, number }, ctx.logo, ctx.now);
-    const written = await ctx.repo.writeIssuedFile(range, file, pdf.bytes);
+    const written = await ctx.repo.writeIssuedFile(range, file, bytes);
     if (!written.ok) return fail(written.error.kind);
-    bytes = pdf.bytes;
   }
   const sha256 = await sha256Hex(bytes.slice());
 

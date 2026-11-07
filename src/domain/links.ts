@@ -14,6 +14,15 @@ export function isWebUrl(text: string): boolean {
   }
 }
 
+/** Is the text an absolute https: URL? For a page that must be reached over an encrypted connection (the statement of a payout) */
+export function isHttpsUrl(text: string): boolean {
+  try {
+    return new URL(text).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** The longest mailto: link a mail program takes reliably (Outlook stops at about 2,000 characters) */
 export const MAILTO_MAX_LENGTH = 2_000;
 

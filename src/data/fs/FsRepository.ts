@@ -1,9 +1,9 @@
-import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
 import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
-import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, NumberRange, PaymentFile, QuoteStatusFile } from '../types';
+import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, NumberRange, PaymentFile, PayoutFile, QuoteStatusFile } from '../types';
 import { isSafeFileName, UnsafeFileNameError } from './fileNames';
 import { isReceiptYear } from '../../domain/receipt';
 import { writeFile, writeJson } from './jsonFile';
@@ -17,6 +17,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   quoteStatus/<id>.json   one file per decision of the customer on a quote; never changed, only removed (soft delete)
 //   dunnings/<id>.json         one file per dunning (Mahnung) of an issued invoice, never changed
 //   expenses/<id>.json         one file per expense (what the business paid for), edited like an item, removed by soft delete
+//   payouts/<id>.json          one file per payout (income without an invoice of kontor), edited like an expense, removed by soft delete
 //   documents/issued/<file>    the PDF of an issued invoice, named after its number, written once
 //   documents/quotes/<file>    the PDF of a finalized quote, the same way
 //   numbering/<range>.json     the counters and reservations of a number range
@@ -25,7 +26,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
 
 export const FILES = { company: 'company.json' } as const;
-export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', expenses: 'expenses', belege: 'belege', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
+export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', expenses: 'expenses', payouts: 'payouts', belege: 'belege', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
 
 /** The folder in documents/ with the PDFs of each number range */
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
@@ -165,6 +166,17 @@ export class FsRepository implements Repository {
 
   saveExpense(expense: ExpenseFile) {
     return attempt(() => this.saveRecord(DIRS.expenses, expense, (raw) => migrate('expense', raw), mergeExpense));
+  }
+
+  loadPayouts() {
+    return attempt(async () => {
+      const { records, issues } = await this.loadRecords(DIRS.payouts, (raw) => migrate('payout', raw));
+      return { payouts: records, issues };
+    });
+  }
+
+  savePayout(payout: PayoutFile) {
+    return attempt(() => this.saveRecord(DIRS.payouts, payout, (raw) => migrate('payout', raw), mergePayout));
   }
 
   loadDocuments() {

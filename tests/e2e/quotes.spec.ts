@@ -141,7 +141,7 @@ test('quotes: lines from the catalogue and free lines, totals, checks, order, ed
   await expect(rows.nth(1)).not.toContainText('abgelaufen');
 
   const [file] = await readDocuments(page);
-  expect(file).toMatchObject({ schemaVersion: 16, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', issued: null, deletedAt: null });
+  expect(file).toMatchObject({ schemaVersion: 17, kind: 'quote', date: isoToday(), validUntil: daysFromToday(14), subject: 'Website-Relaunch', issued: null, deletedAt: null });
   expect(file?.lines).toEqual([
     { name: 'Lektorat', description: '', quantity: 1000, unit: 'H87', unitPrice: 30000, vatRate: 700, discount: { kind: 'none' } },
     { name: 'Webdesign', description: 'Gestaltung und Umsetzung', quantity: 12500, unit: 'HUR', unitPrice: 8500, vatRate: 1900, discount: { kind: 'none' } },
@@ -300,7 +300,7 @@ test('finalizing a quote: the next quote number, the final PDF in the folder, no
   const audit = (files[`Ordner-1/audit/${isoToday().slice(0, 7)}.jsonl`] ?? '').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
   expect(audit).toMatchObject([{ action: 'issueQuote', number }]);
   const [quote] = await readDocuments(page);
-  expect(quote).toMatchObject({ schemaVersion: 16, subject: 'Website-Relaunch', issued: { number, pdf: { file: `${number}.pdf` } } });
+  expect(quote).toMatchObject({ schemaVersion: 17, subject: 'Website-Relaunch', issued: { number, pdf: { file: `${number}.pdf` } } });
 
   // an invoice made from the quote names its number
   await page.getByRole('button', { name: 'Rechnung erstellen' }).click();

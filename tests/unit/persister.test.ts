@@ -8,7 +8,7 @@ import { makePayment, nowIso } from '../../src/data/schema';
 import { cents } from '../../src/domain/money';
 import * as A from '../../src/store/appStore';
 import { MAX_ACCOUNTS } from '../../src/domain/bankAccount';
-import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
+import { MemoryStorage, sampleAccount, sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleItem, samplePayout, sampleQuote } from './fixtures';
 
 beforeAll(() => {
   Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} }, localStorage: new MemoryStorage() });
@@ -24,7 +24,7 @@ beforeEach(async () => {
   const company = sampleCompany();
   must(await repo.createCompany(company, []));
   A.resetApp();
-  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] });
+  A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] });
   persister = new Persister(repo);
   persister.start();
 });
@@ -261,6 +261,53 @@ describe('Persister with expenses', () => {
     repo.saveExpense = orig;
     await persister.retry();
     expect((await expensesOnDisk()).map((e) => e.supplier)).toEqual(['Unsaved']);
+  });
+});
+
+describe('Persister with payouts', () => {
+  const payoutsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadPayouts()).payouts;
+  const accountId = () => A.useApp.getState().company!.bank.defaultAccountId;
+  const profile = (over = {}) => samplePayout(accountId(), A.addContact(sampleContact({ name: 'Apple', customerNumber: '' })), over);
+
+  it('writes a new payout, its changes and its deletion; every changed field is stamped', async () => {
+    const base = profile();
+    const id = A.addPayout(base)!;
+    expect(id).toBeTruthy();
+    await persister.flush();
+    expect((await payoutsOnDisk()).map((p) => p.amount)).toEqual([123_456]);
+
+    expect(A.updatePayout(id, { ...base, note: 'Oktober' })).toBe(true);
+    const stamped = A.useApp.getState().payouts.get(id)!;
+    expect(stamped.fieldUpdatedAt.note! > stamped.createdAt).toBe(true);
+    expect(stamped.fieldUpdatedAt.amount).toBe(stamped.createdAt);
+    await persister.flush();
+    expect((await payoutsOnDisk())[0]?.note).toBe('Oktober');
+
+    A.deletePayout(id);
+    await persister.flush();
+    const [deleted] = await payoutsOnDisk();
+    expect(deleted?.deletedAt).toBeTruthy();
+    expect(deleted?.fieldUpdatedAt.deletedAt).toBe(deleted?.deletedAt);
+    expect(A.updatePayout(id, { ...base, note: 'after delete' })).toBe(false);
+  });
+
+  it('does not book a payout whose payer or account is not known', () => {
+    expect(A.addPayout(samplePayout(accountId(), 'no-such-contact'))).toBeNull();
+    expect(A.addPayout(samplePayout('no-such-account', A.addContact(sampleContact({ customerNumber: '' }))))).toBeNull();
+    expect(A.useApp.getState().payouts.size).toBe(0);
+  });
+
+  it('keeps unsaved payouts in the emergency copy', async () => {
+    const orig = repo.savePayout.bind(repo);
+    repo.savePayout = async () => err({ kind: 'quota', cause: new Error('full') });
+    const id = A.addPayout(profile({ note: 'Unsaved' }))!;
+    await persister.flush();
+    const company = A.useApp.getState().company!;
+    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    expect(copy.payouts.map((p: { id: string }) => p.id)).toEqual([id]);
+    repo.savePayout = orig;
+    await persister.retry();
+    expect((await payoutsOnDisk()).map((p) => p.note)).toEqual(['Unsaved']);
   });
 });
 

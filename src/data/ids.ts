@@ -20,6 +20,8 @@ export type DunningId = Brand<string, 'DunningId'>;
 export type QuoteStatusId = Brand<string, 'QuoteStatusId'>;
 /** An expense: what the business paid for */
 export type ExpenseId = Brand<string, 'ExpenseId'>;
+/** A payout: income without an invoice of kontor (platforms such as Apple or Google) */
+export type PayoutId = Brand<string, 'PayoutId'>;
 /** One import of contacts or items from a file: the records it made carry its ID, so the batch can be taken back */
 export type ImportBatchId = Brand<string, 'ImportBatchId'>;
 
@@ -35,6 +37,7 @@ export const newPaymentId = (): PaymentId => brandId<'PaymentId'>(crypto.randomU
 export const newDunningId = (): DunningId => brandId<'DunningId'>(crypto.randomUUID());
 export const newQuoteStatusId = (): QuoteStatusId => brandId<'QuoteStatusId'>(crypto.randomUUID());
 export const newExpenseId = (): ExpenseId => brandId<'ExpenseId'>(crypto.randomUUID());
+export const newPayoutId = (): PayoutId => brandId<'PayoutId'>(crypto.randomUUID());
 export const newImportBatchId = (): ImportBatchId => brandId<'ImportBatchId'>(crypto.randomUUID());
 
 /**

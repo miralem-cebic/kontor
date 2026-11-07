@@ -38,7 +38,8 @@ export function HomeView() {
   const documents = useApp((s) => s.documents);
   const payments = useApp((s) => s.payments);
   const expenses = useApp((s) => s.expenses);
-  const view = useMemo(() => buildOverview(company, documents, payments, expenses, new Date()), [company, documents, payments, expenses]);
+  const payouts = useApp((s) => s.payouts);
+  const view = useMemo(() => buildOverview(company, documents, payments, expenses, payouts, new Date()), [company, documents, payments, expenses, payouts]);
   const lang = currentLang();
 
   if (!view) {

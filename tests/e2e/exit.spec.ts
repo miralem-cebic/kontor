@@ -16,11 +16,11 @@ test('the company folder exports as a ZIP file: the folder as it is, every list 
   expect(read.ok).toBe(true);
   if (!read.ok) return;
   const names = [...read.value.keys()];
-  expect(names).toEqual(expect.arrayContaining(['company.json', 'listen/contacts.csv', 'listen/items.csv', 'listen/expenses.csv', 'LIESMICH.txt']));
+  expect(names).toEqual(expect.arrayContaining(['company.json', 'listen/contacts.csv', 'listen/items.csv', 'listen/expenses.csv', 'listen/payouts.csv', 'LIESMICH.txt']));
 
   // the folder's company file is in the archive as it is
   const company = JSON.parse(new TextDecoder().decode(read.value.get('company.json')!)) as { name: string; schemaVersion: number };
-  expect(company).toMatchObject({ name: 'Alpha Studio', schemaVersion: 16 });
+  expect(company).toMatchObject({ name: 'Alpha Studio', schemaVersion: 17 });
 
   // a list as a CSV file: the byte order mark, then the header line
   const contacts = new TextDecoder().decode(read.value.get('listen/contacts.csv')!);

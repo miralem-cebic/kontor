@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildReports } from '../../src/app/reports';
 import { buildSearchEntries } from '../../src/app/search';
-import { makeCancellation, makeContact, makeExpense, makeInvoice, makeItem, makePayment, makeQuote } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeExpense, makeInvoice, makeItem, makePayment, makePayout, makeQuote } from '../../src/data/schema';
 import type { ContactId, DocumentId } from '../../src/data/ids';
 import type { ContactFile, DocumentFile, InvoiceFile } from '../../src/data/types';
 import { cancellationOf } from '../../src/data/types';
@@ -10,7 +10,7 @@ import { basisPoints, cents } from '../../src/domain/money';
 import { netShareOf } from '../../src/domain/overview';
 import { searchEntries, type SearchEntry } from '../../src/domain/search';
 import { usePrefs } from '../../src/store/prefs';
-import { sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleItem, samplePayout, sampleQuote } from './fixtures';
 
 beforeEach(() => usePrefs.setState({ language: 'de' }));
 
@@ -34,7 +34,7 @@ const toMap = <T extends { id: string }>(list: T[]) => new Map(list.map((x) => [
 
 describe('buildReports', () => {
   it('has nothing without a company', () => {
-    expect(buildReports(null, contacts, docs(), new Map(), new Map(), 2026, NOW)).toBeNull();
+    expect(buildReports(null, contacts, docs(), new Map(), new Map(), new Map(), 2026, NOW)).toBeNull();
   });
 
   it('adds up the income per customer with their names, and agrees with the totals', () => {
@@ -42,7 +42,7 @@ describe('buildReports', () => {
     const b = issue(other, 'RE-2026-0002', '2026-04-10');
     const totals = invoiceTotals(a, false);
     const payments = toMap([payment(a, '2026-04-02', totals.gross), payment(b, '2026-05-02', 10_000)]);
-    const view = buildReports(COMPANY, contacts, docs(a, b), payments, new Map(), 2026, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(a, b), payments, new Map(), new Map(), 2026, NOW)!;
     const share = netShareOf(cents(10_000), totals.net, totals.gross);
     expect(view.turnover.rows.map((r) => [r.name, r.total])).toEqual([
       ['Kunde GmbH', totals.net],
@@ -56,7 +56,7 @@ describe('buildReports', () => {
   it('names a customer from the snapshot of the invoice when the contact is gone', () => {
     const a = issue(customer, 'RE-2026-0001', '2026-03-10');
     const payments = toMap([payment(a, '2026-04-02', 1_000)]);
-    const view = buildReports(COMPANY, new Map(), docs(a), payments, new Map(), 2026, NOW)!;
+    const view = buildReports(COMPANY, new Map(), docs(a), payments, new Map(), new Map(), 2026, NOW)!;
     expect(view.turnover.rows[0]?.name).toBe('Kunde GmbH');
   });
 
@@ -66,7 +66,7 @@ describe('buildReports', () => {
     const gone = { ...payment(a, '2026-04-02', 5_000), deletedAt: '2026-04-03T10:00:00.000Z' };
     const kept = payment(a, '2026-04-04', 1_190);
     const deletedExpense = { ...makeExpense(sampleExpense({ date: '2026-04-05' })), deletedAt: '2026-04-06T10:00:00.000Z' };
-    const view = buildReports(COMPANY, contacts, docs(a, deletedInvoice), toMap([gone, kept]), toMap([deletedExpense]), 2026, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(a, deletedInvoice), toMap([gone, kept]), toMap([deletedExpense]), new Map(), 2026, NOW)!;
     expect(view.turnover.rows).toHaveLength(1);
     expect(view.expenses.rows).toEqual([]);
     expect(view.open.items.map((i) => i.number)).toEqual(['RE-2026-0001']);
@@ -77,7 +77,7 @@ describe('buildReports', () => {
       makeExpense(sampleExpense({ category: 'Telefon', gross: cents(11_900) })),
       makeExpense(sampleExpense({ category: '', gross: cents(2_000), vatRate: basisPoints(0), taxTreatment: 'noVat' })),
     ]);
-    const view = buildReports(COMPANY, contacts, docs(), new Map(), expenses, 2026, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(), new Map(), expenses, new Map(), 2026, NOW)!;
     expect(view.expenses.rows.map((r) => [r.name, r.total])).toEqual([
       ['Telefon', 10_000],
       ['', 2_000],
@@ -91,7 +91,7 @@ describe('buildReports', () => {
     const cancellation = { ...makeCancellation(cancelled as InvoiceFile & { issued: NonNullable<InvoiceFile['issued']> }, '2026-03-20', 's-1' as DocumentId), issued: sampleIssued('RE-2026-0004') };
     const all = [a, b, cancelled, cancellation];
     expect(cancellationOf(all, cancelled.id)).toBe(cancellation);
-    const view = buildReports(COMPANY, contacts, docs(...all), new Map(), new Map(), 2026, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(...all), new Map(), new Map(), new Map(), 2026, NOW)!;
     expect(view.open.items.map((i) => [i.number, i.customerName])).toEqual([
       ['RE-2026-0001', 'Kunde GmbH'],
       ['RE-2026-0002', 'Zweite AG'],
@@ -104,20 +104,51 @@ describe('buildReports', () => {
   it('an issued invoice counts with the VAT status it was issued with, not with the status of the company today', () => {
     const smallSnapshot = { ...COMPANY, tax: { ...COMPANY.tax, vat: { kind: 'smallBusiness' as const } } };
     const a = issue(customer, 'RE-2026-0001', '2026-03-10', { issued: sampleIssued('RE-2026-0001', { snapshot: { ...sampleIssued().snapshot, company: smallSnapshot } }) });
-    const view = buildReports(COMPANY, contacts, docs(a), toMap([payment(a, '2026-04-02', 10_000)]), new Map(), 2026, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(a), toMap([payment(a, '2026-04-02', 10_000)]), new Map(), new Map(), 2026, NOW)!;
     // without VAT the whole amount is income
     expect(view.turnover.total).toBe(10_000);
   });
 
   it('offers the years of the records and the current year, and compares with the year before', () => {
     const a = issue(customer, 'RE-2025-0001', '2025-03-10');
-    const view = buildReports(COMPANY, contacts, docs(a), toMap([payment(a, '2025-04-02', 1_190)]), toMap([makeExpense(sampleExpense({ date: '2024-02-02' }))]), 2025, NOW)!;
+    const view = buildReports(COMPANY, contacts, docs(a), toMap([payment(a, '2025-04-02', 1_190)]), toMap([makeExpense(sampleExpense({ date: '2024-02-02' }))]), new Map(), 2025, NOW)!;
     expect(view.years).toEqual([2026, 2025, 2024]);
     expect(view.comparison.year).toBe(2025);
     expect(view.comparison.previousYear).toBe(2024);
     const t25 = invoiceTotals(a, false);
     expect(view.comparison.current.income).toBe(netShareOf(cents(1_190), t25.net, t25.gross));
     expect(view.comparison.previous.expenses).toBeGreaterThan(0);
+  });
+});
+
+describe('buildReports with payouts', () => {
+  const payer: ContactFile = makeContact(sampleContact({ name: 'Apple Distribution International', customerNumber: 'K-2001' }));
+  const payerContacts = new Map<ContactId, ContactFile>([...contacts, [payer.id, payer]]);
+  const payout = (over = {}) => makePayout(samplePayout(ACCOUNT_ID, payer.id, over));
+
+  it('puts the payouts under the name of their payer, next to the customers', () => {
+    const a = issue(customer, 'RE-2026-0001', '2026-03-10');
+    const view = buildReports(COMPANY, payerContacts, docs(a), toMap([payment(a, '2026-04-02', 11_900)]), new Map(), toMap([payout()]), 2026, NOW)!;
+    const totals = invoiceTotals(a, false);
+    const fromInvoice = netShareOf(cents(11_900), totals.net, totals.gross);
+    expect(view.turnover.rows.map((r) => [r.name, r.total])).toEqual([
+      ['Apple Distribution International', 123_456],
+      ['Kunde GmbH', fromInvoice],
+    ]);
+    expect(view.turnover.total).toBe(123_456 + fromInvoice);
+    expect(view.comparison.current.income).toBe(123_456 + fromInvoice);
+  });
+
+  it('leaves out a deleted payout, and counts a domestic payout without its VAT', () => {
+    const deleted = { ...payout(), deletedAt: '2026-11-04T10:00:00.000Z' };
+    const domestic = payout({ taxTreatment: 'domesticTaxed', vatRate: basisPoints(1_900), amount: cents(11_900) });
+    const view = buildReports(COMPANY, payerContacts, docs(), new Map(), new Map(), toMap([deleted, domestic]), 2026, NOW)!;
+    expect(view.turnover.total).toBe(10_000);
+  });
+
+  it('offers the year of a payout in the year selector', () => {
+    const view = buildReports(COMPANY, payerContacts, docs(), new Map(), new Map(), toMap([payout({ date: '2024-05-05' })]), 2026, NOW)!;
+    expect(view.years).toEqual([2026, 2024]);
   });
 });
 

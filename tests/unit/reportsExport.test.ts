@@ -82,6 +82,7 @@ describe('comparisonTable', () => {
       invoices: [{ id: 'r1', number: 'R', customerId: 'k', date: '2026-01-01', issued: true, isCancellation: false, cancelled: false, net: cents(10_000), gross: cents(10_000), dueDate: '2026-01-15' }],
       payments: [{ invoiceId: 'r1', date: '2026-02-03', amount: cents(10_000) }],
       expenses: [{ date: '2025-02-03', gross: cents(4_000), vat: cents(0), category: '' }],
+      payouts: [],
     });
     const rows = lines(comparisonTable(c));
     expect(rows[0]).toEqual(['Monat', 'Einnahmen (netto) 2026', 'Einnahmen (netto) 2025', 'Ausgaben (netto) 2026', 'Ausgaben (netto) 2025', 'Überschuss (Schätzung) 2026', 'Überschuss (Schätzung) 2025']);

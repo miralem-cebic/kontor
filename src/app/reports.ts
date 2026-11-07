@@ -4,11 +4,12 @@
 // by the snapshot of one of its invoices.
 
 import type { ContactId, DocumentId } from '../data/ids';
-import type { CompanyFile, ContactFile, DocumentFile, ExpenseFile, PaymentFile } from '../data/types';
+import type { CompanyFile, ContactFile, DocumentFile, ExpenseFile, PaymentFile, PayoutFile } from '../data/types';
 import { cancellationOf, isInvoice } from '../data/types';
 import { isoDateOf } from '../domain/dates';
 import { expenseVat } from '../domain/expense';
 import { dueDate, invoiceTotals } from '../domain/invoice';
+import { payoutVat } from '../domain/payout';
 import {
   availableYears,
   expensesByCategory,
@@ -24,6 +25,7 @@ import {
   type ReportExpense,
   type ReportInput,
   type ReportInvoice,
+  type ReportPayout,
 } from '../domain/reports';
 import type { OverviewPayment } from '../domain/overview';
 
@@ -47,7 +49,7 @@ export interface ReportsView {
 }
 
 /** The rows of the open company the reports are computed from */
-export function reportInput(company: CompanyFile, docs: readonly DocumentFile[], payments: ReadonlyMap<string, PaymentFile>, expenses: ReadonlyMap<string, ExpenseFile>, year: number, today: string): ReportInput {
+export function reportInput(company: CompanyFile, docs: readonly DocumentFile[], payments: ReadonlyMap<string, PaymentFile>, expenses: ReadonlyMap<string, ExpenseFile>, payouts: ReadonlyMap<string, PayoutFile>, year: number, today: string): ReportInput {
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
   const invoices: ReportInvoice[] = docs
     .filter(isInvoice)
@@ -72,7 +74,8 @@ export function reportInput(company: CompanyFile, docs: readonly DocumentFile[],
     });
   const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
   const expenseRows: ReportExpense[] = [...expenses.values()].filter((e) => e.deletedAt === null).map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e), category: e.category }));
-  return { year, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows };
+  const payoutRows: ReportPayout[] = [...payouts.values()].filter((p) => p.deletedAt === null).map((p) => ({ date: p.date, amount: p.amount, vat: payoutVat(p), payerId: p.payerId }));
+  return { year, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows, payouts: payoutRows };
 }
 
 /** The four reports of a calendar year, from the records of the open company; null without a company */
@@ -82,13 +85,14 @@ export function buildReports(
   documents: ReadonlyMap<DocumentId, DocumentFile>,
   payments: ReadonlyMap<string, PaymentFile>,
   expenses: ReadonlyMap<string, ExpenseFile>,
+  payouts: ReadonlyMap<string, PayoutFile>,
   year: number,
   now: Date,
 ): ReportsView | null {
   if (!company) return null;
   const today = isoDateOf(now);
   const docs = [...documents.values()];
-  const input = reportInput(company, docs, payments, expenses, year, today);
+  const input = reportInput(company, docs, payments, expenses, payouts, year, today);
 
   // the name of a customer: the contact as it is now, else the customer in the snapshot of an issued invoice
   const snapshotNames = new Map<string, string>();
@@ -98,7 +102,7 @@ export function buildReports(
   const turnover = turnoverByCustomer(input);
   const spent = expensesByCategory(input);
   const open = openItems(input);
-  const dates = [...input.invoices.map((i) => i.date), ...input.payments.map((p) => p.date), ...input.expenses.map((e) => e.date)];
+  const dates = [...input.invoices.map((i) => i.date), ...input.payments.map((p) => p.date), ...input.expenses.map((e) => e.date), ...input.payouts.map((p) => p.date)];
   return {
     year,
     years: availableYears(dates, now.getFullYear()),

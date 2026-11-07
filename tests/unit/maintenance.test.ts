@@ -3,11 +3,11 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { dailyBackup, KEEP_BACKUPS } from '../../src/data/maintenance';
 import { must } from '../../src/data/result';
-import { makeContact, makeItem, makeQuote } from '../../src/data/schema';
-import { sampleCompany, sampleContact, sampleItem, sampleQuote } from './fixtures';
+import { makeContact, makeItem, makePayout, makeQuote } from '../../src/data/schema';
+import { sampleCompany, sampleContact, sampleItem, samplePayout, sampleQuote } from './fixtures';
 
 let repo: FsRepository;
-const snapshot = { company: sampleCompany(), contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [] };
+const snapshot = { company: sampleCompany(), contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] };
 
 beforeEach(() => {
   repo = new FsRepository(new MemDir('c').asHandle());
@@ -38,12 +38,22 @@ describe('dailyBackup', () => {
     const contact = makeContact(sampleContact());
     const item = makeItem(sampleItem());
     const quote = makeQuote(contact.id, sampleQuote());
-    must(await dailyBackup(r, { company: snapshot.company, contacts: [contact], items: [item], documents: [quote], payments: [], dunnings: [], quoteStatuses: [], expenses: [] }, new Date(2026, 9, 21)));
+    must(await dailyBackup(r, { company: snapshot.company, contacts: [contact], items: [item], documents: [quote], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] }, new Date(2026, 9, 21)));
     const file = await (await (await root.getDirectoryHandle('backups')).getFileHandle('2026-10-21.json')).getFile();
     const backup = JSON.parse(await file.text());
     expect(backup.company.id).toBe(snapshot.company.id);
     expect(backup.contacts.map((c: { id: string }) => c.id)).toEqual([contact.id]);
     expect(backup.items.map((i: { id: string }) => i.id)).toEqual([item.id]);
     expect(backup.documents.map((d: { id: string }) => d.id)).toEqual([quote.id]);
+  });
+
+  it('the backup holds the payouts', async () => {
+    const root = new MemDir('b');
+    const r = new FsRepository(root.asHandle());
+    const payout = makePayout(samplePayout(snapshot.company.bank.defaultAccountId, makeContact(sampleContact()).id));
+    must(await dailyBackup(r, { ...snapshot, payouts: [payout] }, new Date(2026, 9, 21)));
+    const file = await (await (await root.getDirectoryHandle('backups')).getFileHandle('2026-10-21.json')).getFile();
+    const backup = JSON.parse(await file.text());
+    expect(backup.payouts.map((p: { id: string }) => p.id)).toEqual([payout.id]);
   });
 });

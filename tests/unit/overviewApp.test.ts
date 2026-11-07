@@ -27,9 +27,9 @@ const toMap = <T extends { id: string }>(list: T[]) => new Map(list.map((x) => [
 describe('the turnover of the limits in the overview', () => {
   it('counts the payments of the year, not the invoices: an invoice that is not paid yet is not turnover', () => {
     const inv = invoice(SMALL, 30_000);
-    const unpaid = buildOverview(SMALL, docs(inv), new Map(), new Map(), NOW)!;
+    const unpaid = buildOverview(SMALL, docs(inv), new Map(), new Map(), new Map(), NOW)!;
     expect(unpaid.figures.turnover).toBe(0);
-    const paid = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 30_000)]), new Map(), NOW)!;
+    const paid = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 30_000)]), new Map(), new Map(), NOW)!;
     expect(paid.figures.turnover).toBe(3_000_000);
     expect(paid.warning).toBeNull();
   });
@@ -37,7 +37,7 @@ describe('the turnover of the limits in the overview', () => {
   it('leaves out the payments of a service that is not taxable in Germany', () => {
     const abroad = invoice(SMALL, 90_000, { taxTreatment: 'notTaxable' });
     const payments = toMap([pay(abroad, '2026-04-01', 90_000)]);
-    const view = buildOverview(SMALL, docs(abroad), payments, new Map(), NOW)!;
+    const view = buildOverview(SMALL, docs(abroad), payments, new Map(), new Map(), NOW)!;
     expect(view.figures.income).toBe(9_000_000);
     expect(view.figures.turnover).toBe(0);
     expect(view.warning).toBeNull();
@@ -48,15 +48,15 @@ describe('the turnover of the limits in the overview', () => {
 describe('the warning for a small business', () => {
   it('warns when the turnover is at 80 % of the limit, and says when the limit was crossed', () => {
     const inv = invoice(SMALL, 120_000);
-    const close = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 80_000)]), new Map(), NOW)!;
+    const close = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 80_000)]), new Map(), new Map(), NOW)!;
     expect(close.warning).toEqual({ kind: 'close', percent: 80 });
-    const crossed = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 80_000), pay(inv, '2026-09-15', 20_000.01)]), new Map(), NOW)!;
+    const crossed = buildOverview(SMALL, docs(inv), toMap([pay(inv, '2026-04-01', 80_000), pay(inv, '2026-09-15', 20_000.01)]), new Map(), new Map(), NOW)!;
     expect(crossed.warning).toEqual({ kind: 'crossed', day: '2026-09-15' });
   });
 
   it('has no warning for a company with regular VAT, which charges VAT anyway', () => {
     const inv = invoice(REGULAR, 120_000);
-    const view = buildOverview(REGULAR, docs(inv), toMap([pay(inv, '2026-04-01', 110_000)]), new Map(), NOW)!;
+    const view = buildOverview(REGULAR, docs(inv), toMap([pay(inv, '2026-04-01', 110_000)]), new Map(), new Map(), NOW)!;
     expect(view.warning).toBeNull();
     expect(view.reverseChargeExpenses).toBe(0);
   });
@@ -73,7 +73,7 @@ describe('the banner for § 13b UStG', () => {
       expense({ date: '2025-12-31', taxTreatment: 'euReverseCharge' }),
       { ...expense({ taxTreatment: 'euReverseCharge' }), deletedAt: '2026-11-01T00:00:00.000Z' },
     ]);
-    expect(buildOverview(SMALL, docs(), new Map(), list, NOW)!.reverseChargeExpenses).toBe(2);
-    expect(buildOverview(REGULAR, docs(), new Map(), list, NOW)!.reverseChargeExpenses).toBe(0);
+    expect(buildOverview(SMALL, docs(), new Map(), list, new Map(), NOW)!.reverseChargeExpenses).toBe(2);
+    expect(buildOverview(REGULAR, docs(), new Map(), list, new Map(), NOW)!.reverseChargeExpenses).toBe(0);
   });
 });

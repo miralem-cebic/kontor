@@ -53,7 +53,7 @@ Die wichtigsten Felder:
 - **Geldbeträge** sind ganze Zahlen in Cent. `1250` bedeutet 12,50 €.
 - **Umsatzsteuersätze** sind Basispunkte: `1900` bedeutet 19 %, `700` bedeutet 7 %, `0` bedeutet 0 %.
 - **Mengen** sind Tausendstel: `1500` bedeutet 1,5.
-- **Daten** sind ISO-Daten `JJJJ-MM-TT`, Zeitpunkte sind ISO-Zeitstempel in UTC.
+- **Daten** sind ISO-Daten `JJJJ-MM-TT`, Zeitpunkte sind ISO-Zeitstempel in UTC in genau dieser Form: `2026-10-31T10:00:00.000Z` (mit Millisekunden und `Z`). Andere Schreibweisen und Zeitpunkte, die mehr als ein Jahr nach der Uhr dieses Geräts liegen, werden beim Lesen abgelehnt.
 - **Kennungen** (`id`, `customerId` und so weiter) sind UUIDs.
 - **Dateien mit Prüfsumme**: Das PDF einer Rechnung, das PDF eines Angebots und jeder Beleg haben einen SHA-256-Wert im Datensatz, der zu der Datei passen muss.
 

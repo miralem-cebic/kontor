@@ -144,7 +144,10 @@ function slotFor(doc: DocumentFile, ctx: IssueContext, numbering: NumberingFile,
 
 /**
  * The number of the document: its reservation from an earlier attempt, or its next number (slotFor), reserved and read
- * back. Every number known in the range (issued, reserved or as a file) is taken.
+ * back. Every number known in the range (issued, reserved or as a file) is taken. A reservation from an earlier attempt
+ * is used again only while it still fits the document: its counter key and its number are those the document's date
+ * gives now. If the date moved (into another year, or another month in a pattern with {MM}), the old reservation stays
+ * in the range file as a gap, as any abandoned reservation, and the document gets a new number.
  */
 async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true; reservation: Reservation; files: string[] } | Failed> {
   const range: NumberRange = doc.kind;
@@ -153,12 +156,15 @@ async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true
   const listed = await ctx.repo.listIssuedFiles(range);
   if (!listed.ok) return fail(listed.error.kind);
   const numbering: NumberingFile = read.value ?? { schemaVersion: SCHEMA_VERSION, range, counters: [], reservations: [] };
-  const own = numbering.reservations.find((r) => r.documentId === doc.id);
-  if (own) return { ok: true, reservation: own, files: listed.value };
 
   const issued = issuedIn(ctx.documents, range);
   const slot = slotFor(doc, ctx, numbering, issued);
   if (!slot) return fail('notReady');
+  const fits = (r: Reservation): boolean =>
+    r.documentId === doc.id && r.counterKey === slot.key && r.number === (doc.kind === 'quote' && doc.revises ? slot.number : numberFor(patternOf(ctx.company, doc.kind), doc.date, r.counter));
+  const own = numbering.reservations.find(fits);
+  if (own) return { ok: true, reservation: own, files: listed.value };
+
   const { number, counter, key } = slot;
   const taken = new Set([...issued.map((i) => i.number), ...numbering.reservations.map((r) => r.number), ...listed.value.map((f) => f.replace(/\.pdf$/, ''))]);
   if (taken.has(number)) return fail('numberTaken');

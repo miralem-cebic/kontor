@@ -28,6 +28,7 @@ const invoice = (over: Partial<ReportInvoice> = {}): ReportInvoice => ({
   net: cents(10_000),
   gross: cents(11_900),
   dueDate: '2026-03-24',
+  taxableInGermany: true,
   ...over,
 });
 

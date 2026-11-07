@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cents } from '../../src/domain/money';
-import { netShareOf, overview, smallBusinessLimitState, type OverviewExpense, type OverviewInvoice, type OverviewPayment } from '../../src/domain/overview';
+import { netShareOf, overview, smallBusinessLimitState, turnoverEntries, type OverviewExpense, type OverviewInvoice, type OverviewPayment } from '../../src/domain/overview';
 
 const TODAY = '2026-06-01';
 
@@ -14,6 +14,7 @@ const invoice = (over: Partial<OverviewInvoice> = {}): OverviewInvoice => ({
   net: cents(10_000),
   gross: cents(11_900),
   dueDate: '2026-03-24',
+  taxableInGermany: true,
   ...over,
 });
 
@@ -48,7 +49,7 @@ describe('overview of a regular business', () => {
       payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }],
       expenses: [{ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900) }],
     });
-    expect(o).toMatchObject({ income: 5_000, expenses: 10_000, profit: -5_000, turnover: 10_000 });
+    expect(o).toMatchObject({ income: 5_000, expenses: 10_000, profit: -5_000, turnover: 5_000 });
     expect(o.months[3]).toEqual({ month: 4, income: 5_000, expenses: 10_000, profit: -5_000 });
   });
 
@@ -57,12 +58,11 @@ describe('overview of a regular business', () => {
     expect(o).toMatchObject({ openReceivables: 5_950, overdueReceivables: 5_950, overdueCount: 1 });
   });
 
-  it('leaves out drafts and cancelled invoices from what is open, and a cancellation reduces the turnover', () => {
+  it('leaves out drafts and cancelled invoices from what is open', () => {
     const draft = invoice({ id: 'd1', issued: false });
     const cancelled = invoice({ id: 'c1', cancelled: true });
     const cancellation = invoice({ id: 's1', date: '2026-04-01', isCancellation: true, net: cents(-10_000), gross: cents(-11_900), dueDate: '' });
     const o = run({ invoices: [draft, cancelled, cancellation] });
-    // the cancelled invoice and its cancellation cancel out in the turnover; the draft is not counted
     expect(o).toMatchObject({ openReceivables: 0, overdueReceivables: 0, overdueCount: 0, turnover: 0 });
   });
 
@@ -71,7 +71,7 @@ describe('overview of a regular business', () => {
       payments: [{ invoiceId: 'r1', date: '2025-12-30', amount: cents(5_950) }],
       expenses: [{ date: '2027-01-02', gross: cents(11_900), vat: cents(0) }],
     });
-    expect(o).toMatchObject({ income: 0, expenses: 0, turnover: 10_000 });
+    expect(o).toMatchObject({ income: 0, expenses: 0, turnover: 0 });
   });
 });
 
@@ -84,7 +84,36 @@ describe('overview of a small business', () => {
       payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }],
       expenses: [{ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900) }],
     });
-    expect(o).toMatchObject({ income: 5_950, expenses: 11_900, profit: -5_950, turnover: 11_900 });
+    expect(o).toMatchObject({ income: 5_950, expenses: 11_900, profit: -5_950, turnover: 5_950 });
+  });
+});
+
+describe('the turnover of the small business limits (§ 19 Abs. 2 UStG: vereinnahmte Entgelte)', () => {
+  const pay = (invoiceId: string, date: string, amount: number): OverviewPayment => ({ invoiceId, date, amount: cents(amount) });
+
+  it('is the net part of the payments, on the day they arrived, not the invoices of the year', () => {
+    // issued in December 2025, paid in January 2026: it belongs to 2026
+    const december = invoice({ date: '2025-12-20', dueDate: '2026-01-03' });
+    const paid = run({ invoices: [december], payments: [pay('r1', '2026-01-10', 11_900)] });
+    expect(paid.turnover).toBe(10_000);
+    expect(run({ invoices: [december], year: 2025 }).turnover).toBe(0);
+  });
+
+  it('leaves out a service that is not taxable in Germany (place of supply abroad), which is no domestic supply', () => {
+    const abroad = invoice({ id: 'a1', net: cents(10_000), gross: cents(10_000), taxableInGermany: false });
+    const o = run({ invoices: [invoice(), abroad], payments: [pay('r1', '2026-04-02', 11_900), pay('a1', '2026-04-03', 10_000)] });
+    expect(o.income).toBe(20_000);
+    expect(o.turnover).toBe(10_000);
+  });
+
+  it('turnoverEntries lists the net part of each payment with its date, without those of a service not taxable in Germany', () => {
+    const abroad = invoice({ id: 'a1', net: cents(10_000), gross: cents(10_000), taxableInGermany: false });
+    const entries = turnoverEntries([invoice(), abroad], [pay('r1', '2026-04-02', 5_950), pay('a1', '2026-04-03', 10_000), pay('gone', '2026-04-04', 700)]);
+    // a payment of an unknown invoice counts with its whole amount, like in the income
+    expect(entries).toEqual([
+      { date: '2026-04-02', amount: 5_000 },
+      { date: '2026-04-04', amount: 700 },
+    ]);
   });
 });
 

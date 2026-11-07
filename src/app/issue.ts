@@ -1,7 +1,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import { effectiveTaxTreatment, invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
+import { effectiveTaxTreatment, invoiceTotals, issueProblems, smallBusinessRefusalOf, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
 import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
 import { quoteProblems } from '../domain/quote';
@@ -20,6 +20,7 @@ import {
   type InvoiceFile,
   type NumberingFile,
   type NumberRange,
+  type PaymentFile,
   type QuoteFile,
   type Reservation,
 } from '../data/types';
@@ -28,6 +29,7 @@ import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, type LogoImage } from '../pdf/documentPdf';
 import { putIssuedDocument, useApp } from '../store/appStore';
 import { logoImage } from './documentPdf';
+import { companyTurnoverEntries } from './overview';
 import { flushWrites, openRepository } from './session';
 
 // Issuing an invoice (ADR 0004): the number is reserved in numbering/invoice.json and read back, the PDF is written
@@ -53,6 +55,8 @@ export interface IssueContext {
   company: CompanyFile;
   contacts: ReadonlyMap<string, ContactFile>;
   documents: ReadonlyMap<string, DocumentFile>;
+  /** The payments of the company: they decide the small business limit (§ 19 Abs. 1 and 2 UStG) */
+  payments: ReadonlyMap<string, PaymentFile>;
   logo: LogoImage | null;
   /** The browser that issues, for the reservation and the audit log */
   device: string;
@@ -194,6 +198,7 @@ export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueRes
     customer: customer ?? null,
     ownVatId: company.tax.vatId,
     accountActive: !!account && !account.deletedAt,
+    smallBusinessRefusal: smallBusinessRefusalOf(inv, smallBusiness, smallBusiness ? companyTurnoverEntries(company, ctx.documents, ctx.payments) : []),
   });
   if (problems.length > 0 || !customer || !account) return fail('notReady');
   return finalize(inv, { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) }, ctx);
@@ -297,11 +302,11 @@ async function inOpenCompany<D extends DocumentFile>(step: (ctx: IssueContext) =
   const repo = openRepository();
   if (!repo) return fail('notFound');
   if (!(await flushWrites())) return fail('other');
-  const { company, contacts, documents } = useApp.getState();
+  const { company, contacts, documents, payments } = useApp.getState();
   if (!company) return fail('notFound');
   let result: IssueResult<D>;
   try {
-    result = await step({ repo, company, contacts, documents, logo: await logoImage(), device: deviceId(), now: new Date() });
+    result = await step({ repo, company, contacts, documents, payments, logo: await logoImage(), device: deviceId(), now: new Date() });
   } catch (e) {
     // for example the PDF could not be made; a reservation already written is used again by the next attempt
     console.error('Could not issue the document', e);

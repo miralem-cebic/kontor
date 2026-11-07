@@ -613,6 +613,48 @@ const MESSAGES_SRC = {
   'overview.above': { de: 'darüber', en: 'above' },
   'overview.below': { de: 'darunter', en: 'below' },
   'overview.note': { de: 'Alle Zahlen sind Schätzungen zur Orientierung und keine Steuerberatung. Sie beruhen auf den Zahlungseingängen und Ausgaben dieser Firma; die Umsätze anderer Firmen derselben Person sind nicht enthalten.', en: 'All figures are estimates for orientation and not tax advice. They are based on the payments and expenses of this company; the turnover of other companies of the same person is not included.' },
+  // Small business scheme (§ 19 UStG): the warning on the overview, the refusal when issuing, the § 13b banner and the waiver
+  'smallBusiness.warnClose': {
+    de: 'Du hast {percent} % der Umsatzgrenze von {limit} erreicht ({turnover}). Wird sie überschritten, braucht ab diesem Umsatz jede Rechnung Umsatzsteuer (§ 19 Abs. 1 UStG).',
+    en: 'You have reached {percent} % of the turnover limit of {limit} ({turnover}). Once it is crossed, every invoice needs VAT from that turnover on (§ 19 (1) UStG).',
+  },
+  'smallBusiness.warnCrossed': {
+    de: 'Die Umsatzgrenze von {limit} wurde am {date} überschritten. Der Umsatz, der sie überschreitet, ist schon nicht mehr steuerfrei (§ 19 Abs. 1 UStG): Rechnungen ab diesem Tag brauchen Umsatzsteuer. kontor stellt keine Rechnung ohne Umsatzsteuer mehr aus, die nach diesem Tag datiert ist. Stelle in den Einstellungen (Steuern) auf Umsatzsteuer um.',
+    en: 'The turnover limit of {limit} was crossed on {date}. The turnover that crosses it is already not exempt any more (§ 19 (1) UStG): invoices from that day on need VAT. kontor no longer issues an invoice without VAT that is dated after that day. Switch to VAT in the settings (Tax).',
+  },
+  'smallBusiness.warnPreviousYear': {
+    de: 'Dein Umsatz im Vorjahr lag über {limit}. Dann gilt die Kleinunternehmerregelung in diesem Jahr nicht (§ 19 Abs. 1 UStG): Rechnungen brauchen Umsatzsteuer. kontor stellt keine Rechnung ohne Umsatzsteuer mehr aus, die in diesem Jahr datiert ist. Stelle in den Einstellungen (Steuern) auf Umsatzsteuer um.',
+    en: 'Your turnover in the previous year was above {limit}. Then the small business scheme does not apply this year (§ 19 (1) UStG): invoices need VAT. kontor no longer issues an invoice without VAT that is dated in this year. Switch to VAT in the settings (Tax).',
+  },
+  'smallBusiness.warnScope': {
+    de: 'Gezählt werden nur die Zahlungen dieser Firma in kontor, netto, am Tag des Zahlungseingangs (§ 19 Abs. 2 UStG: vereinnahmte Entgelte), ohne Leistungen, die nicht in Deutschland steuerbar sind. Umsätze anderer Firmen derselben Person und Zahlungen, die nicht in kontor stehen, fehlen; die Grenze kann also früher erreicht sein.',
+    en: 'Only the payments of this company in kontor are counted, net, on the day the money arrived (§ 19 (2) UStG: received payments), without services that are not taxable in Germany. The turnover of other companies of the same person and payments that are not in kontor are missing, so the limit may have been reached earlier.',
+  },
+  'smallBusiness.issueLimit': {
+    de: 'Das Rechnungsdatum liegt nach dem {date}. An diesem Tag wurde die Umsatzgrenze für Kleinunternehmer überschritten (§ 19 Abs. 1 UStG), danach braucht die Rechnung Umsatzsteuer. Stelle in den Einstellungen (Steuern) auf Umsatzsteuer um oder prüfe das Datum.',
+    en: 'The invoice date is after {date}. The turnover limit for small businesses was crossed on that day (§ 19 (1) UStG), so the invoice needs VAT. Switch to VAT in the settings (Tax) or check the date.',
+  },
+  'smallBusiness.issuePreviousYear': {
+    de: 'Dein Umsatz im Vorjahr lag über {limit}. Dann gilt die Kleinunternehmerregelung im ganzen Jahr nicht (§ 19 Abs. 1 UStG), die Rechnung braucht Umsatzsteuer. Stelle in den Einstellungen (Steuern) auf Umsatzsteuer um oder prüfe das Datum.',
+    en: 'Your turnover in the previous year was above {limit}. Then the small business scheme does not apply in the whole year (§ 19 (1) UStG), so the invoice needs VAT. Switch to VAT in the settings (Tax) or check the date.',
+  },
+  'smallBusiness.reverseCharge': {
+    de: 'In diesem Jahr gibt es {n} Ausgabe(n) mit Umkehr der Steuerschuldnerschaft oder von einem Lieferanten außerhalb der EU. Dafür schuldest du die Umsatzsteuer selbst (§ 13b UStG), auch als Kleinunternehmer (§ 13b Abs. 5 UStG), und musst dafür eine Umsatzsteuer-Voranmeldung abgeben (§ 18 Abs. 4a UStG). kontor rechnet diese Steuer noch nicht aus; sprich mit deinem Finanzamt oder Steuerberater.',
+    en: 'This year there are {n} expense(s) with reverse charge or from a supplier outside the EU. You owe the VAT on them yourself (§ 13b UStG), also as a small business (§ 13b (5) UStG), and must file an advance VAT return for it (§ 18 (4a) UStG). kontor does not calculate this tax yet; talk to your tax office or tax advisor.',
+  },
+  'smallBusiness.waiverTitle': { de: 'Verzicht auf die Kleinunternehmerregelung', en: 'Waiving the small business scheme' },
+  'smallBusiness.waiverText': {
+    de: 'Auch wenn du die Grenzen einhältst, kannst du auf die Kleinunternehmerregelung verzichten (Option zur Regelbesteuerung, § 19 Abs. 3 UStG) und Umsatzsteuer ausweisen. Das erklärst du dem Finanzamt; kontor gibt die Erklärung nicht ab.',
+    en: 'Even if you stay within the limits, you can waive the small business scheme (option for regular taxation, § 19 (3) UStG) and charge VAT. You declare this to the tax office; kontor does not file the declaration.',
+  },
+  'smallBusiness.waiverBinding': {
+    de: 'Die Erklärung ist unwiderruflich und gilt von Beginn des Jahres an, für das du sie abgibst. Sie bindet dich mindestens {years} Kalenderjahre; erst danach kannst du sie mit Wirkung von Beginn eines folgenden Kalenderjahres widerrufen. Frist: bis zum letzten Tag des Februars des zweiten Kalenderjahres, das auf das Jahr folgt, für das sie gelten soll.',
+    en: 'The declaration cannot be withdrawn and applies from the start of the year you declare it for. It binds you for at least {years} calendar years; only after that can you revoke it, with effect from the start of a later calendar year. Deadline: the last day of February of the second calendar year after the year it is meant to apply to.',
+  },
+  'smallBusiness.waiverNo': {
+    de: '„Nein, ich weise Umsatzsteuer aus“ wählst du auch, wenn du die Umsatzgrenze überschritten hast (§ 19 Abs. 1 UStG) oder ohnehin Umsatzsteuer ausweisen musst. Lass dich vor einem Verzicht beraten.',
+    en: '“No, I charge VAT” is also the choice if you have crossed the turnover limit (§ 19 (1) UStG) or have to charge VAT anyway. Get advice before you waive the scheme.',
+  },
   'taxes.title': { de: 'Steuern', en: 'Taxes' },
   'taxes.lead': { de: 'Ausfüllhilfen für Steuererklärungen. Alle Werte sind Schätzungen aus deinen Daten und keine Steuerberatung.', en: 'Filling aids for tax returns. All values are estimates from your data and not tax advice.' },
   'ustva.title': { de: 'Umsatzsteuer-Voranmeldung', en: 'Advance VAT return' },

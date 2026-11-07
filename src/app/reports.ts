@@ -67,6 +67,7 @@ export function reportInput(company: CompanyFile, docs: readonly DocumentFile[],
         net: totals.net,
         gross: totals.gross,
         dueDate: inv.cancels ? '' : dueDate(inv),
+        taxableInGermany: inv.taxTreatment !== 'notTaxable',
       };
     });
   const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ invoiceId: p.invoiceId, date: p.date, amount: p.amount }));

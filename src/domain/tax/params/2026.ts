@@ -7,7 +7,13 @@ export const PARAMS_2026: TaxYearParams = {
   year: 2026,
   // § 19 Abs. 1 Satz 1 UStG: the turnover of the previous year is at most 25,000 €, and of the current year it is expected
   // to be at most 100,000 €. https://www.gesetze-im-internet.de/ustg_1980/__19.html
-  smallBusiness: { previousYearLimit: cents(2_500_000), currentYearLimit: cents(10_000_000) },
+  smallBusiness: {
+    previousYearLimit: cents(2_500_000),
+    currentYearLimit: cents(10_000_000),
+    // § 19 Abs. 3 Satz 3 UStG: the waiver binds the entrepreneur for at least five calendar years (checked against the law
+    // text of gesetze-im-internet.de on 7 November 2026). The Gesamtumsatz is defined in Abs. 2, the waiver is Abs. 3.
+    waiverBindingYears: 5,
+  },
   vatReturn: {
     // § 18 Abs. 1 Satz 1 UStG: the return is due on the 10th day after the end of the period.
     // https://www.gesetze-im-internet.de/ustg_1980/__18.html

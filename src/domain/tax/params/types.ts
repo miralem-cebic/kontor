@@ -29,6 +29,8 @@ export interface TaxYearParams {
     previousYearLimit: Cents;
     /** The turnover of the current calendar year is expected not to exceed this */
     currentYearLimit: Cents;
+    /** Calendar years the waiver of the scheme binds (§ 19 Abs. 3 Satz 3 UStG) */
+    waiverBindingYears: number;
   };
   /** The advance VAT return (Umsatzsteuer-Voranmeldung, UStVA): when it is due and the form fields kontor fills */
   vatReturn: {

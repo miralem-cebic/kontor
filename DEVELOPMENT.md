@@ -49,6 +49,7 @@ src/
                                an issued invoice or a finalized quote is its stored file, checked against its SHA-256
   app/issue.ts                 Issuing and cancelling an invoice, finalizing a quote (ADR 0004): reserve the number,
                                write the PDF once, the record, audit
+  app/ustva.ts                 Advance VAT return: the records of the company mapped into the domain, copy values, CSV
   app/sending.ts               E-mail to the customer (F04): the mail as .eml with the PDF attached, or a mailto: link;
                                the text from the templates, a changed PDF is not sent, the audit line `send`
   domain/                      Pure logic, no I/O:
@@ -62,6 +63,7 @@ src/
     tax/params/<year>.ts       Values that depend on the tax year, each with its legal source; tax/params/index.ts
                                picks the year (an unknown later year gets the last known one)
     tax/tradeTax.ts            Trade tax: the minimum multiplier of a year
+    ustva.ts                   Advance VAT return (R1): periods, due date, the fields of the form from invoices, payments and expenses
     numbering.ts               Number patterns of invoices and quotes ("RE-{YYYY}-{NNNN}", "AN-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
     contact.ts                 Customers and suppliers: profile, form draft, checks, search

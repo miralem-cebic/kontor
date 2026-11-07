@@ -41,7 +41,7 @@ import { counterOnlyProblem, MAX_PATTERN_LENGTH, patternProblem } from '../domai
 import { LOWEST_MIN_MULTIPLIER_PERCENT } from '../domain/tax/tradeTax';
 import { UNITS, type UnitCode } from '../domain/units';
 import { isVatRate } from '../domain/vat';
-import { observeStamp } from './clock';
+import { isPlausibleStamp, observeStamp } from './clock';
 import { brandId, type Brand } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
@@ -137,12 +137,14 @@ const int =
   (v, path) =>
     Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? (v as number) : fail(path, `expected a whole number from ${min} to ${max}, got ${describe(v)}`);
 const bool: Check<boolean> = (v, path) => (typeof v === 'boolean' ? v : fail(path, `expected a boolean, got ${describe(v)}`));
+// Timestamps are compared as strings by the merge, so only the canonical form the app writes is accepted
+// (`YYYY-MM-DDTHH:mm:ss.sssZ`), and none further than a year ahead of the clock (clock.ts).
 const dateTime: Check<string> = (v, path) => {
-  if (typeof v === 'string' && v.length <= 40 && !Number.isNaN(Date.parse(v))) {
+  if (typeof v === 'string' && isPlausibleStamp(v)) {
     observeStamp(v);
     return v;
   }
-  return fail(path, `expected an ISO timestamp, got ${describe(v)}`);
+  return fail(path, `expected a timestamp like 2026-10-31T10:00:00.000Z (not more than a year ahead), got ${describe(v)}`);
 };
 
 function oneOf<T extends string>(values: readonly T[]): Check<T> {

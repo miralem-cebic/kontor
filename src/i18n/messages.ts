@@ -1062,6 +1062,10 @@ const MESSAGES_SRC = {
     de: 'Die nächste Rechnungsnummer ist im Ordner schon vergeben, der Nummernkreis (numbering/invoice.json) ist nicht aktuell. Es wurde nichts ausgestellt.',
     en: 'The next invoice number is already taken in the folder; the number range (numbering/invoice.json) is out of date. Nothing was issued.',
   },
+  'issue.fileDiffers': {
+    de: 'Zur reservierten Nummer liegt im Ordner (documents/) schon eine PDF-Datei aus einem unterbrochenen Versuch, die nicht zum jetzigen Stand passt (der Entwurf wurde seitdem geändert). Die Datei wurde nicht überschrieben und nichts ausgestellt. Bitte den Entwurf wie zuvor herstellen oder die Datei aus dem Ordner entfernen, wenn sie nicht gebraucht wird.',
+    en: 'The folder (documents/) already holds a PDF for the reserved number from an interrupted attempt that does not match the current state (the draft was changed since). The file was not overwritten and nothing was issued. Restore the draft as it was, or remove the file from the folder if it is not needed.',
+  },
   'invoices.issueFailed': { de: 'Die Rechnung wurde nicht ausgestellt: {reason}', en: 'The invoice was not issued: {reason}' },
   'invoices.empty': {
     de: 'Noch keine Rechnungen. Lege eine neue an oder erstelle sie aus einem Angebot.',

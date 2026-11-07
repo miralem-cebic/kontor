@@ -284,6 +284,33 @@ describe('issued invoices in the folder', () => {
     expect(await text(dir, `${inv.id}.json`)).toBe(before);
   });
 
+  it('a file replaced by another device with an older modification time is still noticed and merged', async () => {
+    const inv = draft();
+    must(await repo.saveDocument(inv));
+    const dir = await root.getDirectoryHandle('documents');
+    // another device (clock behind ours, or a sync client keeping the source time) issues the invoice: older mtime
+    const file = (await dir.getFileHandle(`${inv.id}.json`)) as MemFile;
+    const mtime = file.lastModified;
+    file.content = new Blob([JSON.stringify({ ...inv, schemaVersion: SCHEMA_VERSION, issued: sampleIssued() })]);
+    file.lastModified = mtime - 5000;
+    const edited = { ...inv, subject: 'Geändert', fieldUpdatedAt: { ...inv.fieldUpdatedAt, subject: nowIso() } } as typeof inv;
+    const written = must(await repo.saveDocument(edited));
+    expect(written).toMatchObject({ issued: { number: 'RE-2026-0001' } });
+    expect(JSON.parse(await text(dir, `${inv.id}.json`))).toMatchObject({ issued: { number: 'RE-2026-0001' } });
+  });
+
+  it('a file replaced with the same modification time but another size is noticed too', async () => {
+    const inv = draft();
+    must(await repo.saveDocument(inv));
+    const dir = await root.getDirectoryHandle('documents');
+    const file = (await dir.getFileHandle(`${inv.id}.json`)) as MemFile;
+    const mtime = file.lastModified;
+    file.content = new Blob([JSON.stringify({ ...inv, schemaVersion: SCHEMA_VERSION, issued: sampleIssued() })]);
+    file.lastModified = mtime;
+    const written = must(await repo.saveDocument({ ...inv, subject: 'Geändert', fieldUpdatedAt: { ...inv.fieldUpdatedAt, subject: nowIso() } } as typeof inv));
+    expect(written).toMatchObject({ issued: { number: 'RE-2026-0001' } });
+  });
+
   it('an invoice issued with another number elsewhere stops the save', async () => {
     const inv = draft();
     must(await repo.saveDocument({ ...inv, issued: sampleIssued('RE-2026-0001') }));

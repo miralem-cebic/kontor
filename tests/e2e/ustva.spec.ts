@@ -14,26 +14,28 @@ test('the advance VAT return: the period, the due date, the input tax of an expe
   await page.getByRole('button', { name: 'Ausgabe speichern' }).click();
 
   await page.getByRole('button', { name: 'Steuern' }).click();
-  await expect(page.getByRole('heading', { name: 'Umsatzsteuer-Voranmeldung' })).toBeVisible();
-  await expect(page.getByText('Ausfüllhilfe und Schätzung, keine Steuerberatung')).toBeVisible();
+  // the page holds two sections with the same period fields; this test is about the first
+  const section = page.getByRole('region', { name: 'Umsatzsteuer-Voranmeldung' });
+  await expect(section.getByRole('heading', { name: 'Umsatzsteuer-Voranmeldung' })).toBeVisible();
+  await expect(section.getByText('Ausfüllhilfe und Schätzung, keine Steuerberatung')).toBeVisible();
 
   // the expense is in the current month, not in the last one that is over
   const now = new Date();
-  await page.getByLabel('Art', { exact: true }).selectOption('month');
-  await page.getByLabel('Jahr', { exact: true }).selectOption(String(now.getFullYear()));
-  await page.getByLabel('Monat', { exact: true }).selectOption(String(now.getMonth() + 1));
-  const input = page.getByRole('row', { name: /^66 / });
+  await section.getByLabel('Art', { exact: true }).selectOption('month');
+  await section.getByLabel('Jahr', { exact: true }).selectOption(String(now.getFullYear()));
+  await section.getByLabel('Monat', { exact: true }).selectOption(String(now.getMonth() + 1));
+  const input = section.getByRole('row', { name: /^66 / });
   await expect(input).toContainText('19,00');
-  await expect(page.getByRole('row', { name: /^83 / })).toContainText('-19,00');
-  await expect(page.getByText(/^Fällig am /)).toBeVisible();
+  await expect(section.getByRole('row', { name: /^83 / })).toContainText('-19,00');
+  await expect(section.getByText(/^Fällig am /)).toBeVisible();
 
   // the value is copied as ELSTER takes it: a comma, no grouping
   await page.getByRole('button', { name: 'Steuer 66 kopieren (19,00)' }).click();
   await expect(page.getByText('Kopiert: 19,00').or(page.getByText('Kopieren nicht möglich'))).toBeVisible();
 
   // what kontor leaves out is listed
-  await expect(page.getByRole('heading', { name: 'Nicht abgedeckt' })).toBeVisible();
-  await expect(page.getByText('Anzahlungen: Eine Rechnung zählt erst')).toBeVisible();
+  await expect(section.getByRole('heading', { name: 'Nicht abgedeckt' })).toBeVisible();
+  await expect(section.getByText('Anzahlungen: Eine Rechnung zählt erst')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -44,5 +46,41 @@ test('a small business sees that no advance return is needed', async ({ page }) 
   await page.getByRole('button', { name: 'Steuern' }).click();
   await expect(page.getByText('Keine Voranmeldung nötig')).toBeVisible();
   await expect(page.getByRole('table')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('the summary report (ZM): the period, the due date without extension, nothing to report, the link to the BZSt portal, what is not covered', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+  await page.getByRole('button', { name: 'Steuern' }).click();
+
+  const section = page.getByRole('region', { name: /^Zusammenfassende Meldung/ });
+  await expect(section.getByRole('heading', { name: /^Zusammenfassende Meldung/ })).toBeVisible();
+  await expect(section.getByText('Ausfüllhilfe, keine Steuerberatung')).toBeVisible();
+  await expect(section.getByText(/^Fällig am /)).toBeVisible();
+  // no invoices: nothing to report and no table
+  await expect(section.getByText('keine Zusammenfassende Meldung nötig', { exact: false })).toBeVisible();
+  await expect(section.getByRole('table')).toHaveCount(0);
+
+  // the link goes to the portal of the BZSt, in a new window
+  const link = section.getByRole('link', { name: /BZSt-Online-Portal/ });
+  await expect(link).toHaveAttribute('href', 'https://online.portal.bzst.de');
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', /noopener/);
+
+  // months are possible too
+  await section.getByLabel('Art', { exact: true }).selectOption('month');
+  await expect(section.getByText(/^Fällig am /)).toBeVisible();
+  await expect(section.getByRole('heading', { name: 'Nicht abgedeckt' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a small business sees that no summary report is needed', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Beta Studio', smallBusiness: true });
+  await page.getByRole('button', { name: 'Steuern' }).click();
+  await expect(page.getByText('Keine Zusammenfassende Meldung nötig')).toBeVisible();
   expect(errors).toEqual([]);
 });

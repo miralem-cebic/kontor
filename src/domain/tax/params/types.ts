@@ -41,6 +41,13 @@ export interface TaxYearParams {
     /** The field numbers (Kennzahlen) of the form. The tax of the fields 81 and 86 has no number of its own: it sits beside the base. */
     kz: VatReturnFields;
   };
+  /** The summary report of intra-community supplies and services (Zusammenfassende Meldung, ZM) to the Federal Central Tax Office */
+  summaryReport: {
+    /** The day of the month after the reporting period by which the report is due (§ 18a Abs. 1 Satz 1 UStG). The permanent extension of the advance returns does not apply to it. */
+    dueDay: number;
+    /** Supplies of goods above this sum of bases in a quarter, or in one of the four before, have to be reported monthly (§ 18a Abs. 1 Satz 2 UStG) */
+    monthlySupplyLimit: Cents;
+  };
   tradeTax: {
     /** Lowest multiplier (Hebesatz) of the trade tax, in percent; a municipality may not set less (§ 16 Abs. 4 Satz 2 GewStG) */
     minMultiplierPercent: number;

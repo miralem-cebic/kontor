@@ -33,6 +33,7 @@ describe('the content of an invoice', () => {
       'Leistungszeitraum: 01.10.2026 – 31.10.2026',
       'Fällig am: 14.11.2026',
       'Kundennummer: K-1001',
+      'Ihre E-Mail: einkauf@kunde.example',
       'Ihre Bestellnummer: PO-4711',
     ]);
   });
@@ -94,6 +95,38 @@ describe('the content of an invoice', () => {
   });
 });
 
+describe('the email and phone of the customer (F31)', () => {
+  const withPhone = makeContact(sampleContact({ contact: { email: 'einkauf@kunde.example', phone: '+49 30 123456' } }));
+  const rows = (c: DocumentContent) => c.info.map((r) => `${r.label}: ${r.value}`);
+
+  it('are in the information block of an invoice, not in the address field', () => {
+    const c = documentContent(src({ document: invoice({}, withPhone), customer: withPhone }));
+    expect(rows(c)).toContain('Ihre E-Mail: einkauf@kunde.example');
+    expect(rows(c)).toContain('Ihr Telefon: +49 30 123456');
+    expect(c.recipient).toEqual(['Kunde GmbH', 'Einkauf', 'z. Hd. Max Muster', 'Ringstraße 5', '10115 Berlin']);
+  });
+
+  it('print nothing when the customer has none, or when the contact is gone', () => {
+    const none = makeContact(sampleContact({ contact: { email: '', phone: '' } }));
+    expect(documentContent(src({ customer: none })).info.map((r) => r.label)).not.toContain('Ihre E-Mail');
+    expect(documentContent(src({ customer: none })).info.map((r) => r.label)).not.toContain('Ihr Telefon');
+    expect(documentContent(src({ customer: null })).info.map((r) => r.label)).not.toContain('Ihre E-Mail');
+  });
+
+  it('are in the information block of a quote and of a cancellation', () => {
+    const quote = documentContent({ company, document: makeQuote(withPhone.id, sampleQuote()), customer: withPhone, account, lang: 'de', number: 'AN-2026-0001' });
+    expect(rows(quote)).toEqual(expect.arrayContaining(['Ihre E-Mail: einkauf@kunde.example', 'Ihr Telefon: +49 30 123456']));
+    const original = { ...invoice({}, withPhone), issued: sampleIssued('RE-2026-0001') };
+    const cancellation = documentContent(src({ document: makeCancellation(original, '2026-11-05', newDocumentId()), customer: withPhone, number: 'RE-2026-0002' }));
+    expect(rows(cancellation)).toEqual(expect.arrayContaining(['Ihre E-Mail: einkauf@kunde.example', 'Ihr Telefon: +49 30 123456']));
+  });
+
+  it('are labelled in the language of the document', () => {
+    const c = documentContent(src({ document: invoice({}, withPhone), customer: withPhone, lang: 'en' }));
+    expect(rows(c)).toEqual(expect.arrayContaining(['Your email: einkauf@kunde.example', 'Your phone: +49 30 123456']));
+  });
+});
+
 describe('the content of a cancellation invoice', () => {
   const original = { ...invoice(), issued: sampleIssued('RE-2026-0001') };
   const c = documentContent(src({ document: makeCancellation(original, '2026-11-05', newDocumentId()), number: 'RE-2026-0002' }));
@@ -107,6 +140,7 @@ describe('the content of a cancellation invoice', () => {
       'Leistungszeitraum: 01.10.2026 – 31.10.2026',
       'Storno zu: RE-2026-0001',
       'Kundennummer: K-1001',
+      'Ihre E-Mail: einkauf@kunde.example',
       'Ihre Bestellnummer: PO-4711',
     ]);
   });
@@ -133,7 +167,7 @@ describe('the content of a quote', () => {
     const quote = makeQuote(customer.id, sampleQuote());
     const c = documentContent({ company: small, document: quote, customer, account: small.bank.accounts[0] ?? null, lang: 'de', number: null });
     expect(c.title).toBe('Angebotsentwurf');
-    expect(c.info.map((r) => r.label)).toEqual(['Angebotsnummer', 'Angebotsdatum', 'Gültig bis', 'Kundennummer']);
+    expect(c.info.map((r) => r.label)).toEqual(['Angebotsnummer', 'Angebotsdatum', 'Gültig bis', 'Kundennummer', 'Ihre E-Mail']);
     expect(c.totals).toEqual([{ label: 'Gesamtbetrag', value: '1.362,50 €', grand: true }]);
     expect(c.notes).toEqual(['Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', 'Dieses Angebot ist gültig bis zum 21.11.2026.']);
     expect(c.footer.columns[2]).toEqual(['Steuernummer 12/345/67890']);

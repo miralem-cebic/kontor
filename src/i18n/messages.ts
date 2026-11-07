@@ -1251,6 +1251,8 @@ const MESSAGES_SRC = {
   'pdf.servicePeriod': { de: 'Leistungszeitraum', en: 'Period of service' },
   'pdf.dueDate': { de: 'Fällig am', en: 'Due date' },
   'pdf.customerNumber': { de: 'Kundennummer', en: 'Customer number' },
+  'pdf.customerEmail': { de: 'Ihre E-Mail', en: 'Your email' },
+  'pdf.customerPhone': { de: 'Ihr Telefon', en: 'Your phone' },
   'pdf.orderReference': { de: 'Ihre Bestellnummer', en: 'Your order number' },
   'pdf.leitwegId': { de: 'Leitweg-ID', en: 'Leitweg-ID' },
   'pdf.attention': { de: 'z. Hd. {name}', en: 'Attn. {name}' },

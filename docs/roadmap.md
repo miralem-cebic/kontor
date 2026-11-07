@@ -104,7 +104,7 @@ Proposed on 4 November 2026, not agreed yet (the issues are linked; the website 
 
 | ID | Feature | Content | Effort |
 | --- | --- | --- | --- |
-| F31 | **Customer email and phone on the document** ([#47](https://github.com/miralem-cebic/kontor/issues/47)) | the email and phone of the customer are stored but not printed; they go into the recipient block of quotes and invoices. Placement open | S |
+| F31 | **Customer email and phone on the document** ([#47](https://github.com/miralem-cebic/kontor/issues/47); **done on 7 November 2026**) | the email and phone of the customer were stored but not printed. They are now printed in the information block (DIN 5008) of quotes, invoices, cancellations and dunning letters, below the customer number, as "Ihre E-Mail" and "Ihr Telefon"; not in the address field, whose window must keep the postal address. The snapshot of an issued document already held `contact` of the customer, so there is no schema change and an issued document prints what it held when it was issued; empty values print nothing | S |
 | F32 | **Time and place of the service** ([#48](https://github.com/miralem-cebic/kontor/issues/48)) | an event invoice has a time, a place, a ticket and a participant; today this is free text in the line description. Open: own fields or free text (fields are a schema change) | M |
 | F33 | **Invoice on behalf of another party** ([#49](https://github.com/miralem-cebic/kontor/issues/49)) | an organiser block for documents issued in the name of another party. Only if needed; the tax wording needs a check first | M |
 

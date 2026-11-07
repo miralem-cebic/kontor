@@ -259,12 +259,26 @@ export function documentContent(src: PdfSource): DocumentContent {
   };
 }
 
+/**
+ * The email and phone of the customer for the information block (F31). They are not part of the address field: its
+ * window shows what the post office needs, and a line more would push the address out of it. Empty ones are left out.
+ */
+function customerContactRows(customer: ContactProfile | null, lang: Lang): InfoRow[] {
+  if (!customer) return [];
+  const { email, phone } = customer.contact;
+  return [
+    ...(email ? [{ label: tIn(lang, 'pdf.customerEmail'), value: email }] : []),
+    ...(phone ? [{ label: tIn(lang, 'pdf.customerPhone'), value: phone }] : []),
+  ];
+}
+
 function quoteInfo(q: QuoteFile, customer: ContactProfile | null, number: string | null, lang: Lang): InfoRow[] {
   return [
     { label: tIn(lang, 'pdf.quoteNumber'), value: number ?? tIn(lang, 'pdf.draftNumber') },
     { label: tIn(lang, 'pdf.quoteDate'), value: formatDate(q.date, lang) },
     { label: tIn(lang, 'pdf.validUntil'), value: formatDate(q.validUntil, lang) },
     ...(customer?.customerNumber ? [{ label: tIn(lang, 'pdf.customerNumber'), value: customer.customerNumber }] : []),
+    ...customerContactRows(customer, lang),
   ];
 }
 
@@ -282,6 +296,7 @@ function invoiceInfo(inv: InvoiceFile, customer: ContactProfile | null, number: 
     service,
     reference,
     ...optional('pdf.customerNumber', customer?.customerNumber ?? ''),
+    ...customerContactRows(customer, lang),
     ...optional('pdf.orderReference', inv.orderReference),
     ...optional('pdf.leitwegId', inv.leitwegId),
   ];
@@ -336,6 +351,7 @@ export function dunningContent(src: DunningSource): DocumentContent {
       { label: tIn(lang, 'pdf.dunningDate'), value: formatDate(dunning.date, lang) },
       { label: tIn(lang, 'pdf.dunningPayBy'), value: formatDate(dunning.payBy, lang) },
       ...(customer.customerNumber ? [{ label: tIn(lang, 'pdf.customerNumber'), value: customer.customerNumber }] : []),
+      ...customerContactRows(customer, lang),
     ],
     title,
     subject: tIn(lang, 'pdf.dunningSubject', { number, date: invoiceDate }),

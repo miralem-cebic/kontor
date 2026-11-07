@@ -2,6 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   checkLogo,
+  DEFAULT_FOOTER_PARTS,
   detectLogoType,
   draftFromProfile,
   emptyDraft,
@@ -103,10 +104,28 @@ describe('readSection', () => {
     expect(problems(readSection('invoice', sampleDraft({ contactPattern: 'K-' }), YEAR))).toEqual(['contactPattern:pattern.noCounter']);
     expect(problems(readSection('invoice', sampleDraft({ itemPattern: 'A-{YYYY}-{NNNN}' }), YEAR))).toEqual(['itemPattern:pattern.dateToken']);
     const r = readSection('invoice', sampleDraft({ quotePattern: ' A-{YY}-{NNN} ' }), YEAR);
-    expect(r.ok && r.value.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A-{YY}-{NNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '' });
+    expect(r.ok && r.value.invoiceDefaults).toEqual({ numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'A-{YY}-{NNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '', footerParts: { address: true, phone: true, email: true } });
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'AN {NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.invalidCharacter']);
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: '' }), YEAR))).toEqual(['quotePattern:pattern.empty']);
     expect(problems(readSection('invoice', sampleDraft({ quotePattern: 'RE-{YYYY}-{NNNN}' }), YEAR))).toEqual(['quotePattern:pattern.sameAsInvoice']);
+  });
+});
+
+describe('the parts of the footer (F26)', () => {
+  it('a new draft shows every part', () => {
+    expect(emptyDraft().footerParts).toEqual({ address: true, phone: true, email: true });
+    expect(DEFAULT_FOOTER_PARTS).toEqual({ address: true, phone: true, email: true });
+  });
+
+  it('the choice is read with the invoice section and survives the round trip through the draft', () => {
+    const r = readSection('invoice', sampleDraft({ footerParts: { address: true, phone: false, email: true } }), YEAR);
+    expect(r.ok && r.value.invoiceDefaults.footerParts).toEqual({ address: true, phone: false, email: true });
+    const profile = sampleProfile({ invoiceDefaults: { ...sampleProfile().invoiceDefaults, footerParts: { address: false, phone: false, email: true } } });
+    expect(draftFromProfile(profile).footerParts).toEqual({ address: false, phone: false, email: true });
+  });
+
+  it('is a field of the invoice section', () => {
+    expect(SECTION_FIELDS.invoice).toContain('footerParts');
   });
 });
 

@@ -90,7 +90,7 @@ describe('issue', () => {
   });
 
   it('without a year in the pattern the counter runs on across years', async () => {
-    company = sampleCompany({ invoiceDefaults: { numberPattern: 'R{NNN}', quotePattern: 'A{NNN}', paymentTermDays: 14, footer: '' } });
+    company = sampleCompany({ invoiceDefaults: { ...sampleCompany().invoiceDefaults, numberPattern: 'R{NNN}', quotePattern: 'A{NNN}', paymentTermDays: 14, footer: '' } });
     const a = await issueOk((await draft({ date: '2026-12-30' })).id);
     const b = await issueOk((await draft({ date: '2027-01-04' })).id);
     expect([a.issued?.number, b.issued?.number]).toEqual(['R001', 'R002']);

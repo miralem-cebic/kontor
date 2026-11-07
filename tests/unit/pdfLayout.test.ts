@@ -57,6 +57,28 @@ describe('layoutDocument', () => {
     expect(layoutDocument(content(), metrics, { logo: true }).pages[0]?.items.some((i) => i.kind === 'logo')).toBe(true);
   });
 
+  it('the email and phone of the customer stand in the information block, below the reference lines and outside the address window', () => {
+    const phoned = makeContact(sampleContact({ contact: { email: 'einkauf@kunde.example', phone: '+49 30 123456' } }));
+    const c = documentContent({ company, document: makeInvoice(phoned.id, account.id, sampleInvoice(), null), customer: phoned, account, lang: 'de', number: null });
+    const items = texts(layoutDocument(c, metrics, { logo: false }).pages[0]?.items ?? []);
+    const at = (text: string) => items.find((i) => i.text === text);
+    const number = at('Kundennummer');
+    for (const [label, value] of [
+      ['Ihre E-Mail', 'einkauf@kunde.example'],
+      ['Ihr Telefon', '+49 30 123456'],
+    ] as const) {
+      expect(at(label)).toMatchObject({ x: 125 * MM });
+      expect(at(value)).toMatchObject({ x: 156 * MM });
+      expect(at(value)?.y).toBe(at(label)?.y);
+      expect(at(label)?.y).toBeGreaterThan(number?.y ?? Infinity);
+    }
+    // the address field keeps its lines: nothing of the contact data is left of the information block
+    expect(items.filter((i) => i.x < 125 * MM && /einkauf@|\+49 30/.test(i.text))).toEqual([]);
+    // and the body starts below the block
+    const title = at('Rechnungsentwurf');
+    expect(title?.y).toBeGreaterThan(at('Ihr Telefon')?.y ?? Infinity);
+  });
+
   it('numbers are right aligned in their column', () => {
     const items = texts(layoutDocument(content(), metrics, { logo: false }).pages[0]?.items ?? []);
     const totals = items.filter((i) => i.text.endsWith('€') && i.text.includes('1.062,50'));

@@ -31,7 +31,7 @@ export const sampleProfile = (over: Partial<CompanyProfile> = {}): CompanyProfil
     vat: { kind: 'regular', method: 'accrual', period: 'quarterly', permanentExtension: true },
     business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
   },
-  invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '' },
+  invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', contactPattern: 'K-{NNNN}', itemPattern: 'A-{NNNN}', paymentTermDays: 14, footer: '', footerParts: { address: true, phone: true, email: true } },
   ...over,
 });
 

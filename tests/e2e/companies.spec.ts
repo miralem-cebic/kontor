@@ -111,6 +111,37 @@ test('settings change the fields of the assistant and keep field timestamps', as
   expect(errors).toEqual([]);
 });
 
+test('the settings choose the parts of the footer, with a preview of the footer of the default account (F26)', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio' });
+
+  await openSettings(page, 'Rechnungen');
+  const card = page.getByRole('region', { name: 'Rechnungen' });
+  const preview = card.getByTestId('footer-preview');
+  await expect(preview).toContainText('Alpha Studio');
+  await expect(preview).toContainText('erika@example.com');
+  await expect(preview).toContainText('IBAN DE89 3704 0044 0532 0130 00');
+  // free text is shown above the columns
+  await card.getByLabel('Fußzeile', { exact: true }).fill('www.alpha.example');
+  await expect(preview).toContainText('www.alpha.example');
+
+  await card.getByRole('checkbox', { name: 'E-Mail' }).uncheck();
+  await card.getByRole('checkbox', { name: 'Name und Anschrift' }).uncheck();
+  await expect(preview).not.toContainText('erika@example.com');
+  await expect(preview).not.toContainText('Hauptstraße 1');
+  // the tax number and the account stay
+  await expect(preview).toContainText('Steuernummer 12/345/67890');
+  await expect(preview).toContainText('IBAN');
+  await card.getByRole('button', { name: 'Speichern' }).click();
+
+  await expect.poll(async () => (await readCompanyFile(page, 'Ordner-1'))['invoiceDefaults']).toMatchObject({ footer: 'www.alpha.example', footerParts: { address: false, phone: true, email: false } });
+  await page.reload();
+  await openSettings(page, 'Rechnungen');
+  await expect(page.getByRole('region', { name: 'Rechnungen' }).getByRole('checkbox', { name: 'E-Mail' })).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
 test('the interface switches to English', async ({ page }) => {
   await page.goto(APP_URL);
   await setUpCompany(page, { name: 'Alpha Studio' });

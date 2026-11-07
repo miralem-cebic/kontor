@@ -71,6 +71,9 @@ export function netShareOf(amount: Cents, net: Cents, gross: Cents): Cents {
   return cents(Number(share));
 }
 
+/** What an expense counts: its gross amount for a small business, otherwise without the VAT that comes back */
+export const expenseNet = (e: OverviewExpense, smallBusiness: boolean): Cents => (smallBusiness ? e.gross : subtract(e.gross, e.vat));
+
 const inYear = (date: string, year: number): boolean => date.startsWith(`${year}-`);
 const monthOf = (date: string): number => Number(date.slice(5, 7));
 
@@ -83,7 +86,7 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
     const inv = byId.get(p.invoiceId);
     return inv ? netShareOf(p.amount, inv.net, inv.gross) : p.amount;
   };
-  const expenseOf = (e: OverviewExpense): Cents => (smallBusiness ? e.gross : subtract(e.gross, e.vat));
+  const expenseOf = (e: OverviewExpense): Cents => expenseNet(e, smallBusiness);
 
   const yearPayments = payments.filter((p) => inYear(p.date, year));
   const yearExpenses = expenses.filter((e) => inYear(e.date, year));

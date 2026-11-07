@@ -12,6 +12,7 @@ import {
   LOGO_FILE,
   MAX_TRADE_TAX_MULTIPLIER_PERCENT,
   type BusinessType,
+  type FooterParts,
   type InvoiceDefaults,
   type LogoRef,
   type LogoType,
@@ -274,6 +275,8 @@ const numberPattern: Check<string> = (v, path) =>
 const counterPattern: Check<string> = (v, path) =>
   typeof v === 'string' && v.length <= MAX_PATTERN_LENGTH && counterOnlyProblem(v) === null ? v : fail(path, `expected a counter pattern, got ${describe(v)}`);
 
+const footerParts = objectOf<FooterParts>({ address: bool, phone: bool, email: bool });
+
 const invoiceDefaults = objectOf<InvoiceDefaults>({
   numberPattern,
   quotePattern: numberPattern,
@@ -281,6 +284,7 @@ const invoiceDefaults = objectOf<InvoiceDefaults>({
   itemPattern: counterPattern,
   paymentTermDays: int(0, LIMITS.maxPaymentTermDays),
   footer: text(LIMITS.footer),
+  footerParts,
 });
 
 /** Only the known fields are kept: the keys come from the file and must not become arbitrary keys of the record. */

@@ -80,6 +80,15 @@ test('the setup assistant checks each step and writes the company folder', async
   await expect(page.getByText(`Das erste Angebot bekäme die Nummer AN-${year}-0001.`)).toBeVisible();
   await page.getByLabel('Angebotsnummer').fill('{YY}-{NNN}');
   await page.getByLabel('Zahlungsziel in Tagen').fill('30');
+  // the footer is shown as it will print, from what was typed; the parts can be left out (F26)
+  const preview = page.getByTestId('footer-preview');
+  await expect(preview).toContainText('Muster Design');
+  await expect(preview).toContainText('erika@example.com');
+  await expect(preview).toContainText('USt-IdNr. DE136695976');
+  await expect(preview).toContainText('IBAN DE89 3704 0044 0532 0130 00');
+  await page.getByRole('checkbox', { name: 'E-Mail' }).uncheck();
+  await expect(preview).not.toContainText('erika@example.com');
+  await expect(preview).toContainText('Hauptstraße 1');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await expect(page.getByText('Wähle ein anderes Format als für Rechnungen')).toBeVisible();
   await page.getByLabel('Angebotsnummer').fill('A{YY}-{NNN}');
@@ -105,7 +114,7 @@ test('the setup assistant checks each step and writes the company folder', async
   const files = await readFolders(page);
   const company = await readCompanyFile(page, 'Ordner-1');
   expect(company).toMatchObject({
-    schemaVersion: 15,
+    schemaVersion: 16,
     name: 'Muster Design',
     address: { street: 'Hauptstraße 1', postalCode: '50667', city: 'Köln', country: 'DE' },
     tax: {
@@ -115,7 +124,7 @@ test('the setup assistant checks each step and writes the company folder', async
       business: { kind: 'trade', municipality: 'Köln', multiplierPercent: 475 },
     },
     bank: { accounts: [{ kind: 'bank', name: '', holder: 'Erika Mustermann', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX', deletedAt: null }] },
-    invoiceDefaults: { numberPattern: '{YY}-{NNN}', quotePattern: 'A{YY}-{NNN}', paymentTermDays: 30, footer: '' },
+    invoiceDefaults: { numberPattern: '{YY}-{NNN}', quotePattern: 'A{YY}-{NNN}', paymentTermDays: 30, footer: '', footerParts: { address: true, phone: true, email: false } },
     logo: { type: 'image/png' },
   });
   const bank = company['bank'] as { defaultAccountId: string; accounts: { id: string }[] };

@@ -85,6 +85,15 @@ describe('the letter of a dunning', () => {
     );
   });
 
+  it('prints the email and phone of the customer as the invoice was issued (F31)', () => {
+    const { invoice, first } = twoDunnings();
+    const contact = sampleContact({ contact: { email: 'einkauf@kunde.example', phone: '+49 30 123456' } });
+    const issued = { ...invoice, issued: { ...invoice.issued, snapshot: { ...invoice.issued.snapshot, customer: contact } } };
+    const c = plainContent(dunningContent(sourceOf(issued, first, [first])));
+    expect(c.info).toEqual(expect.arrayContaining([{ label: 'Ihre E-Mail', value: 'einkauf@kunde.example' }, { label: 'Ihr Telefon', value: '+49 30 123456' }]));
+    expect(c.recipient).not.toContain('einkauf@kunde.example');
+  });
+
   it('a first dunning is the payment reminder', () => {
     const { invoice, first } = twoDunnings();
     expect(plainContent(dunningContent(sourceOf(invoice, first, [first]))).title).toBe('Zahlungserinnerung');

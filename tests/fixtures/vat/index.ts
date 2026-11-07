@@ -10,3 +10,4 @@ import { scenarios as smallBusiness } from './05-small-business-and-expenses';
 export const scenarios: VatScenario[] = [...rounding, ...foreign, ...boundaries, ...cashAccrual, ...smallBusiness];
 export { limitCases } from './06-small-business-limits';
 export { pendingScenarios } from './pending';
+export { zmScenarios, type ZmScenario } from './07-zm-lines';

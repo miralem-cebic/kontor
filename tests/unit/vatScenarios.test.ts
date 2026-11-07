@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { basisPoints, cents, splitGross, taxTotals } from '../../src/domain/money';
 import { smallBusinessLimitState } from '../../src/domain/overview';
 import { ustva } from '../../src/domain/ustva';
-import { limitCases, pendingScenarios, scenarios } from '../fixtures/vat';
+import { zm } from '../../src/domain/zm';
+import { limitCases, pendingScenarios, scenarios, zmScenarios } from '../fixtures/vat';
 import { gross, invoiceOf } from '../fixtures/vat/helpers';
 import { fcParams } from './fixtures';
 
@@ -29,6 +30,35 @@ describe('VAT reference scenarios: advance return (UStVA)', () => {
       }
       if (s.notices) expect(result.notices.map((n) => ({ code: n.code, count: n.count, amount: n.amount }))).toEqual(s.notices);
       if (s.dueDate) expect(result.dueDate).toBe(s.dueDate);
+    });
+  }
+});
+
+describe('VAT reference scenarios: summary report (ZM)', () => {
+  for (const s of zmScenarios) {
+    it(`${s.id}: ${s.title}`, () => {
+      const result = zm({ period: s.period, invoices: s.invoices });
+      expect(result.lines.map((l) => ({ vatId: l.vatId, kind: l.kind, base: l.base }))).toEqual(s.lines);
+      expect(result.total.service).toBe(s.services);
+      // the services are the base of Kz 21 of the advance return of the same period (accrual basis)
+      const kz21 = ustva({
+        period: s.period,
+        method: 'accrual',
+        permanentExtension: false,
+        payments: [],
+        expenses: [],
+        invoices: s.invoices.map((i) => ({
+          id: i.id,
+          date: i.date,
+          serviceEnd: i.serviceEnd,
+          treatment: i.treatment,
+          customerCountry: i.customerCountry,
+          isCancellation: i.isCancellation,
+          smallBusiness: i.smallBusiness,
+          lines: [{ rate: basisPoints(0), net: i.net, tax: cents(0) }],
+        })),
+      }).fields.find((f) => f.id === 'euServices');
+      expect(kz21?.base).toBe(s.services);
     });
   }
 });

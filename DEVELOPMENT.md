@@ -4,7 +4,7 @@ kontor is a local web app (React 18, TypeScript, Vite, zustand) for invoicing an
 
 ## Setup
 
-Requirements: Node.js 20 or newer (CI uses Node 22) and an installed Google Chrome for the browser tests.
+Requirements: Node.js `^22.13.0 || ^24.0.0 || >=26.0.0` and an installed Google Chrome for the browser tests. That is the range in which the locked toolchain (Vitest 5, ESLint 10, Vite 8) supports Node; Node 20, 22.0 to 22.12, 23 and 25 are outside it. `.nvmrc` pins the major version CI uses (`node-version-file` in `ci.yml` and `build.yml`), so `nvm use` picks the same one. When an update of the toolchain changes its Node ranges, change `engines` in `package.json` and this line together.
 
 ```bash
 npm ci             # install exact dependencies from package-lock.json

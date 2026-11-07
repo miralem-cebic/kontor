@@ -30,7 +30,7 @@ jobs:
         if: ${{ hashFiles('package.json') != '' }}
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       # --no-audit: the install does not wait for npm's audit service; the next step audits.
       - name: Install, test and build

@@ -131,7 +131,7 @@ src/
 2. `Persister` compares object references and queues what changed; objects that are saved are kept in a `WeakSet`.
 3. After 400 ms it writes through the `Repository`. Repository operations return a `Result`; exceptions from the browser API are turned into results once, in `FsRepository`.
 4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy of the unsaved company, contacts, items and documents is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
-5. `saveCompany`, `saveContact`, `saveItem` and `saveDocument` check the file's `lastModified`. If someone else changed it since the last read, they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
+5. `saveCompany`, `saveContact`, `saveItem` and `saveDocument` compare the file's `lastModified` and size with the last read or write. If they differ in any way (also an older time), they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
 6. Deleting a contact, an item, a quote draft or an invoice draft sets `deletedAt` (a mergeable field with its own timestamp): the file stays, the record is hidden, and an edit made elsewhere later does not bring it back.
 7. Bank accounts are a list in `company.json` (`bank`), merged as one field: when two devices change accounts at the same time, the later change wins for the whole list. Removing an account sets its `deletedAt`; it stays in the list, because payments will refer to it by ID. The default account cannot be removed.
 

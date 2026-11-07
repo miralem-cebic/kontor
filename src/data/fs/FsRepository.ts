@@ -83,11 +83,18 @@ const checkReceiptPath = (year: string, name: string) => {
 
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 
+/** What identifies the state of a file: a change of the time in either direction or of the size is a change */
+const stampOf = (file: File): string => `${file.lastModified}:${file.size}`;
+
 export class FsRepository implements Repository {
-  /** Path → lastModified at the last read or write, to notice changes made by someone else */
-  readonly known = new Map<string, number>();
+  /** Path → stamp (lastModified and size) at the last read or write, to notice changes made by someone else */
+  readonly known = new Map<string, string>();
 
   constructor(private readonly root: FileSystemDirectoryHandle) {}
+
+  private async stampAt(dir: FileSystemDirectoryHandle, name: string): Promise<string> {
+    return stampOf(await (await dir.getFileHandle(name)).getFile());
+  }
 
   get label() {
     return this.root.name;
@@ -107,7 +114,7 @@ export class FsRepository implements Repository {
   readCompany() {
     return attempt(async () => {
       const file = await (await this.root.getFileHandle(FILES.company)).getFile();
-      this.known.set(FILES.company, file.lastModified);
+      this.known.set(FILES.company, stampOf(file));
       return migrate('company', JSON.parse(await file.text()));
     });
   }
@@ -117,7 +124,8 @@ export class FsRepository implements Repository {
       if (await fileExists(this.root, FILES.company)) throw new InvalidFileError('The folder already contains a company');
       for (const a of assets) await this.runWriteAsset(a);
       const data = { ...company, schemaVersion: SCHEMA_VERSION };
-      this.known.set(FILES.company, await writeJson(this.root, FILES.company, data));
+      await writeJson(this.root, FILES.company, data);
+      this.known.set(FILES.company, await this.stampAt(this.root, FILES.company));
       return company;
     });
   }
@@ -298,7 +306,7 @@ export class FsRepository implements Repository {
       const path = `${dirName}/${name}`;
       try {
         const file = await (h as FileSystemFileHandle).getFile();
-        this.known.set(path, file.lastModified);
+        this.known.set(path, stampOf(file));
         const record = read(JSON.parse(await file.text()));
         if (`${record.id}.json` !== name) throw new InvalidFileError('The file name does not match the ID in the file');
         records.push(record);
@@ -334,7 +342,8 @@ export class FsRepository implements Repository {
     try {
       const file = await (await dir.getFileHandle(name)).getFile();
       const known = this.known.get(path);
-      if (known === undefined || file.lastModified > known) {
+      // any difference counts, also an older time: a device with a clock behind ours must not be overwritten
+      if (known === undefined || stampOf(file) !== known) {
         const text = await file.text();
         if (text.trim()) {
           const remote = read(JSON.parse(text));
@@ -342,7 +351,7 @@ export class FsRepository implements Repository {
           next = merge(data, remote);
           // the file already holds the merged state (for example an issued invoice that wins): nothing to write
           if (sameJson(next, remote)) {
-            this.known.set(path, file.lastModified);
+            this.known.set(path, stampOf(file));
             return sameJson(next, data) ? record : next;
           }
         }
@@ -350,7 +359,8 @@ export class FsRepository implements Repository {
     } catch (e) {
       if (!isNotFound(e) && !(e instanceof SyntaxError)) throw e;
     }
-    this.known.set(path, await writeJson(dir, name, next));
+    await writeJson(dir, name, next);
+    this.known.set(path, await this.stampAt(dir, name));
     return sameJson(next, data) ? record : next;
   }
 

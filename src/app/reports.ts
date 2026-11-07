@@ -28,6 +28,7 @@ import {
   type ReportPayout,
 } from '../domain/reports';
 import type { OverviewPayment } from '../domain/overview';
+import { smallBusinessOn } from './vatStatus';
 
 /** A row of a group report with the name to show; empty when there is none (no known customer, no category) */
 export type NamedGroupRow = GroupRow & { name: string };
@@ -73,7 +74,11 @@ export function reportInput(company: CompanyFile, docs: readonly DocumentFile[],
       };
     });
   const paymentRows: OverviewPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ id: p.id, invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
-  const expenseRows: ReportExpense[] = [...expenses.values()].filter((e) => e.deletedAt === null).map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e), category: e.category }));
+  // an expense counts with the VAT status of its day: it has no snapshot, so the status comes from the invoices around it
+  const smallOn = smallBusinessOn(company, docs);
+  const expenseRows: ReportExpense[] = [...expenses.values()]
+    .filter((e) => e.deletedAt === null)
+    .map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e), category: e.category, smallBusiness: smallOn(e.date) }));
   const payoutRows: ReportPayout[] = [...payouts.values()].filter((p) => p.deletedAt === null).map((p) => ({ date: p.date, amount: p.amount, vat: payoutVat(p), payerId: p.payerId }));
   return { year, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows, payouts: payoutRows };
 }

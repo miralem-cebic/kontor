@@ -11,6 +11,7 @@ import { dueDate, invoiceTotals } from '../domain/invoice';
 import { payoutVat } from '../domain/payout';
 import { overview as computeOverview, smallBusinessLimitState, turnoverEntries, type Overview, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from '../domain/overview';
 import { limitWarning, reverseChargeExpenseCount, type LimitWarning, type TurnoverEntry } from '../domain/smallBusiness';
+import { smallBusinessOn } from './vatStatus';
 
 export interface OverviewView {
   figures: Overview;
@@ -64,10 +65,13 @@ export function buildOverview(company: CompanyFile | null, documents: ReadonlyMa
   const today = isoDateOf(now);
   const year = now.getFullYear();
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
-  const invoices = overviewInvoices(company, [...documents.values()]);
+  const docs = [...documents.values()];
+  const invoices = overviewInvoices(company, docs);
   const paymentRows = overviewPayments(payments);
   const activeExpenses = [...expenses.values()].filter((e) => e.deletedAt === null);
-  const expenseRows: OverviewExpense[] = activeExpenses.map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e) }));
+  // an expense counts with the VAT status of its day: it has no snapshot, so the status comes from the invoices around it
+  const smallOn = smallBusinessOn(company, docs);
+  const expenseRows: OverviewExpense[] = activeExpenses.map((e) => ({ date: e.date, gross: e.gross, vat: expenseVat(e), smallBusiness: smallOn(e.date) }));
   const payoutRows: OverviewPayout[] = [...payouts.values()].filter((p) => p.deletedAt === null).map((p) => ({ date: p.date, amount: p.amount, vat: payoutVat(p) }));
   const input = (y: number) => ({ year: y, today, smallBusiness, invoices, payments: paymentRows, expenses: expenseRows, payouts: payoutRows });
 

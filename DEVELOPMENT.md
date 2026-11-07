@@ -121,6 +121,7 @@ src/
     invoice.ts                 Invoices: content, tax treatment, form draft, checks, what is missing before issuing
     reports.ts                 Reports (F11): income per customer, expenses per category, open items, the year against the year
                                before; the same cash-basis rules as overview.ts, and sums that equal its totals
+    vatStatus.ts               The VAT status on a day, from the status of the issued invoices around it (expenses have no snapshot; #70)
     search.ts                  Global search (F11): the words of a query against the fields of an entry, ordered by kind
   data/
     types.ts                   File formats (company.json, backups)

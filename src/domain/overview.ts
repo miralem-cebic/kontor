@@ -38,6 +38,8 @@ export interface OverviewPayment {
 /** An expense: its gross amount and the VAT inside it that can be claimed back (0 without such VAT) */
 export interface OverviewExpense {
   date: string;
+  /** The VAT status of the day it was paid (a small business has no VAT to take off); the status of the whole input when left out */
+  smallBusiness?: boolean;
   gross: Cents;
   vat: Cents;
 }
@@ -100,8 +102,11 @@ export function turnoverEntries(invoices: readonly OverviewInvoice[], payments: 
   return entries;
 }
 
-/** What an expense counts: its gross amount for a small business, otherwise without the VAT that comes back */
-export const expenseNet = (e: OverviewExpense, smallBusiness: boolean): Cents => (smallBusiness ? e.gross : subtract(e.gross, e.vat));
+/**
+ * What an expense counts: its gross amount for a small business, otherwise without the VAT that comes back. The status of
+ * the expense itself (the one valid on its day) decides; `smallBusiness` is the fallback when the row has none.
+ */
+export const expenseNet = (e: OverviewExpense, smallBusiness: boolean): Cents => ((e.smallBusiness ?? smallBusiness) ? e.gross : subtract(e.gross, e.vat));
 
 /** What a payout counts as income: its amount without the VAT inside it */
 export const payoutIncome = (p: OverviewPayout): Cents => subtract(p.amount, p.vat);

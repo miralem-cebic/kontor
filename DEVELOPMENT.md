@@ -47,6 +47,8 @@ src/
   app/crashReporting.ts        Global handlers for uncaught errors (emergency copy, then a toast)
   app/documentPdf.ts           PDF of a quote or an invoice: logo from the folder (SVG drawn into a PNG), download;
                                an issued invoice or a finalized quote is its stored file, checked against its SHA-256
+  app/reports.ts, reportsExport.ts, search.ts  Reports (F11): the records mapped into rows and named; each report as a CSV table
+                               (reusing the encoder of csvExport.ts); the records as entries for the search
   app/issue.ts                 Issuing and cancelling an invoice, finalizing a quote (ADR 0004): reserve the number,
                                write the PDF once, the record, audit
   app/ustva.ts                 Advance VAT return: the records of the company mapped into the domain, copy values, CSV
@@ -74,6 +76,9 @@ src/
     quoteVersions.ts           Quote versions: version numbers, what changed between two, the versions of a quote, how
                                often quotes were changed
     invoice.ts                 Invoices: content, tax treatment, form draft, checks, what is missing before issuing
+    reports.ts                 Reports (F11): income per customer, expenses per category, open items, the year against the year
+                               before; the same cash-basis rules as overview.ts, and sums that equal its totals
+    search.ts                  Global search (F11): the words of a query against the fields of an entry, ordered by kind
   data/
     types.ts                   File formats (company.json, backups)
     schema.ts                  SCHEMA_VERSION, factories
@@ -102,7 +107,7 @@ src/
   i18n/                        Texts in de and en
   features/                    setup (assistant), company (shared form fields, summary), shell (frame, switcher),
                                quotes, invoices, documents (line editor, totals, customer choice), contacts (list and
-                               form), items (catalogue), settings (with the bank accounts card), sending (the e-mail
+                               form), items (catalogue), reports (the four reports and the search), settings (with the bank accounts card), sending (the e-mail
                                card and form of an issued document), home, start
   components/                  Form fields, icon, toast, error boundary, language select, side panel with jump marks,
                                links to pages outside kontor

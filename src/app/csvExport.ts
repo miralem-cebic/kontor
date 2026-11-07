@@ -5,7 +5,7 @@
 
 import { date, encodeCsv, num, type Cell, type NumberCell } from '../data/export/csv';
 import { tableToXlsx } from '../data/export/xlsx';
-import { cancellationOf, isInvoice, isQuote, type BankAccount, type ContactFile, type DocumentFile, type ExpenseFile, type ItemFile, type PayoutFile } from '../data/types';
+import { cancelledIds, isInvoice, isQuote, type BankAccount, type ContactFile, type DocumentFile, type ExpenseFile, type ItemFile, type PayoutFile } from '../data/types';
 import type { ContactRoles } from '../domain/contact';
 import type { ContactId, AccountId } from '../data/ids';
 import { isoDateOf } from '../domain/dates';
@@ -169,6 +169,7 @@ export function quotesTable(documents: readonly DocumentFile[], smallBusiness: b
 }
 
 export function invoicesTable(documents: readonly DocumentFile[], smallBusiness: boolean, contacts: ReadonlyMap<ContactId, ContactFile>): Table {
+  const cancelledSet = cancelledIds(documents);
   const invoices = documents.filter(isInvoice).filter((i) => !i.deletedAt).sort((a, b) => byDate(a, b) || (a.issued?.number ?? '').localeCompare(b.issued?.number ?? ''));
   return {
     header: [
@@ -186,7 +187,7 @@ export function invoicesTable(documents: readonly DocumentFile[], smallBusiness:
     rows: invoices.map((inv) => {
       const issued = inv.issued;
       const totals = invoiceTotals(inv, smallBusinessFor(inv, smallBusiness));
-      const cancelled = issued !== null && cancellationOf(documents, inv.id) !== undefined;
+      const cancelled = issued !== null && cancelledSet.has(inv.id);
       const status = inv.cancels ? t('csv.status.cancellation') : !issued ? t('invoices.draft') : cancelled ? t('invoices.cancelled') : t('invoices.issued');
       return [
         issued?.number ?? '',

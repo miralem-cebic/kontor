@@ -148,9 +148,11 @@ export function overview(input: { year: number; today: string; smallBusiness: bo
   let openReceivables = 0;
   let overdueReceivables = 0;
   let overdueCount = 0;
+  const paidBy = new Map<string, number>();
+  for (const p of payments) paidBy.set(p.invoiceId, (paidBy.get(p.invoiceId) ?? 0) + p.amount);
   for (const inv of invoices) {
     if (!inv.issued || inv.isCancellation || inv.cancelled) continue;
-    const paid = sum(payments.filter((p) => p.invoiceId === inv.id).map((p) => p.amount));
+    const paid = cents(paidBy.get(inv.id) ?? 0);
     const open = Math.max(0, inv.gross - paid);
     openReceivables += open;
     if (open > 0 && inv.dueDate < today) {

@@ -89,7 +89,9 @@ const KIND_ORDER: Record<AccountEntryKind, number> = { invoice: 0, cancellation:
 
 /** The account of a customer as of `today` (YYYY-MM-DD, for what is overdue) */
 export function customerAccount(invoices: readonly AccountInvoice[], payments: readonly AccountPayment[], today: string, payouts: readonly AccountPayout[] = []): CustomerAccount {
-  const paidOf = (invoiceId: string): Cents => sum(payments.filter((p) => p.invoiceId === invoiceId).map((p) => p.amount));
+  const paidBy = new Map<string, number>();
+  for (const p of payments) paidBy.set(p.invoiceId, (paidBy.get(p.invoiceId) ?? 0) + p.amount);
+  const paidOf = (invoiceId: string): Cents => cents(paidBy.get(invoiceId) ?? 0);
 
   const unsorted: AccountEntry[] = [
     ...invoices.map((inv): AccountEntry => ({ kind: inv.kind, id: inv.id, date: inv.date, number: inv.number, text: inv.subject, amount: inv.gross, balance: cents(0) })),

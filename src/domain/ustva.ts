@@ -214,12 +214,18 @@ function recognized(input: UstvaInput): Part[] {
     return invoices.filter((i) => inPeriod(i.isCancellation ? i.date : i.serviceEnd, period)).flatMap(partsOf);
   }
   const result: Part[] = [];
+  const byInvoice = new Map<string, UstvaPayment[]>();
+  for (const p of payments) {
+    const list = byInvoice.get(p.invoiceId);
+    if (list) list.push(p);
+    else byInvoice.set(p.invoiceId, [p]);
+  }
   for (const inv of invoices) {
     if (inv.isCancellation) continue;
     const parts = partsOf(inv);
     const gross = sum(parts.flatMap((p) => [p.net, p.tax]));
     if (gross <= 0) continue;
-    const mine = payments.filter((p) => p.invoiceId === inv.id).sort(comparePayments);
+    const mine = [...(byInvoice.get(inv.id) ?? [])].sort(comparePayments);
     let paid = 0;
     for (const payment of mine) {
       const before = Math.min(paid, gross);

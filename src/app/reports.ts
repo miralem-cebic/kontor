@@ -5,7 +5,7 @@
 
 import type { ContactId, DocumentId } from '../data/ids';
 import type { CompanyFile, ContactFile, DocumentFile, ExpenseFile, PaymentFile, PayoutFile } from '../data/types';
-import { cancellationOf, isInvoice } from '../data/types';
+import { cancelledIds, isInvoice } from '../data/types';
 import { isoDateOf } from '../domain/dates';
 import { expenseVat } from '../domain/expense';
 import { dueDate, invoiceTotals } from '../domain/invoice';
@@ -52,6 +52,7 @@ export interface ReportsView {
 /** The rows of the open company the reports are computed from */
 export function reportInput(company: CompanyFile, docs: readonly DocumentFile[], payments: ReadonlyMap<string, PaymentFile>, expenses: ReadonlyMap<string, ExpenseFile>, payouts: ReadonlyMap<string, PayoutFile>, year: number, today: string): ReportInput {
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
+  const cancelled = cancelledIds(docs);
   const invoices: ReportInvoice[] = docs
     .filter(isInvoice)
     .filter((inv) => !inv.deletedAt)
@@ -66,7 +67,7 @@ export function reportInput(company: CompanyFile, docs: readonly DocumentFile[],
         date: inv.date,
         issued,
         isCancellation: inv.cancels !== null,
-        cancelled: issued && cancellationOf(docs, inv.id) !== undefined,
+        cancelled: issued && cancelled.has(inv.id),
         net: totals.net,
         gross: totals.gross,
         dueDate: inv.cancels ? '' : dueDate(inv),

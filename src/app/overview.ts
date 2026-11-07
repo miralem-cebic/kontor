@@ -4,7 +4,7 @@
 
 import type { DocumentId } from '../data/ids';
 import type { CompanyFile, DocumentFile, ExpenseFile, PaymentFile, PayoutFile } from '../data/types';
-import { cancellationOf, isInvoice } from '../data/types';
+import { cancelledIds, isInvoice } from '../data/types';
 import { expenseVat } from '../domain/expense';
 import { isoDateOf } from '../domain/dates';
 import { dueDate, invoiceTotals } from '../domain/invoice';
@@ -27,6 +27,7 @@ export interface OverviewView {
 /** The invoices of the company as the overview counts them, each with the VAT status it was issued with */
 function overviewInvoices(company: CompanyFile, docs: readonly DocumentFile[]): OverviewInvoice[] {
   const smallBusiness = company.tax.vat.kind === 'smallBusiness';
+  const cancelled = cancelledIds(docs);
   return docs
     .filter(isInvoice)
     .filter((inv) => !inv.deletedAt)
@@ -39,7 +40,7 @@ function overviewInvoices(company: CompanyFile, docs: readonly DocumentFile[]): 
         date: inv.date,
         issued,
         isCancellation: inv.cancels !== null,
-        cancelled: issued && cancellationOf(docs, inv.id) !== undefined,
+        cancelled: issued && cancelled.has(inv.id),
         net: totals.net,
         gross: totals.gross,
         dueDate: inv.cancels ? '' : dueDate(inv),

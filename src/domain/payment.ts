@@ -74,7 +74,8 @@ export interface ShareablePayment {
 
 /** The order the payments of an invoice are taken in: the day, then the ID */
 export const comparePayments = (a: { date: string; id?: string }, b: { date: string; id?: string }): number =>
-  a.date.localeCompare(b.date) || (a.id ?? '').localeCompare(b.id ?? '');
+  // the dates are ISO dates, so they compare as text (and much faster than with localeCompare, which matters for thousands)
+  a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id ?? '').localeCompare(b.id ?? '');
 
 /**
  * The net part of every payment, in the order of the list. The parts of one invoice are taken from the cumulative amount

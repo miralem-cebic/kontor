@@ -378,6 +378,16 @@ export const nextVersionOf = (q: QuoteFile & { issued: IssuedInfo }): RevisedQuo
   version: (q.revises?.version ?? 1) + 1,
 });
 
+/**
+ * The IDs of the invoices that a cancellation exists for, built in one pass. Use it instead of calling `cancellationOf`
+ * once per invoice, which scans every document each time (O(n²) over a list).
+ */
+export function cancelledIds(documents: Iterable<DocumentFile>): Set<DocumentId> {
+  const ids = new Set<DocumentId>();
+  for (const d of documents) if (d.kind === 'invoice' && d.cancels) ids.add(d.cancels.id);
+  return ids;
+}
+
 /** The cancellation of an invoice, if it has one */
 export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId): InvoiceFile | undefined {
   for (const d of documents) if (d.kind === 'invoice' && d.cancels?.id === id) return d;

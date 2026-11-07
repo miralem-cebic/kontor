@@ -89,6 +89,8 @@ src/
                                (reusing the encoder of csvExport.ts); the records as entries for the search
   app/issue.ts                 Issuing and cancelling an invoice, finalizing a quote (ADR 0004): reserve the number,
                                write the PDF once, the record, audit
+  app/customerAccount.ts       The invoices and payments of one customer mapped into the rows of the customer account
+  app/vatStatus.ts             The VAT status of a day from the issued invoices (expenses have no snapshot; #70)
   app/ustva.ts                 Advance VAT return: the records of the company mapped into the domain, copy values, CSV
   app/zm.ts                    Summary report (ZM, R8): the issued invoices mapped into the domain, the check against Kz 21, copy values, CSV
   app/sending.ts               E-mail to the customer (F04): the mail as .eml with the PDF attached, or a mailto: link;

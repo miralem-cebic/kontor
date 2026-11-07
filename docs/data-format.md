@@ -32,10 +32,11 @@ Versteckte Dateien (sie beginnen mit einem Punkt) und Hilfsdateien von Sync-Prog
 
 ## Die Dateien
 
-Die Datensätze sind JSON in UTF-8, jeder hat ein Feld `schemaVersion`; die aktuelle Version ist 15. PDFs, Belege und das Logo sind Dateien wie sie sind. Ältere Versionen werden beim Lesen auf die aktuelle gebracht, und ältere Versionen von kontor lehnen Dateien einer neueren Version ab, statt sie zu überschreiben.
+Die Datensätze sind JSON in UTF-8, jeder hat ein Feld `schemaVersion`; die aktuelle Version ist 16. PDFs, Belege und das Logo sind Dateien wie sie sind. Ältere Versionen werden beim Lesen auf die aktuelle gebracht, und ältere Versionen von kontor lehnen Dateien einer neueren Version ab, statt sie zu überschreiben.
 
 Die wichtigsten Felder:
 
+- **Firma** (`company.json`): `invoiceDefaults` enthält die Nummernmuster, `paymentTermDays`, den Freitext `footer` und `footerParts`: je `true` oder `false` für `address`, `phone` und `email`, ob die Fußzeile der Dokumente Name und Anschrift, Telefon und E-Mail zeigt. Steuernummer bzw. USt-IdNr. und Bankverbindung stehen immer darin.
 - **Kontakte** (`contacts/`): `kind` (`company` oder `person`), `roles` (Kunde und/oder Lieferant), `name`, `customerNumber`, `address`, `contact` (E-Mail, Telefon), `vatId` (EU-USt-IdNr.), `leitwegId`, `paymentTermDays`, `language` (`de` oder `en`), `deletedAt`.
 - **Artikel** (`items/`): `number`, `name`, `description`, `unit` (ein Code der UN/ECE-Empfehlung 20, zum Beispiel `HUR` für Stunde), `netPrice`, `vatRate`, `deletedAt`.
 - **Dokumente** (`documents/`): `kind` (`quote` oder `invoice`), `customerId`, `date`, `lines` (Menge, Einheit, Preis je Einheit, Umsatzsteuersatz), `discount`, bei Rechnungen `service`, `paymentTermDays`, `taxTreatment`, `accountId`; ausgestellte Dokumente haben `issued` mit Nummer, Zeitpunkt, Kopie der Stammdaten zu diesem Zeitpunkt und der Prüfsumme des PDFs.

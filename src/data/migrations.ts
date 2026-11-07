@@ -1,3 +1,4 @@
+import { DEFAULT_FOOTER_PARTS } from '../domain/company';
 import { DEFAULT_CONTACT_PATTERN, DEFAULT_ITEM_PATTERN, DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
 import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateExpense, validateItem, validateNumbering, validatePayment, validateQuoteStatus, type Check } from './validate';
@@ -132,6 +133,37 @@ const snapshotNumberPatterns: Migration = {
 };
 
 /**
+ * Version 16: the footer of a document shows the parts of the master data the company chooses (F26). A profile of version
+ * 15 showed all of them, so it gets the choice that shows all of them; a profile that has a choice keeps it.
+ */
+function withFooterParts(profile: unknown): unknown {
+  if (!isRecord(profile)) return profile;
+  const defaults = profile['invoiceDefaults'];
+  if (!isRecord(defaults) || 'footerParts' in defaults) return profile;
+  return { ...profile, invoiceDefaults: { ...defaults, footerParts: { ...DEFAULT_FOOTER_PARTS } } };
+}
+
+const footerParts: Migration = {
+  from: 15,
+  up: (raw) => withFooterParts(raw) as Record<string, unknown>,
+};
+
+/**
+ * Version 16 for documents: the company in the snapshot of an issued document gets the choice like company.json, so that
+ * it is read with the same checks. It shows every part, as the PDF of the document did. Nothing else of the document
+ * changes, and its PDF is not touched.
+ */
+const snapshotFooterParts: Migration = {
+  from: 15,
+  up: (raw) => {
+    const issued = raw['issued'];
+    if (!isRecord(issued) || !isRecord(issued['snapshot'])) return raw;
+    const snapshot = issued['snapshot'];
+    return { ...raw, issued: { ...issued, snapshot: { ...snapshot, company: withFooterParts(snapshot['company']) } } };
+  },
+};
+
+/**
  * Version 15: an expense has a receipt, a file in belege/ or a link (null when there is none). The expenses of version 14
  * have none; the receipt is read with its checks like the rest of the expense.
  */
@@ -205,11 +237,13 @@ const snapshotLanguage: Migration = {
  * Version 13 adds expenses, a new kind of file (expenses/); no existing file changes.
  * Version 14 gives contacts and items the import they came from (`importBatchId`, null for records typed in); no other file changes.
  * Version 15 gives expenses a receipt (`receipt`, null when there is none); no other file changes.
+ * Version 16 lets a company choose the parts of the footer (F26): company.json gets `invoiceDefaults.footerParts`, and the
+ * company in an issued document's snapshot gets it too; no other file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), footerParts],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15)],
   document: [
     unchanged(1),
     unchanged(2),
@@ -225,12 +259,13 @@ export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
     unchanged(12),
     unchanged(13),
     unchanged(14),
+    snapshotFooterParts,
   ],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
-  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14)],
-  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), expenseReceipt],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
+  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
+  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), expenseReceipt, unchanged(15)],
 };
 
 export class NewerSchemaError extends Error {

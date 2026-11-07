@@ -90,7 +90,8 @@ src/
     fs/storageFs.ts            Folders in localStorage and their list (?e2e)
     fs/jsonFile.ts, fileNames.ts, permission.ts, support.ts
   pdf/                         PDF of quotes and invoices (@cantoo/pdf-lib, @cantoo/fontkit):
-    content.ts                 What the document says, formatted in its language (German for now, F05)
+    content.ts                 What the document says, formatted in its language (German for now, F05); the footer
+                               columns (`footerColumns`) are also the preview in the invoice settings (F26)
     layout.ts                  Where it goes: DIN 5008 form B, the lines table over several pages, footer (pure)
     render.ts                  The file: subset fonts, logo, metadata, sRGB output intent, missing characters
     assets.ts, assets/         The embedded font and ICC profile (sources and licences in assets/README.md)
@@ -133,7 +134,7 @@ src/
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the number patterns (they produce file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
 - `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
 
-## Data format (schema version 15)
+## Data format (schema version 16)
 
 The format is described for people who keep their data, in [docs/data-format.md](docs/data-format.md). What follows is the detail for the code.
 
@@ -172,7 +173,7 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
 | `tax.taxNumber`, `tax.vatId` | at least one is set |
 | `bank` | `{ defaultAccountId, accounts }`; `defaultAccountId` is an active account of the list |
 | `bank.accounts[]` | `{ id, kind: 'bank', name, holder, iban (normalized), bic (may be empty), deletedAt }` or `{ id, kind: 'paypal', name, email, deletedAt }`; `name` may be empty; at most 50, removed ones included |
-| `invoiceDefaults` | `numberPattern` (invoices), `quotePattern` (quotes; the form requires it to differ from `numberPattern`), `contactPattern` and `itemPattern` (the numbers a new contact or item starts with; counters only, no date, F28), `paymentTermDays`, `footer` |
+| `invoiceDefaults` | `numberPattern` (invoices), `quotePattern` (quotes; the form requires it to differ from `numberPattern`), `contactPattern` and `itemPattern` (the numbers a new contact or item starts with; counters only, no date, F28), `paymentTermDays`, `footer` (free text below the columns), `footerParts` (`{ address, phone, email }`, booleans: which of these the footer columns show, F26; the tax numbers and the account always stand) |
 | `fieldUpdatedAt` | timestamp per top-level field, for the merge |
 
 A contact file (`contacts/<id>.json`, types in `src/domain/contact.ts`) has `kind` (`company` or `person`), `roles` (`customer`, `supplier`), `name`, `nameLine2`, `contactPerson`, `customerNumber` (unique among active contacts), `address` (`null` or complete), `contact` (`email`, `phone`), `vatId` (EU), `leitwegId`, `orderReference` (default PO number), `language` (`de` or `en`, the language of its documents; `de` by default, F05), `paymentTermDays` (`null` = company default), `notes`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. Contacts were added in schema version 1 as a new kind of file; no existing file changed, so the version stayed.
@@ -228,6 +229,7 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | 13 | Expenses: a new kind of file (`expenses/`). No existing file changes; every other kind gets `unchanged(12)`. An app of version 12 refuses an expense instead of dropping it. The daily backup holds the expenses as well. |
 | 14 | Contacts and items get `importBatchId`, the import they came from (`null` for records typed in). Every other kind gets `unchanged(13)`. An app of version 13 refuses a contact or an item of version 14, so it never drops a batch. |
 | 15 | Expenses get `receipt` (`null` when there is none). Every other kind gets `unchanged(14)`. An app of version 14 refuses an expense with a receipt, so it never drops one. |
+| 16 | The footer shows the parts of the master data the company chooses (F26): `company.json` gets `invoiceDefaults.footerParts` (all three `true` for existing companies, as their documents showed everything), and the company in the snapshot of an issued document gets it too, so that a dunning letter made later from the snapshot still prints the footer as before. Every other kind gets `unchanged(15)`. An app of version 15 refuses a company with the choice, so it never drops it. |
 
 ## Tests
 

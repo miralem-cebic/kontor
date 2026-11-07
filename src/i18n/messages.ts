@@ -200,9 +200,19 @@ const MESSAGES_SRC = {
   'invoice.paymentTermHint': { de: '0 bedeutet „sofort fällig“', en: '0 means “due immediately”' },
   'invoice.footer': { de: 'Fußzeile', en: 'Footer' },
   'invoice.footerHint': {
-    de: 'Name, Anschrift, Kontakt, Steuernummer und Bankverbindung stehen schon in der Fußzeile. Hier nur Ergänzungen eintragen, z. B. eine Website.',
-    en: 'Name, address, contact details, tax number and bank details are already in the footer. Add only extras here, e.g. a website.',
+    de: 'Name, Anschrift, Kontakt, Steuernummer und Bankverbindung stehen schon in der Fußzeile (Vorschau unten). Hier nur Ergänzungen eintragen, z. B. eine Website.',
+    en: 'Name, address, contact details, tax number and bank details are already in the footer (preview below). Add only extras here, e.g. a website.',
   },
+  'invoice.footerParts': { de: 'In der Fußzeile zeigen', en: 'Show in the footer' },
+  'invoice.footerPartAddress': { de: 'Name und Anschrift', en: 'Name and address' },
+  'invoice.footerPartPhone': { de: 'Telefon', en: 'Phone' },
+  'invoice.footerPartEmail': { de: 'E-Mail', en: 'Email' },
+  'invoice.footerPartsHint': {
+    de: 'Steuernummer bzw. USt-IdNr. und Bankverbindung stehen immer in der Fußzeile: Die Steuernummer ist Pflicht auf der Rechnung, und die Zahlungsaufforderung verweist auf das Konto.',
+    en: 'The tax number or VAT ID and the bank details are always in the footer: the tax number is required on an invoice, and the request for payment points to the account.',
+  },
+  'invoice.footerPreview': { de: 'Vorschau der Fußzeile', en: 'Footer preview' },
+  'invoice.footerPreviewEmpty': { de: 'Noch keine Angaben für die Fußzeile.', en: 'Nothing for the footer yet.' },
 
   'logo.label': { de: 'Logo', en: 'Logo' },
   'logo.preview': { de: 'Vorschau des Logos', en: 'Logo preview' },

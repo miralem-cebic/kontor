@@ -158,7 +158,7 @@ function SectionCard({
           save();
         }}
       >
-        <Fields draft={draft} set={set} errors={errors} />
+        <Fields draft={draft} set={set} errors={errors} account={company.bank.accounts.find((a) => a.id === company.bank.defaultAccountId) ?? null} />
         <div className="card-actions">
           <button type="submit" className="btn primary" disabled={!dirty}>
             {t('settings.save')}

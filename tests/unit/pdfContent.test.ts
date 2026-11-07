@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { makeAccount, makeCancellation, makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
 import { newDocumentId } from '../../src/data/ids';
 import type { BankAccount } from '../../src/data/types';
-import { documentContent as contentOf, pdfFileName, recipientLines, type DocumentContent, type PdfSource } from '../../src/pdf/content';
+import { documentContent as contentOf, footerColumns, pdfFileName, recipientLines, type DocumentContent, type PdfSource } from '../../src/pdf/content';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleLine, sampleQuote } from './fixtures';
 
-const company = sampleCompany({ invoiceDefaults: { numberPattern: 'RE-{YYYY}-{NNNN}', quotePattern: 'AN-{YYYY}-{NNNN}', paymentTermDays: 14, footer: 'Amtsgericht Köln' } });
+const company = sampleCompany({ invoiceDefaults: { ...sampleCompany().invoiceDefaults, footer: 'Amtsgericht Köln' } });
 const customer = makeContact(sampleContact());
 const account = company.bank.accounts[0] as BankAccount;
 const inAustria = makeContact(sampleContact({ nameLine2: '', contactPerson: '', address: { street: 'Ring 1', postalCode: '1010', city: 'Wien', country: 'AT' }, vatId: 'ATU12345678' }));
@@ -92,6 +92,46 @@ describe('the content of an invoice', () => {
     expect(c2.info[1]).toEqual({ label: 'Invoice date', value: '31/10/2026' });
     expect(c2.totals.at(-1)).toEqual({ label: 'Total', value: '€1,585.38', grand: true });
     expect(c2.pageLabel).toBe('Page {n} of {m}');
+  });
+});
+
+describe('the parts of the footer (F26)', () => {
+  const withParts = (footerParts: { address: boolean; phone: boolean; email: boolean }) =>
+    sampleCompany({ invoiceDefaults: { ...company.invoiceDefaults, footerParts } });
+  const footerOf = (parts: { address: boolean; phone: boolean; email: boolean }, lang: 'de' | 'en' = 'de') =>
+    documentContent(src({ company: withParts(parts), lang })).footer.columns;
+
+  it('shows every part by default', () => {
+    expect(footerOf({ address: true, phone: true, email: true })).toEqual([
+      ['Muster Design', 'Erika Mustermann', 'Hauptstraße 1', '50667 Köln'],
+      ['Tel. +49 221 123456', 'erika@example.com'],
+      ['Steuernummer 12/345/67890', 'USt-IdNr. DE136695976'],
+      ['Erika Mustermann', 'IBAN DE89 3704 0044 0532 0130 00', 'BIC COBADEFFXXX'],
+    ]);
+  });
+
+  it('leaves out the phone number, the email or the address as chosen', () => {
+    expect(footerOf({ address: true, phone: false, email: true })[1]).toEqual(['erika@example.com']);
+    expect(footerOf({ address: true, phone: true, email: false })[1]).toEqual(['Tel. +49 221 123456']);
+    const noAddress = footerOf({ address: false, phone: true, email: true });
+    expect(noAddress).toHaveLength(3);
+    expect(noAddress[0]).toEqual(['Tel. +49 221 123456', 'erika@example.com']);
+  });
+
+  it('leaves out a column that has nothing left, and never the tax numbers or the account', () => {
+    const columns = footerOf({ address: false, phone: false, email: false });
+    expect(columns).toEqual([['Steuernummer 12/345/67890', 'USt-IdNr. DE136695976'], ['Erika Mustermann', 'IBAN DE89 3704 0044 0532 0130 00', 'BIC COBADEFFXXX']]);
+  });
+
+  it('a dunning letter follows the choice stored in the snapshot of its invoice', () => {
+    // the snapshot of an issued document holds the company as it was; the letter is made from it
+    const parts = { address: true, phone: false, email: false };
+    const snapshotCompany = { ...company, invoiceDefaults: { ...company.invoiceDefaults, footerParts: parts } };
+    expect(footerColumns(snapshotCompany, account, 'de')[1]).toEqual(['Steuernummer 12/345/67890', 'USt-IdNr. DE136695976']);
+  });
+
+  it('is labelled in the language of the document', () => {
+    expect(footerOf({ address: true, phone: true, email: true }, 'en')[1]).toEqual(['Phone +49 221 123456', 'erika@example.com']);
   });
 });
 

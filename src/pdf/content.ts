@@ -8,7 +8,7 @@ import { dueDate, invoiceTotals, vatNote, type IssuedInfo } from '../domain/invo
 import { claimTotal, SPREAD_BP } from '../domain/dunning';
 import { formatCents, formatQuantity, formatRate, negate, type TaxTotals } from '../domain/money';
 import type { AccountDetails } from '../domain/bankAccount';
-import type { CompanyProfile } from '../domain/company';
+import type { CompanyProfile, FooterParts } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { DocumentFile, DunningFile, InvoiceFile, QuoteFile } from '../data/types';
 import { fmtIn, tIn, type Lang, type MessageKey } from '../i18n';
@@ -132,11 +132,27 @@ const accountLines = (account: AccountDetails | null, lang: Lang): string[] => {
   }
 };
 
-function footerColumns(company: CompanyProfile, account: AccountDetails | null, lang: Lang): string[][] {
+/** What the footer needs of the company, so that a preview can be made from a form that is not saved yet */
+export interface FooterSource {
+  name: string;
+  owner: string;
+  address: CompanyProfile['address'];
+  contact: CompanyProfile['contact'];
+  tax: Pick<CompanyProfile['tax'], 'taxNumber' | 'vatId'>;
+  invoiceDefaults: { footerParts: FooterParts };
+}
+
+/**
+ * The columns of the footer: address, phone and email, tax numbers, account. The company chooses which of the address,
+ * the phone and the email it shows (F26); the tax numbers and the account always stand. A column with nothing left is
+ * left out.
+ */
+export function footerColumns(company: FooterSource, account: AccountDetails | null, lang: Lang): string[][] {
   const { address, contact, tax } = company;
+  const parts = company.invoiceDefaults.footerParts;
   return [
-    nonEmpty([company.name, company.owner !== company.name ? company.owner : '', address.street, `${address.postalCode} ${address.city}`]),
-    nonEmpty([contact.phone ? `${tIn(lang, 'pdf.phone')} ${contact.phone}` : '', contact.email]),
+    parts.address ? nonEmpty([company.name, company.owner !== company.name ? company.owner : '', address.street, `${address.postalCode} ${address.city}`]) : [],
+    nonEmpty([parts.phone && contact.phone ? `${tIn(lang, 'pdf.phone')} ${contact.phone}` : '', parts.email ? contact.email : '']),
     nonEmpty([tax.taxNumber ? `${tIn(lang, 'pdf.taxNumber')} ${tax.taxNumber}` : '', tax.vatId ? `${tIn(lang, 'pdf.vatId')} ${tax.vatId}` : '']),
     accountLines(account, lang),
   ].filter((column) => column.length > 0);

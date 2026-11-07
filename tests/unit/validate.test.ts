@@ -56,10 +56,20 @@ describe('company.json validation', () => {
     ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', quotePattern: '../{NNNN}', paymentTermDays: 14, footer: '' }],
     // a file of the current version has a quote pattern
     ['invoiceDefaults', { numberPattern: 'RE-{NNNN}', paymentTermDays: 14, footer: '' }],
+    // the parts of the footer (version 16) are three booleans
+    ['invoiceDefaults', { ...sampleProfile().invoiceDefaults, footerParts: { address: true, phone: 'yes', email: true } }],
+    ['invoiceDefaults', { ...sampleProfile().invoiceDefaults, footerParts: { address: true, phone: true } }],
+    ['invoiceDefaults', { ...sampleProfile().invoiceDefaults, footerParts: ['address'] }],
+    ['invoiceDefaults', (({ footerParts: _f, ...rest }) => rest)(sampleProfile().invoiceDefaults)],
     ['fieldUpdatedAt', { name: 'not a date' }],
     ['fieldUpdatedAt', []],
   ])('rejects %s = %j', (field, value) => {
     expect(() => read(file({ [field]: value }))).toThrow(InvalidFileError);
+  });
+
+  it('accepts a footer without some of its parts', () => {
+    const invoiceDefaults = { ...sampleProfile().invoiceDefaults, footerParts: { address: true, phone: false, email: false } };
+    expect(read(file({ invoiceDefaults })).invoiceDefaults.footerParts).toEqual({ address: true, phone: false, email: false });
   });
 
   it('accepts a logo whose name matches its hash and type', () => {

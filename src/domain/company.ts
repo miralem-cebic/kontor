@@ -36,6 +36,16 @@ export interface TaxSettings {
   business: BusinessType;
 }
 
+/**
+ * The parts of the footer of a document that can be left out (F26). The tax number or VAT ID and the account stay: § 14
+ * UStG asks for the tax number, and the request for payment points to the account below.
+ */
+export const FOOTER_PARTS = ['address', 'phone', 'email'] as const;
+export type FooterPart = (typeof FOOTER_PARTS)[number];
+/** Which parts the footer shows */
+export type FooterParts = Record<FooterPart, boolean>;
+export const DEFAULT_FOOTER_PARTS: FooterParts = { address: true, phone: true, email: true };
+
 export interface InvoiceDefaults {
   numberPattern: string;
   /** The pattern of quote numbers, given when a quote is finalized; it differs from `numberPattern` */
@@ -46,6 +56,8 @@ export interface InvoiceDefaults {
   itemPattern: string;
   paymentTermDays: number;
   footer: string;
+  /** Which parts of the master data the footer shows (F26) */
+  footerParts: FooterParts;
 }
 
 export type LogoType = 'image/png' | 'image/jpeg' | 'image/svg+xml';
@@ -126,6 +138,7 @@ export interface CompanyDraft {
   itemPattern: string;
   paymentTermDays: string;
   footer: string;
+  footerParts: FooterParts;
 }
 
 export type DraftField = keyof CompanyDraft;
@@ -157,6 +170,7 @@ export const emptyDraft = (): CompanyDraft => ({
   itemPattern: DEFAULT_ITEM_PATTERN,
   paymentTermDays: String(DEFAULT_PAYMENT_TERM_DAYS),
   footer: '',
+  footerParts: { ...DEFAULT_FOOTER_PARTS },
 });
 
 export function draftFromProfile(p: CompanyProfile): CompanyDraft {
@@ -189,6 +203,7 @@ export function draftFromProfile(p: CompanyProfile): CompanyDraft {
     itemPattern: p.invoiceDefaults.itemPattern,
     paymentTermDays: String(p.invoiceDefaults.paymentTermDays),
     footer: p.invoiceDefaults.footer,
+    footerParts: { ...p.invoiceDefaults.footerParts },
   };
 }
 
@@ -215,7 +230,7 @@ export const SECTION_FIELDS: Record<Section, readonly DraftField[]> = {
   master: ['name', 'owner', 'street', 'postalCode', 'city', 'country', 'email', 'phone'],
   tax: ['taxNumber', 'vatId', 'smallBusiness', 'vatMethod', 'vatPeriod', 'permanentExtension', 'businessKind', 'municipality', 'multiplier'],
   bank: ['bankHolder', 'iban', 'bic'],
-  invoice: ['numberPattern', 'quotePattern', 'contactPattern', 'itemPattern', 'paymentTermDays', 'footer'],
+  invoice: ['numberPattern', 'quotePattern', 'contactPattern', 'itemPattern', 'paymentTermDays', 'footer', 'footerParts'],
 };
 
 type Read<T> = Result<T, CompanyFieldError[]>;
@@ -291,7 +306,7 @@ function readInvoice(d: CompanyDraft): Read<SectionValues['invoice']> {
   if (itemProblem) c.add('itemPattern', `pattern.${itemProblem}`);
   const paymentTermDays = c.paymentTerm('paymentTermDays', d.paymentTermDays);
   const footer = c.optionalText('footer', d.footer, LIMITS.footer);
-  return c.done(() => ({ invoiceDefaults: { numberPattern, quotePattern, contactPattern, itemPattern, paymentTermDays, footer } }));
+  return c.done(() => ({ invoiceDefaults: { numberPattern, quotePattern, contactPattern, itemPattern, paymentTermDays, footer, footerParts: { ...d.footerParts } } }));
 }
 
 const READERS: { [S in Section]: (d: CompanyDraft, year: number) => Read<SectionValues[S]> } = {

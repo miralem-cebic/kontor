@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Footer from the master data (F26): in the setup assistant (step "Rechnungen") and in the invoice settings, the company chooses which parts of its master data the footer of quotes, invoices, cancellations and dunning letters shows (name and address, phone, email), and a preview shows the footer as it will print, from what is typed so far. The tax number or VAT ID and the bank details always stand. The free text "Fußzeile" is for additions only. Existing companies keep showing every part.
 - Customer email and phone on the document (F31): the PDF of quotes, invoices, cancellations and dunning letters prints the email and phone of the customer in the information block, below the customer number, as "Ihre E-Mail" and "Ihr Telefon" ("Your email", "Your phone"). They are not part of the address field, so the address stays in the window of the envelope. A document that was issued keeps printing what its snapshot of the customer held; a customer without email or phone prints nothing. No format change.
 - Overview of the calendar year (Phase 4, "Wo stehe ich?"): the net income from the payments received, the net expenses (without the VAT that comes back), an estimate of the surplus on the cash basis, what is still open on issued invoices and what of it is overdue, the twelve months, and the turnover against the small business limits (25,000 € of the previous year, 100,000 € of the current year, § 19 Abs. 1 UStG, kept in the tax parameters with their source). Every figure is an estimate for orientation.
 - Exit at any time (F12): Settings, App, "Ordner als ZIP exportieren" downloads a ZIP file of the company folder as it is, with every list as a CSV file under `listen/` and a readme. Nothing in the folder changes; unsaved changes are written first. The format is described in `docs/data-format.md`.
@@ -53,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- All files of a company folder have schema version 16: `company.json` has `invoiceDefaults.footerParts` (which parts the footer shows; all three for existing companies), and the company in the snapshot of an issued document gets it too; no other file changes.
 - All files of a company folder have schema version 15: expenses have a receipt (`receipt`, `null` when there is none); no other file changes.
 - All files of a company folder have schema version 14: contacts and items carry the import they came from (`importBatchId`, `null` for records typed in); no other file changes.
 - All files of a company folder have schema version 13: expenses are a new kind of file (`expenses/`); no other file changes.

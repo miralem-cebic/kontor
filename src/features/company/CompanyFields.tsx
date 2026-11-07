@@ -1,12 +1,16 @@
 import { useId, useState } from 'react';
 import type { LogoUpload } from '../../app/session';
 import { ExternalLink } from '../../components/ExternalLink';
-import { CheckField, Choice, Row, TextArea, TextField } from '../../components/Field';
+import { CheckField, CheckGroup, Choice, Row, TextArea, TextField } from '../../components/Field';
 import { Icon } from '../../components/Icon';
-import { checkLogo, LIMITS, TRADE_TAX_MULTIPLIER_SOURCE, type CompanyDraft, type CompanyFieldError, type VatMethod, type VatPeriod } from '../../domain/company';
+import type { AccountDetails } from '../../domain/bankAccount';
+import { checkLogo, FOOTER_PARTS, LIMITS, TRADE_TAX_MULTIPLIER_SOURCE, type CompanyDraft, type CompanyFieldError, type FooterPart, type VatMethod, type VatPeriod } from '../../domain/company';
+import { normalizeIban } from '../../domain/iban';
+import { normalizeVatId } from '../../domain/taxIds';
+import { footerColumns } from '../../pdf/content';
 import { formatNumber, nextFreeNumber, patternProblem } from '../../domain/numbering';
 import { upcomingMinimum } from '../../domain/tax/tradeTax';
-import { t } from '../../i18n';
+import { currentLang, t, type MessageKey } from '../../i18n';
 import { fieldError, logoProblemText } from '../../lib/labels';
 
 // The form fields of the company profile, shared by the setup assistant and the settings page. The bank fields are
@@ -16,6 +20,8 @@ export interface FieldsProps {
   draft: CompanyDraft;
   set: (patch: Partial<CompanyDraft>) => void;
   errors: readonly CompanyFieldError[];
+  /** The account the footer preview shows (the settings pass the default account); without it, the account of the draft */
+  account?: AccountDetails | null;
 }
 
 export function MasterFields({ draft, set, errors }: FieldsProps) {
@@ -154,7 +160,48 @@ function firstNumber(pattern: string): string | null {
 /** The first contact or item number of a pattern, or null while the pattern cannot number them (F28) */
 const firstCounterNumber = (pattern: string): string | null => nextFreeNumber(pattern.trim(), []);
 
-export function InvoiceFields({ draft, set, errors }: FieldsProps) {
+/** The account typed into the setup assistant, as the footer will show it; null while there is no IBAN */
+const draftAccount = (d: CompanyDraft): AccountDetails | null =>
+  d.iban.trim() === '' ? null : { kind: 'bank', name: '', holder: d.bankHolder.trim(), iban: normalizeIban(d.iban), bic: d.bic.trim().toUpperCase() };
+
+const FOOTER_PART_LABEL = { address: 'invoice.footerPartAddress', phone: 'invoice.footerPartPhone', email: 'invoice.footerPartEmail' } as const satisfies Record<FooterPart, MessageKey>;
+
+/** The footer of a document as it will print, built from what is typed so far (not saved) */
+function FooterPreview({ draft, account }: { draft: CompanyDraft; account: AccountDetails | null }) {
+  const columns = footerColumns(
+    {
+      name: draft.name.trim(),
+      owner: draft.owner.trim(),
+      address: { street: draft.street.trim(), postalCode: draft.postalCode.trim(), city: draft.city.trim(), country: draft.country.trim() },
+      contact: { email: draft.email.trim(), phone: draft.phone.trim() },
+      tax: { taxNumber: draft.taxNumber.trim(), vatId: normalizeVatId(draft.vatId) },
+      invoiceDefaults: { footerParts: draft.footerParts },
+    },
+    account,
+    currentLang(),
+  );
+  const extra = draft.footer.trim();
+  return (
+    <div className="field">
+      <span className="f-label">{t('invoice.footerPreview')}</span>
+      <div className="footer-preview" role="group" aria-label={t('invoice.footerPreview')} data-testid="footer-preview">
+        {extra !== '' && <p className="footer-extra">{extra}</p>}
+        <div className="footer-cols">
+          {columns.map((lines, i) => (
+            <div key={i} className="footer-col">
+              {lines.map((line, j) => (
+                <span key={j}>{line}</span>
+              ))}
+            </div>
+          ))}
+        </div>
+        {columns.length === 0 && <span className="f-hint">{t('invoice.footerPreviewEmpty')}</span>}
+      </div>
+    </div>
+  );
+}
+
+export function InvoiceFields({ draft, set, errors, account }: FieldsProps) {
   const e = (f: keyof CompanyDraft) => fieldError(errors, f);
   const preview = firstNumber(draft.numberPattern);
   const quotePreview = firstNumber(draft.quotePattern);
@@ -199,7 +246,14 @@ export function InvoiceFields({ draft, set, errors }: FieldsProps) {
         maxLength={60}
       />
       <TextField className="w-num" label={t('invoice.paymentTerm')} hint={t('invoice.paymentTermHint')} value={draft.paymentTermDays} onChange={(paymentTermDays) => set({ paymentTermDays })} error={e('paymentTermDays')} required inputMode="numeric" maxLength={3} />
+      <CheckGroup<FooterPart>
+        label={t('invoice.footerParts')}
+        options={FOOTER_PARTS.map((key) => ({ key, label: t(FOOTER_PART_LABEL[key]), checked: draft.footerParts[key] }))}
+        onChange={(key, checked) => set({ footerParts: { ...draft.footerParts, [key]: checked } })}
+      />
+      <p className="f-hint">{t('invoice.footerPartsHint')}</p>
       <TextArea label={t('invoice.footer')} hint={t('invoice.footerHint')} value={draft.footer} onChange={(footer) => set({ footer })} error={e('footer')} maxLength={LIMITS.footer} />
+      <FooterPreview draft={draft} account={account === undefined ? draftAccount(draft) : account} />
     </>
   );
 }

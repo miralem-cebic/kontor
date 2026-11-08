@@ -29,7 +29,7 @@
 // Buchst. b UStG, https://www.gesetze-im-internet.de/ustg_1980/__4.html), which is why the VAT IDs are checked here.
 
 import { cents, divideRounded, sum, type Cents } from './money';
-import { addDays } from './dates';
+import { addDays, endOfNextMonth } from './dates';
 import type { TaxTreatment } from './invoice';
 import { isPlausibleEuVatId, normalizeVatId } from './taxIds';
 import { taxParams } from './tax/params';
@@ -136,12 +136,6 @@ export function zmDueDate(p: UstvaPeriod): string {
   const weekday = due.getUTCDay();
   return addDays(isoOf(due), weekday === 6 ? 2 : weekday === 0 ? 1 : 0);
 }
-
-/** The last day of the month after the one that holds `iso` */
-const endOfNextMonth = (iso: string): string => {
-  const [y = 0, m = 1] = iso.split('-').map(Number);
-  return isoOf(new Date(Date.UTC(y, m + 1, 0)));
-};
 
 /** A base as the portal takes it: whole euros, half away from zero (UNVERIFIED, see the top of the file) */
 export const zmWholeEuros = (amount: Cents): number => Number(divideRounded(BigInt(Math.abs(amount)), 100n)) * (amount < 0 ? -1 : 1) + 0;

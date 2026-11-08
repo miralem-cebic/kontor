@@ -825,7 +825,10 @@ const MESSAGES_SRC = {
     de: 'In den Einstellungen ist „jährlich“ gewählt: Dann ist meist keine Voranmeldung nötig. Du kannst trotzdem einen Zeitraum wählen, zum Beispiel für eine Dauerfristverlängerung oder wenn das Finanzamt es verlangt.',
     en: 'The settings say “yearly”: then an advance return is usually not required. You can still pick a period, for example if the tax office asks for it.',
   },
-  'ustva.method.cash': { de: 'Nach vereinnahmten Entgelten (Ist-Versteuerung): Rechnungen zählen im Zeitraum der Zahlung, bei Teilzahlungen anteilig.', en: 'On the cash basis (Ist-Versteuerung): invoices count in the period of the payment, in part for part payments.' },
+  'ustva.method.cash': {
+    de: 'Nach vereinnahmten Entgelten (Ist-Versteuerung): Rechnungen zählen im Zeitraum der Zahlung, bei Teilzahlungen anteilig. Innergemeinschaftliche Lieferungen (41) zählen nach dem Rechnungsdatum, Leistungen an Unternehmen in anderen EU-Staaten (21) nach der Leistung, wie in der Zusammenfassenden Meldung (§ 18b UStG).',
+    en: 'On the cash basis (Ist-Versteuerung): invoices count in the period of the payment, in part for part payments. Intra-community supplies (41) count by the invoice date, services to businesses in other EU states (21) by the service, as in the summary report (§ 18b UStG).',
+  },
   'ustva.method.accrual': { de: 'Nach vereinbarten Entgelten (Soll-Versteuerung): Rechnungen zählen im Zeitraum, in dem die Leistung endet. Stornorechnungen zählen mit ihrem Datum.', en: 'On the accrual basis (Soll-Versteuerung): invoices count in the period in which the service ends. Cancellations count on their own date.' },
   'ustva.due': { de: 'Fällig am {date}', en: 'Due on {date}' },
   'ustva.dueExtension': { de: 'mit Dauerfristverlängerung (einen Monat später)', en: 'with permanent extension (one month later)' },
@@ -866,6 +869,10 @@ const MESSAGES_SRC = {
   'ustva.notCovered.prepayments': { de: 'Anzahlungen: Eine Rechnung zählt erst, wenn die Leistung endet (Soll) oder gezahlt wird (Ist), nicht schon bei einer Anzahlung davor.', en: 'Prepayments: an invoice counts only when the service ends (accrual) or is paid (cash), not at a prepayment before that.' },
   'ustva.notCovered.refunds': { de: 'Rückzahlungen an Kunden, Skonto und andere Minderungen des Entgelts, die nicht als Stornorechnung in kontor stehen.', en: 'Refunds to customers, discounts for early payment and other reductions of the price that are not a cancellation in kontor.' },
   'ustva.notCovered.corrections': { de: 'Berichtigung des Vorsteuerabzugs (§ 15a UStG), Vorsteuerausschluss und -aufteilung, private Nutzung und unentgeltliche Wertabgaben, unrichtig ausgewiesene Steuer (§ 14c UStG).', en: 'Correction of input tax (§ 15a UStG), excluded or split input tax, private use and gifts, wrongly shown tax (§ 14c UStG).' },
+  'ustva.notCovered.cashBases': {
+    de: 'Bei Ist-Versteuerung: Umsätze, für die der Kunde die Steuer schuldet (§ 13b Abs. 5 UStG, 60), und Umsätze mit Leistungsort im Ausland (45) ordnet kontor dem Zahlungseingang zu. Ob sie stattdessen in den Zeitraum der Leistung oder der Rechnung gehören, ist nicht geprüft; bitte mit der Steuerberatung klären.',
+    en: 'On the cash basis: kontor assigns supplies for which the customer owes the tax (§ 13b Abs. 5 UStG, 60) and supplies with a place of supply abroad (45) to the payment. Whether they belong to the period of the service or of the invoice instead is not verified; please check with your tax advisor.',
+  },
   'ustva.notCovered.extension': { de: 'Die Sondervorauszahlung bei Dauerfristverlängerung (39) und ihre Anrechnung.', en: 'The special prepayment for the permanent extension (39) and its set-off.' },
   'ustva.notCovered.otherCompanies': { de: 'Andere Firmen derselben Person: Die Voranmeldung ist eine für alle. Rechne ihre Werte von Hand dazu.', en: 'Other companies of the same person: there is one return for all. Add their values by hand.' },
   'ustva.notCovered.summaryReport': { de: 'Die Zusammenfassende Meldung (ZM) für innergemeinschaftliche Lieferungen und Leistungen: Sie ist eine eigene Meldung beim Bundeszentralamt für Steuern. kontor bereitet sie weiter unten auf dieser Seite vor.', en: 'The recapitulative statement (Zusammenfassende Meldung) for intra-community supplies and services: it is a separate report to the Federal Central Tax Office. kontor prepares it further down on this page.' },
@@ -927,10 +934,6 @@ const MESSAGES_SRC = {
   'zm.check.differs': {
     de: 'Die Leistungen der Meldung ({zm}) weichen von Kennzahl 21 der Voranmeldung ({ustva}) ab, Unterschied {difference}. Prüfe die Rechnungen und die Voranmeldung für dieses Quartal.',
     en: 'The services in the report ({zm}) differ from field 21 of the advance return ({ustva}), by {difference}. Check the invoices and the advance return for this quarter.',
-  },
-  'zm.check.cash': {
-    de: 'Bei Ist-Versteuerung zählt kontor Kennzahl 21 der Voranmeldung nach dem Zahlungseingang, die Meldung zählt nach der Leistung (§ 18a Abs. 8 UStG). Ein Unterschied kann deshalb an Rechnungen liegen, die noch nicht bezahlt sind.',
-    en: 'On the cash basis kontor counts field 21 of the advance return by the payment, while the report counts by the service (§ 18a Abs. 8 UStG). A difference can therefore come from invoices that are not paid yet.',
   },
   'zm.check.none': {
     de: 'In diesem Monat stehen keine Leistungen in der Meldung. Der Abgleich mit Kennzahl 21 gilt für das Quartal, dessen letzter Monat sie enthält.',

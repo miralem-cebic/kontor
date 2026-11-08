@@ -242,10 +242,12 @@ describe('invoices without German VAT', () => {
     expect(field(run({ invoices: [noVat({ treatment: 'reverseCharge', customerCountry: 'DE' })] }), 'reverseChargeSupplied')).toMatchObject({ kz: '60', base: 50_000 });
   });
 
-  it('property: a payment of a tax-free invoice counts its amount (cash)', () => {
-    const inv = noVat({ treatment: 'intraCommunitySupply', customerCountry: 'FR' });
-    const r = run({ method: 'cash', invoices: [inv], payments: [{ id: 'p', invoiceId: 'r1', date: '2026-10-05', amount: cents(20_000) }] });
-    expect(field(r, 'intraCommunitySupply')?.base).toBe(20_000);
+  it('on the cash basis, a payment of an invoice with Kz 45 or Kz 60 counts its amount (the rule is not verified)', () => {
+    for (const [treatment, country, id] of [['notTaxable', 'US', 'otherNotTaxable'], ['reverseCharge', 'DE', 'reverseChargeSupplied']] as const) {
+      const inv = noVat({ treatment, customerCountry: country });
+      const r = run({ method: 'cash', invoices: [inv], payments: [{ id: 'p', invoiceId: 'r1', date: '2026-10-05', amount: cents(20_000) }] });
+      expect(field(r, id)?.base).toBe(20_000);
+    }
   });
 
   it('what kontor cannot place is reported, not guessed: 0 % under standard, reverse charge without a known country', () => {
@@ -254,6 +256,70 @@ describe('invoices without German VAT', () => {
     const r = run({ invoices: [zero, unknown] });
     expect(r.notices).toContainEqual({ code: 'supplyUnplaced', count: 2, amount: 60_000 });
     expect(field(r, 'euServices')?.base).toBe(0);
+  });
+});
+
+describe('§ 18b UStG: Kz 41 and Kz 21 by the invoice and the service, also on the cash basis (#75)', () => {
+  // § 18b Satz 2: an intra-community supply in the period in which the invoice is issued, at the latest the one in which
+  // the month after the supply ends. § 18b Satz 3: a service under § 3a Abs. 2 for which the recipient in another EU state
+  // owes the tax in the period in which it was performed. Neither depends on the payment. Read at
+  // https://dejure.org/gesetze/UStG/18b.html on 8 November 2026 (gesetze-im-internet.de did not answer).
+  const Q1: UstvaPeriod = { year: 2026, kind: 'quarter', index: 1 };
+  const Q2: UstvaPeriod = { year: 2026, kind: 'quarter', index: 2 };
+  const month = (index: number): UstvaPeriod => ({ year: 2026, kind: 'month', index });
+  const eu = (over: Partial<UstvaInvoice>): UstvaInvoice => invoice({ customerCountry: 'AT', lines: [{ rate: basisPoints(0), net: cents(500_000), tax: cents(0) }], ...over });
+  const paidInApril: UstvaPayment[] = [{ id: 'p', invoiceId: 'r1', date: '2026-04-15', amount: cents(500_000) }];
+  const base = (r: UstvaResult, id: 'euServices' | 'intraCommunitySupply') => field(r, id)?.base ?? 0;
+
+  it('the failing scenario of #75: an EU service of 20 March, paid on 15 April, is Kz 21 of Q1 on the cash basis', () => {
+    const service = eu({ treatment: 'reverseCharge', date: '2026-03-20', serviceEnd: '2026-03-20' });
+    expect(base(run({ method: 'cash', period: Q1, invoices: [service], payments: paidInApril }), 'euServices')).toBe(500_000);
+    expect(base(run({ method: 'cash', period: Q2, invoices: [service], payments: paidInApril }), 'euServices')).toBe(0);
+    // and an EU service that is never paid is still declared
+    expect(base(run({ method: 'cash', period: Q1, invoices: [service] }), 'euServices')).toBe(500_000);
+  });
+
+  it('an intra-community supply counts when the invoice is issued, on both bases', () => {
+    const supply = eu({ treatment: 'intraCommunitySupply', serviceEnd: '2026-03-20', date: '2026-04-02' });
+    for (const method of ['accrual', 'cash'] as const) {
+      expect(base(run({ method, period: month(3), invoices: [supply], payments: paidInApril }), 'intraCommunitySupply')).toBe(0);
+      expect(base(run({ method, period: month(4), invoices: [supply], payments: paidInApril }), 'intraCommunitySupply')).toBe(500_000);
+    }
+  });
+
+  it('an invoice issued late counts at the latest in the period in which the month after the supply ends', () => {
+    const late = eu({ treatment: 'intraCommunitySupply', serviceEnd: '2026-03-20', date: '2026-05-15' });
+    expect(base(run({ period: month(4), invoices: [late] }), 'intraCommunitySupply')).toBe(500_000);
+    expect(base(run({ period: month(5), invoices: [late] }), 'intraCommunitySupply')).toBe(0);
+    // a supply on the last day of January: the month after is February, also in a leap year
+    const january = eu({ treatment: 'intraCommunitySupply', serviceEnd: '2028-01-31', date: '2028-04-01' });
+    expect(base(run({ period: { year: 2028, kind: 'month', index: 2 }, invoices: [january] }), 'intraCommunitySupply')).toBe(500_000);
+  });
+
+  it('an EU service over a period counts when it ends, also when it was invoiced before', () => {
+    const service = eu({ treatment: 'reverseCharge', date: '2026-02-01', serviceEnd: '2026-04-30' });
+    expect(base(run({ method: 'cash', period: Q1, invoices: [service] }), 'euServices')).toBe(0);
+    expect(base(run({ method: 'cash', period: Q2, invoices: [service] }), 'euServices')).toBe(500_000);
+  });
+
+  it('a cancellation counts negative in the period of its own date, also on the cash basis (§ 18b Satz 4, § 17 Abs. 1 Satz 8)', () => {
+    const service = eu({ treatment: 'reverseCharge', date: '2026-03-20', serviceEnd: '2026-03-20' });
+    const cancellation = eu({ id: 's1', treatment: 'reverseCharge', date: '2026-04-10', serviceEnd: '2026-03-20', isCancellation: true, lines: [{ rate: basisPoints(0), net: cents(-500_000), tax: cents(0) }] });
+    expect(base(run({ method: 'cash', period: Q1, invoices: [service, cancellation] }), 'euServices')).toBe(500_000);
+    expect(base(run({ method: 'cash', period: Q2, invoices: [service, cancellation] }), 'euServices')).toBe(-500_000);
+  });
+
+  it('property: on the cash basis, Kz 21 and Kz 41 do not depend on the payments', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 12 }), fc.array(fc.tuple(fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 500_000 })), { maxLength: 4 }), (m, paid) => {
+        const invoices = [eu({ treatment: 'reverseCharge' }), eu({ id: 'r2', treatment: 'intraCommunitySupply' })];
+        const payments = paid.map(([pm, amount], i) => ({ id: `p${i}`, invoiceId: i % 2 ? 'r2' : 'r1', date: `2026-${String(pm).padStart(2, '0')}-10`, amount: cents(amount) }));
+        const withPayments = run({ method: 'cash', period: month(m), invoices, payments });
+        const without = run({ method: 'cash', period: month(m), invoices });
+        expect([base(withPayments, 'euServices'), base(withPayments, 'intraCommunitySupply')]).toEqual([base(without, 'euServices'), base(without, 'intraCommunitySupply')]);
+      }),
+      fcParams,
+    );
   });
 });
 

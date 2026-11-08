@@ -1796,6 +1796,10 @@ const MESSAGES_SRC = {
   },
   'start.openHere': { de: 'Hier öffnen', en: 'Open here' },
 
+  'toast.copyRejected': {
+    de: 'Eine Notfallkopie im Browser stammte nicht von diesem Ordner oder aus einer älteren kontor-Version. Sie wurde nicht übernommen und gelöscht.',
+    en: 'An emergency copy in the browser did not come from this folder or came from an older version of kontor. It was not used and was removed.',
+  },
   'toast.recovered': {
     de: 'Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.',
     en: 'Unsaved changes from the last session were restored.',

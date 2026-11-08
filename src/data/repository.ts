@@ -104,6 +104,11 @@ export interface Repository {
   listBackups(): Promise<Result<BackupInfo[], StorageError>>;
   /** Physical removal: only maintenance.ts calls it, for backups beyond the retention */
   removeBackup(name: string): Promise<Result<void, StorageError>>;
+  /**
+   * The secret of this folder that signs the emergency copy in the browser (32 bytes, `.kontor/emergency-copy.key`),
+   * made on first use. Other pages under file:// share the browser's storage, but not the folder (#69).
+   */
+  copyKey(): Promise<Result<Uint8Array, StorageError>>;
 }
 
 /** Another writer got there first; thrown inside the repository and returned as `conflict` */

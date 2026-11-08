@@ -28,7 +28,7 @@ beforeEach(async () => {
   must(await repo.createCompany(sampleCompany(), []));
   A.resetApp();
   A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] });
-  persister = new Persister(repo);
+  persister = new Persister(repo, new Uint8Array(32));
   persister.start();
   payerId = A.addContact(sampleContact({ name: 'Apple Distribution International', customerNumber: '' }));
   accountId = A.useApp.getState().company!.bank.defaultAccountId;

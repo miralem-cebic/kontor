@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
-import { emergencyKey, Persister, RETRY_DELAYS_MS } from '../../src/data/persister';
+import { emergencyKey, Persister, readEmergencyCopy, RETRY_DELAYS_MS } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
 import { brandId } from '../../src/data/ids';
 import { makePayment, nowIso } from '../../src/data/schema';
@@ -25,13 +25,25 @@ beforeEach(async () => {
   must(await repo.createCompany(company, []));
   A.resetApp();
   A.loadCompany(must(await repo.readCompany()), { contacts: [], items: [], documents: [], payments: [], dunnings: [], quoteStatuses: [], expenses: [], payouts: [] });
-  persister = new Persister(repo);
+  persister = new Persister(repo, KEY);
   persister.start();
 });
 
 afterEach(() => persister.stop());
 
 const onDisk = async () => must(await new FsRepository(root.asHandle()).readCompany());
+
+/** The key the folder signs its emergency copy with (#69) */
+const KEY = new Uint8Array(32).fill(7);
+
+/** The emergency copy of a company as the session reads it: signed with KEY, or null */
+function storedCopy(companyId: string) {
+  const raw = localStorage.getItem(emergencyKey(companyId));
+  if (raw === null) return null;
+  const read = readEmergencyCopy(raw, KEY);
+  if (!read.ok) throw new Error('the emergency copy is not signed with the key of the folder');
+  return read.copy as Record<string, unknown> & { company: Record<string, unknown> | null; contacts: { id: string }[]; items: { id: string }[]; documents: { id: string }[]; payments: { id: string }[]; expenses: { id: string }[]; payouts: { id: string }[] };
+}
 
 describe('Persister', () => {
   it('writes nothing when nothing changed', async () => {
@@ -55,7 +67,7 @@ describe('Persister', () => {
     await persister.flush();
     const s = A.useApp.getState();
     expect(s.save).toEqual({ state: 'error', kind: 'permission' });
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(s.company!.id)) ?? 'null');
+    const copy = storedCopy(s.company!.id);
     expect(copy.company.owner).toBe('Erika M.');
 
     repo.saveCompany = orig;
@@ -167,7 +179,7 @@ describe('Persister: trying again (#94)', () => {
 describe('Persister: a record the folder refuses for good (#95)', () => {
   const contactsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadContacts()).contacts;
   const newer = () => err({ kind: 'newerSchema' as const, cause: new Error('written by a newer kontor') });
-  const copyOf = () => JSON.parse(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id)) ?? 'null');
+  const copyOf = () => storedCopy(A.useApp.getState().company!.id);
 
   it('waits apart: the other records are written, the status is saved, and the record is listed as unsaved', async () => {
     const orig = repo.saveContact.bind(repo);
@@ -230,6 +242,40 @@ describe('Persister: a record the folder refuses for good (#95)', () => {
     persister.discard(`contact:${discarded}`);
     expect(copyOf().contacts.map((c: { id: string }) => c.id)).toEqual([kept]);
     repo.saveContact = orig;
+  });
+});
+
+describe('Persister: the emergency copy is signed with the key of the folder (#69)', () => {
+  const unsaved = async () => {
+    repo.saveCompany = async () => err({ kind: 'permission', cause: new Error('denied') });
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+    return localStorage.getItem(emergencyKey(A.useApp.getState().company!.id))!;
+  };
+
+  it('is kept under a new name, as the signature and the copy', async () => {
+    const raw = await unsaved();
+    expect(raw).toMatch(/^[0-9a-f]{64}\.\{/);
+    expect(emergencyKey(A.useApp.getState().company!.id)).toMatch(/^kontor\.unsaved\.v2\./);
+    expect(readEmergencyCopy(raw, KEY)).toMatchObject({ ok: true, copy: { company: { owner: 'Erika M.' } } });
+  });
+
+  it('a copy signed with another key, changed, or without a signature is refused', async () => {
+    const raw = await unsaved();
+    expect(readEmergencyCopy(raw, new Uint8Array(32).fill(8)).ok).toBe(false);
+    expect(readEmergencyCopy(raw.replace('Erika M.', 'Mallory'), KEY).ok).toBe(false);
+    expect(readEmergencyCopy(raw.slice(65), KEY).ok).toBe(false);
+    expect(readEmergencyCopy(`${'0'.repeat(64)}.${raw.slice(65)}`, KEY).ok).toBe(false);
+    expect(readEmergencyCopy('', KEY).ok).toBe(false);
+  });
+
+  it('without the key of the folder, no copy is kept, and the person is told', async () => {
+    persister.stop();
+    persister = new Persister(repo, null);
+    persister.start();
+    await unsaved();
+    expect(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id))).toBeNull();
+    expect(A.useApp.getState().emergencyCopyFailed).toBe(true);
   });
 });
 
@@ -346,7 +392,7 @@ describe('Persister with contacts', () => {
     const id = A.addContact(sampleContact({ name: 'Unsaved' }));
     await persister.flush();
     const company = A.useApp.getState().company!;
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    const copy = storedCopy(company.id);
     expect(copy.company).toBeNull();
     expect(copy.contacts.map((c: { id: string }) => c.id)).toEqual([id]);
     repo.saveContact = orig;
@@ -383,7 +429,7 @@ describe('Persister with items', () => {
     const id = A.addItem(sampleItem({ name: 'Unsaved' }));
     await persister.flush();
     const company = A.useApp.getState().company!;
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    const copy = storedCopy(company.id);
     expect(copy.company).toBeNull();
     expect(copy.contacts).toEqual([]);
     expect(copy.items.map((i: { id: string }) => i.id)).toEqual([id]);
@@ -428,7 +474,7 @@ describe('Persister with expenses', () => {
     const id = A.addExpense(sampleExpense({ supplier: 'Unsaved' }));
     await persister.flush();
     const company = A.useApp.getState().company!;
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    const copy = storedCopy(company.id);
     expect(copy.expenses.map((e: { id: string }) => e.id)).toEqual([id]);
     repo.saveExpense = orig;
     await persister.retry();
@@ -475,7 +521,7 @@ describe('Persister with payouts', () => {
     const id = A.addPayout(profile({ note: 'Unsaved' }))!;
     await persister.flush();
     const company = A.useApp.getState().company!;
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    const copy = storedCopy(company.id);
     expect(copy.payouts.map((p: { id: string }) => p.id)).toEqual([id]);
     repo.savePayout = orig;
     await persister.retry();
@@ -514,7 +560,7 @@ describe('Persister with quotes', () => {
     const id = A.addQuote(customer, sampleQuote());
     await persister.flush();
     const company = A.useApp.getState().company!;
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(company.id)) ?? 'null');
+    const copy = storedCopy(company.id);
     expect(copy.documents.map((d: { id: string }) => d.id)).toEqual([id]);
     repo.saveDocument = orig;
     await persister.retry();
@@ -611,7 +657,7 @@ describe('payments', () => {
     const p = payment();
     A.putWrittenPayment(p);
     await persister.flush();
-    const copy = JSON.parse(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id)) ?? 'null');
+    const copy = storedCopy(A.useApp.getState().company!.id);
     expect(copy.payments.map((x: { id: string }) => x.id)).toEqual([p.id]);
 
     repo.savePayment = orig;

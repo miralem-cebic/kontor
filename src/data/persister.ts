@@ -1,4 +1,5 @@
 import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenPayout, integrateWrittenQuoteStatus, setEmergencyCopyFailed, setSaveStatus, setUnsaved, useApp, type AppState } from '../store/appStore';
+import { hmacSha256Hex, sameDigest } from '../lib/hmac';
 import type { CompanyId } from './ids';
 import { classifyError, type Repository, type StorageError, type StorageErrorKind } from './repository';
 import { err, ok, type Result } from './result';
@@ -38,7 +39,29 @@ function recordOf(state: AppState, key: string): object | null | undefined {
   if (at < 0 || !collection) return undefined;
   return (state[collection] as ReadonlyMap<string, object>).get(key.slice(at + 1));
 }
-export const emergencyKey = (id: CompanyId) => `kontor.unsaved.v1.${id}`;
+/**
+ * Where the emergency copy of a company is kept: `<signature>.<copy as JSON>`, the signature an HMAC-SHA-256 with the key
+ * of the folder (#69). Every page under file:// shares this storage, so a copy is used only with the folder's signature.
+ */
+export const emergencyKey = (id: CompanyId) => `kontor.unsaved.v2.${id}`;
+/** The unsigned copies of earlier versions: never used, only removed */
+export const legacyEmergencyKey = (id: CompanyId) => `kontor.unsaved.v1.${id}`;
+
+const SIGNED = /^([0-9a-f]{64})\.([\s\S]*)$/;
+
+/** The copy as it is stored: the signature over the JSON, a dot, and the JSON */
+export const signCopy = (json: string, key: Uint8Array): string => `${hmacSha256Hex(key, json)}.${json}`;
+
+/** A stored copy, if it carries the signature of the folder's key; its content is still unchecked data */
+export function readEmergencyCopy(raw: string, key: Uint8Array): { ok: true; copy: unknown } | { ok: false } {
+  const m = SIGNED.exec(raw);
+  if (!m || !sameDigest(m[1] as string, hmacSha256Hex(key, m[2] as string))) return { ok: false };
+  try {
+    return { ok: true, copy: JSON.parse(m[2] as string) };
+  } catch {
+    return { ok: false };
+  }
+}
 
 type Job = () => Promise<Result<void, StorageError>>;
 
@@ -56,7 +79,11 @@ export class Persister {
   /** How many automatic retries were made since the last success or "Try again" */
   private retries = 0;
 
-  constructor(private readonly repo: Repository) {}
+  /** `copyKey` signs the emergency copy (Repository.copyKey); without it, no copy is kept and the person is told */
+  constructor(
+    private readonly repo: Repository,
+    private readonly copyKey: Uint8Array | null,
+  ) {}
 
   /** Starts watching; the state at this moment counts as saved */
   start() {
@@ -325,7 +352,9 @@ export class Persister {
     // nothing unsaved: an older copy has nothing left to keep
     if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length && !copy.quoteStatuses.length && !copy.expenses.length && !copy.payouts.length) return this.clearEmergencyCopy();
     try {
-      localStorage.setItem(emergencyKey(company.id), JSON.stringify(copy));
+      // an unsigned copy would be thrown away when it is read: without the key, there is none
+      if (!this.copyKey) throw new Error('No key of the folder to sign the emergency copy with');
+      localStorage.setItem(emergencyKey(company.id), signCopy(JSON.stringify(copy), this.copyKey));
       setEmergencyCopyFailed(false);
     } catch (e) {
       // the storage is full (about 5 MB) or blocked: the changes are only in this window, and the person is told so

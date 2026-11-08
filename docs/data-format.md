@@ -26,10 +26,11 @@ Eine Firma hat einen Ordner. Er enthält diese Dateien und Unterordner:
 | `numbering/<bereich>.json` | Der Zähler der Nummernkreise (Rechnungen, Angebote) |
 | `audit/<JJJJ-MM>.jsonl` | Das Protokoll: eine JSON-Zeile je Vorgang, nur angehängt |
 | `backups/<JJJJ-MM-TT>.json` | Die tägliche Sicherung der Daten |
+| `.kontor/emergency-copy.key` | Ein zufälliger Schlüssel (32 Byte als 64 Hexziffern), mit dem kontor die Notfallkopie ungespeicherter Änderungen im Browser signiert. Versteckt, nicht im ZIP-Export; fehlt er, legt kontor einen neuen an |
 
 Der Ordner `listen/` ist im ZIP-Export dabei; er liegt nicht im Firmenordner. Er enthält jede Liste als CSV-Datei, siehe unten.
 
-Versteckte Dateien (sie beginnen mit einem Punkt) und Hilfsdateien von Sync-Programmen gehören nicht zum Datenbestand.
+Versteckte Dateien (sie beginnen mit einem Punkt) und Hilfsdateien von Sync-Programmen gehören nicht zum Datenbestand. Der Ordner `.kontor/` ist kontors eigene Ablage, keine Geschäftsdaten.
 
 ## Die Dateien
 

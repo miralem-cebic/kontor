@@ -9,9 +9,9 @@ import { checkSupport } from '../data/fs/support';
 import { acquireCompanyLock, waitForClosed, type ClosedMessage, type CompanyLock } from './companyLock';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayout, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
-import { emergencyKey, Persister } from '../data/persister';
+import { emergencyKey, legacyEmergencyKey, Persister, readEmergencyCopy } from '../data/persister';
 import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
 import { makeCompany } from '../data/schema';
 import type { CompanyFile } from '../data/types';
@@ -264,17 +264,20 @@ async function openRecords(r: FsRepository, entry: CompanyEntry, company: Compan
   repo = r;
   openHandle = entry.handle;
   loadCompany(company, records);
-  persister = new Persister(r);
+  // the secret of the folder that signs the emergency copy; without it no copy is kept, and the sidebar says so
+  const copyKey = await r.copyKey();
+  if (!copyKey.ok) console.warn('No key for the emergency copy', copyKey.error.cause);
+  persister = new Persister(r, copyKey.ok ? copyKey.value : null);
   persister.start();
   // after the persister started with the file state as saved, so that it writes the recovered changes
-  const recovered = recoverEmergencyCopy(company, records);
+  const { recovered, rejected } = recoverEmergencyCopy(company, records, copyKey.ok ? copyKey.value : null);
   if (recovered) applyRecovered(recovered.company, recovered);
   // the files that could not be read stay listed on the overview, the reports and the taxes (LoadIssuesNotice), since
   // their records are missing from every figure; the toast only points there, in one message with the recovery (#96)
   const unreadable = [loadedContacts, loadedItems, loadedDocuments, loadedPayments, loadedDunnings, loadedQuoteStatuses, loadedExpenses, loadedPayouts].flatMap((l) => l.value.issues);
   setLoadIssues(unreadable);
   if (unreadable.length) console.warn('Some files could not be read', unreadable);
-  const told = [recovered ? t('toast.recovered') : '', unreadable.length ? t('toast.unreadable', { n: unreadable.length }) : ''].filter(Boolean);
+  const told = [recovered ? t('toast.recovered') : '', rejected ? t('toast.copyRejected') : '', unreadable.length ? t('toast.unreadable', { n: unreadable.length }) : ''].filter(Boolean);
   if (told.length) showToast(told.join(' '));
   setLastCompany(company.id);
   if (entry.name !== company.name) await rememberCompany(entry.handle, company);
@@ -311,33 +314,53 @@ function recoverRecords<T extends { id: string }>(saved: unknown, loaded: readon
   });
 }
 
-/**
- * Unsaved changes from an earlier session (the folder was not reachable then). The copy is data like any other
- * file: it is used only if it passes the same checks, belongs to this company and is newer.
- */
-function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ company: CompanyFile } & CompanyRecords) | null {
-  let copy: unknown;
+/** Removes a stored item; true when there was one */
+function removeStored(key: string): boolean {
   try {
-    const raw = localStorage.getItem(emergencyKey(company.id));
-    if (!raw) return null;
-    copy = JSON.parse(raw);
+    const had = localStorage.getItem(key) !== null;
+    localStorage.removeItem(key);
+    return had;
   } catch {
-    return null;
+    return false;
   }
-  if (!isRecord(copy)) return null;
+}
+
+/**
+ * Unsaved changes from an earlier session (the folder was not reachable then). Every page under file:// can read and
+ * write the browser's storage (#69), so the copy is used only when it carries the signature of the folder's key, and
+ * then like any other file: only what passes the same checks, belongs to this company and is newer. An unsigned or
+ * forged copy, and the unsigned copies of earlier versions, are removed and reported (`rejected`). Issued documents
+ * are never taken from a copy, nor payments, dunnings and decisions on quotes: they are written to the folder before
+ * they reach the store, so a copy has nothing of them that the folder lacks.
+ */
+export function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords, key: Uint8Array | null): { recovered: ({ company: CompanyFile } & CompanyRecords) | null; rejected: boolean } {
+  const legacy = removeStored(legacyEmergencyKey(company.id));
+  const none = { recovered: null, rejected: legacy };
+  const raw = orNull(() => localStorage.getItem(emergencyKey(company.id)));
+  // without the key the copy cannot be checked now: it stays for a later start
+  if (!raw || !key) return none;
+  const read = readEmergencyCopy(raw, key);
+  if (!read.ok) {
+    console.warn('An emergency copy without the signature of this folder was removed');
+    removeStored(emergencyKey(company.id));
+    return { recovered: null, rejected: true };
+  }
+  const copy = read.copy;
+  if (!isRecord(copy)) return none;
   const savedCompany = copy['company'] ? orNull(() => migrate('company', copy['company'])) : null;
   const nextCompany = savedCompany?.id === company.id ? mergeCompany(company, savedCompany) : company;
   const contacts = recoverRecords(copy['contacts'], loaded.contacts, (raw) => migrate('contact', raw), mergeContact);
   const items = recoverRecords(copy['items'], loaded.items, (raw) => migrate('item', raw), mergeItem);
-  const documents = recoverRecords(copy['documents'], loaded.documents, (raw) => migrate('document', raw), mergeDocument);
-  const payments = recoverRecords(copy['payments'], loaded.payments, (raw) => migrate('payment', raw), mergePayment);
-  // a dunning is never changed: the copy's version of one that the folder holds is not used
-  const dunnings = recoverRecords(copy['dunnings'], loaded.dunnings, (raw) => migrate('dunning', raw), (local) => local);
-  const quoteStatuses = recoverRecords(copy['quoteStatuses'], loaded.quoteStatuses, (raw) => migrate('quoteStatus', raw), mergeQuoteStatus);
+  const draft = (raw: unknown) => {
+    const document = migrate('document', raw);
+    if (document.issued) throw new Error('An issued document is never taken from the emergency copy');
+    return document;
+  };
+  const documents = recoverRecords(copy['documents'], loaded.documents, draft, mergeDocument);
   const expenses = recoverRecords(copy['expenses'], loaded.expenses, (raw) => migrate('expense', raw), mergeExpense);
   const payouts = recoverRecords(copy['payouts'], loaded.payouts, (raw) => migrate('payout', raw), mergePayout);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length && !expenses.length && !payouts.length) return null;
-  return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts };
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !expenses.length && !payouts.length) return none;
+  return { recovered: { company: nextCompany, contacts, items, documents, payments: [], dunnings: [], quoteStatuses: [], expenses, payouts }, rejected: legacy };
 }
 
 /**

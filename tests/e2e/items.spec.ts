@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { APP_URL, expect, openSettings, readCompanyFile, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
@@ -138,9 +139,12 @@ test('unsaved items from an earlier session are restored and written', async ({ 
   const item = { schemaVersion: 2, id: '0f8fad5b-d9cb-469f-a165-70867728950e', number: '', name: 'Gerettet', description: '', unit: 'DAY', netPrice: 64000, vatRate: 1900, createdAt: at, deletedAt: null, fieldUpdatedAt: stamps };
   // a copy that does not pass the checks is left out
   const broken = { ...item, id: '7c9e6679-7425-40de-944b-e07fc1f90ae7', name: 'Kaputt', netPrice: 1.5 };
-  await page.evaluate(({ key, copy }) => localStorage.setItem(key, JSON.stringify(copy)), {
-    key: `kontor.unsaved.v1.${companyId}`,
-    copy: { at, company: null, contacts: [], items: [item, broken] },
+  // the copy carries the signature of the folder's key, as the app writes it (#69)
+  const key = Buffer.from((await readFolders(page))['Ordner-1/.kontor/emergency-copy.key']!.trim(), 'hex');
+  const json = JSON.stringify({ at, company: null, contacts: [], items: [item, broken] });
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: `kontor.unsaved.v2.${companyId}`,
+    value: `${createHmac('sha256', key).update(json, 'utf8').digest('hex')}.${json}`,
   });
 
   await page.reload();
@@ -149,6 +153,33 @@ test('unsaved items from an earlier session are restored and written', async ({ 
   await expect(page.getByRole('table')).toContainText('Gerettet');
   await expect(page.getByRole('table')).not.toContainText('Kaputt');
   expect((await itemFiles(page)).map((f) => f['name'])).toEqual(['Gerettet']);
-  expect(await page.evaluate((key) => localStorage.getItem(key), `kontor.unsaved.v1.${companyId}`)).toBeNull();
+  expect(await page.evaluate((key) => localStorage.getItem(key), `kontor.unsaved.v2.${companyId}`)).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test('an emergency copy that another local page wrote is not used (#69)', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio' });
+  const { id: companyId } = await readCompanyFile(page, 'Ordner-1');
+  const at = new Date().toISOString();
+  const stamps = Object.fromEntries(['number', 'name', 'description', 'unit', 'netPrice', 'vatRate', 'deletedAt'].map((f) => [f, at]));
+  const item = { schemaVersion: 2, id: '0f8fad5b-d9cb-469f-a165-70867728950e', number: '', name: 'Untergeschoben', description: '', unit: 'DAY', netPrice: 64000, vatRate: 1900, createdAt: at, deletedAt: null, fieldUpdatedAt: stamps };
+  // one copy without a signature (as earlier versions wrote it), one with a signature that is not the folder's
+  const json = JSON.stringify({ at, company: null, contacts: [], items: [item] });
+  await page.evaluate(
+    ({ id, json }) => {
+      localStorage.setItem(`kontor.unsaved.v1.${id}`, json);
+      localStorage.setItem(`kontor.unsaved.v2.${id}`, `${'0'.repeat(64)}.${json}`);
+    },
+    { id: companyId, json },
+  );
+
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'Eine Notfallkopie im Browser stammte nicht von diesem Ordner' })).toBeVisible();
+  await openCatalogue(page);
+  await expect(page.getByText('Untergeschoben')).toHaveCount(0);
+  expect(await itemFiles(page)).toEqual([]);
+  expect(await page.evaluate((id) => [localStorage.getItem(`kontor.unsaved.v1.${id}`), localStorage.getItem(`kontor.unsaved.v2.${id}`)], companyId)).toEqual([null, null]);
   expect(errors).toEqual([]);
 });

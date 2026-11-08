@@ -24,6 +24,7 @@ import { writeFile, writeJson } from './jsonFile';
 //   audit/<YYYY-MM>.jsonl      what happened to documents, one JSON line each, only appended
 //   assets/<file>              logo files, named after their hash, never overwritten
 //   backups/<YYYY-MM-DD>.json  daily copy of company.json and the contacts
+//   .kontor/emergency-copy.key the secret that signs the emergency copy in the browser (hidden, not in the exit archive)
 
 export const FILES = { company: 'company.json' } as const;
 export const DIRS = { contacts: 'contacts', items: 'items', documents: 'documents', payments: 'payments', dunnings: 'dunnings', quoteStatus: 'quoteStatus', expenses: 'expenses', payouts: 'payouts', belege: 'belege', numbering: 'numbering', audit: 'audit', assets: 'assets', backups: 'backups' } as const;
@@ -32,6 +33,13 @@ export const DIRS = { contacts: 'contacts', items: 'items', documents: 'document
 const ISSUED_DIRS: Record<NumberRange, string> = { invoice: 'issued', quote: 'quotes' };
 
 const AUDIT_MONTH = /^\d{4}-\d{2}$/;
+
+/** The hidden folder of kontor's own files and the key of the emergency copy in it: 32 bytes as 64 hex digits */
+const KONTOR_DIR = '.kontor';
+const COPY_KEY_FILE = 'emergency-copy.key';
+const COPY_KEY = /^[0-9a-f]{64}$/;
+const toHex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+const fromHex = (hex: string) => Uint8Array.from(hex.match(/../g) ?? [], (h) => parseInt(h, 16));
 
 const BACKUP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 /** A record file (contact, item) is named after its ID; other names (conflict copies of sync clients) are not read */
@@ -419,6 +427,25 @@ export class FsRepository implements Repository {
       const belege = await this.root.getDirectoryHandle(DIRS.belege);
       const dir = await belege.getDirectoryHandle(year);
       return (await dir.getFileHandle(name)).getFile();
+    });
+  }
+
+  copyKey() {
+    return attempt(async () => {
+      const dir = await this.root.getDirectoryHandle(KONTOR_DIR, { create: true });
+      const text = await dir.getFileHandle(COPY_KEY_FILE).then(
+        async (h) => (await h.getFile()).text(),
+        (e: unknown) => {
+          if (isNotFound(e)) return null;
+          throw e;
+        },
+      );
+      if (text !== null && COPY_KEY.test(text.trim())) return fromHex(text.trim());
+      // none yet, or a damaged one (it can sign nothing): a new random key; copies signed with an old one are refused
+      if (text !== null) console.warn('The key of the emergency copy was damaged and is replaced');
+      const key = crypto.getRandomValues(new Uint8Array(32));
+      await writeFile(dir, COPY_KEY_FILE, `${toHex(key)}\n`);
+      return key;
     });
   }
 

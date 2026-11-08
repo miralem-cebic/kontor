@@ -38,4 +38,13 @@ export default tseslint.config(
     files: ['scripts/**/*.mjs', '*.config.*', 'tests/**/*.ts'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
+  {
+    // The e2e specs take `test` from helpers.ts, which switches the app into test mode; only testMode.spec.ts checks
+    // that the app without it is not in test mode (#83)
+    files: ['tests/e2e/**/*.spec.ts'],
+    ignores: ['tests/e2e/testMode.spec.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [{ name: '@playwright/test', importNames: ['test'], message: 'Import test from ./helpers: it runs the app in test mode.' }] }],
+    },
+  },
 );

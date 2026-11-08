@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, openSettings, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, openSettings, readCompanyFile, setUpCompany, switcher, test, watchErrors } from './helpers';
 
 const openAccounts = async (page: Page) => {
   await openSettings(page, 'Bankkonten');

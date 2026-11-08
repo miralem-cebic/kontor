@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, setUpCompany, test, watchErrors } from './helpers';
 
 /** Clicks the export button of the open list and returns the saved file as text (with its byte order mark removed) */
 async function downloadCsv(page: Page, name: RegExp): Promise<string> {

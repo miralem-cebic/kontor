@@ -1,8 +1,23 @@
-import { expect, type Page } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
-export const APP_URL = pathToFileURL(resolve('dist/index.html')).href + '?e2e';
+export const APP_URL = pathToFileURL(resolve('dist/index.html')).href;
+
+/**
+ * The `test` of every spec: each page of the browser context runs the app in test mode (folders in localStorage,
+ * window.__e2e). The flag is set before the app's script runs, on every load and reload; a URL cannot set it (#83).
+ */
+export const test = base.extend({
+  // the fixture callback is not named `use`, so that the React hooks rule does not take it for a hook
+  context: async ({ context }, provide) => {
+    await context.addInitScript(() => {
+      window.__kontorE2E = true;
+    });
+    await provide(context);
+  },
+});
+export { expect };
 
 /** A 1×1 PNG */
 export const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');

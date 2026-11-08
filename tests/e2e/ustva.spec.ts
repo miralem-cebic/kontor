@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { APP_URL, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, setUpCompany, test, watchErrors } from './helpers';
 
 test('the advance VAT return: the period, the due date, the input tax of an expense, a copy button per value, what is not covered', async ({ page }) => {
   const errors = watchErrors(page);

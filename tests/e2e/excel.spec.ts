@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
-import { APP_URL, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, setUpCompany, test, watchErrors } from './helpers';
 
 test('an item list exports as an Excel file that imports back: the same number is refused, a new one is fine', async ({ page }) => {
   const errors = watchErrors(page);

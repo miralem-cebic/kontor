@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, isoToday, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, isoToday, setUpCompany, test, watchErrors } from './helpers';
 
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('button', { name }).click();
 const line = (page: Page, n: number) => page.getByRole('group', { name: `Position ${n}`, exact: true });

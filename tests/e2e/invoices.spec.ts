@@ -1,7 +1,7 @@
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { APP_URL, isoToday, readFolders, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, isoToday, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('button', { name }).click();
 const line = (page: Page, n: number) => page.getByRole('group', { name: `Position ${n}`, exact: true });

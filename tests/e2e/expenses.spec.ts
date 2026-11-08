@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, readFolders, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
 const openExpenses = (page: Page) => page.getByRole('button', { name: 'Ausgaben' }).click();
 const expenseFiles = async (page: Page) => {

@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, isoToday, readFolders, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, isoToday, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
 const openExpenses = (page: Page) => page.getByRole('button', { name: 'Ausgaben' }).click();
 /** The text of a file of the folder: the helper gives binary files as data URLs */

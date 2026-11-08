@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, setUpCompany, test, watchErrors } from './helpers';
 
 /** Only the content area scrolls; the page itself never does, in either direction */
 const pageScrolls = (page: Page) =>

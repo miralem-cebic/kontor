@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, openSettings, readCompanyFile, readFolders, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, openSettings, readCompanyFile, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
 const openCatalogue = (page: Page) => page.getByRole('button', { name: 'Artikel & Leistungen' }).click();
 const itemFiles = async (page: Page) => {

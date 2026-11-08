@@ -1,5 +1,5 @@
 // Stand-in for a folder, based on Web Storage (localStorage).
-// For end-to-end tests only (?e2e): every simulated folder is a namespace of keys, so a test can create several
+// For end-to-end tests only (the test mode, see DEVELOPMENT.md): every simulated folder is a namespace of keys, so a test can create several
 // company folders, reload the page and find them again. Two windows of the same profile share them.
 
 import { isRecord } from '../validate';

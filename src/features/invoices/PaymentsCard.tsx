@@ -6,7 +6,7 @@ import type { BankAccount, InvoiceFile, PaymentFile } from '../../data/types';
 import { isoDateOf } from '../../domain/dates';
 import { dueDate, type IssuedInfo } from '../../domain/invoice';
 import { formatCents, type Cents } from '../../domain/money';
-import { activePayments, emptyPaymentDraft, isOverdue, openAmount, paidAmount, paymentStateOf, PAYMENT_NOTE_LIMIT, readPayment, type PaymentDraft, type PaymentField, type PaymentFieldError } from '../../domain/payment';
+import { activePayments, emptyPaymentDraft, isOverdue, openAmount, paidAmount, paymentBeforeInvoice, paymentStateOf, PAYMENT_NOTE_LIMIT, readPayment, type PaymentDraft, type PaymentField, type PaymentFieldError } from '../../domain/payment';
 import { currentLang, t } from '../../i18n';
 import { accountDetail, accountName, fieldError, paymentFailureText, paymentStateText } from '../../lib/labels';
 import { showToast, useApp } from '../../store/appStore';
@@ -134,6 +134,7 @@ export function PaymentsCard({ invoice, gross, payments, cancelled }: Props) {
         (adding ? (
           <PaymentForm
             invoiceId={invoice.id}
+            invoiceDate={invoice.date}
             open={open}
             accounts={accounts}
             preferred={accounts.some((a) => a.id === invoice.accountId) ? invoice.accountId : company.bank.defaultAccountId}
@@ -155,6 +156,8 @@ export function PaymentsCard({ invoice, gross, payments, cancelled }: Props) {
 
 interface FormProps {
   invoiceId: IssuedInvoice['id'];
+  /** The date of the invoice: a payment before it is pointed out (a prepayment, or a typo) */
+  invoiceDate: string;
   /** The open amount: a payment may not be more */
   open: Cents;
   accounts: readonly BankAccount[];
@@ -164,7 +167,7 @@ interface FormProps {
 }
 
 /** Records one payment; the open amount and the first active account are proposed */
-function PaymentForm({ invoiceId, open, accounts, preferred, onDone }: FormProps) {
+function PaymentForm({ invoiceId, invoiceDate, open, accounts, preferred, onDone }: FormProps) {
   const lang = currentLang();
   const [draft, setDraft] = useState<PaymentDraft>(() => emptyPaymentDraft(isoDateOf(new Date()), preferred, open, lang));
   const [errors, setErrors] = useState<readonly PaymentFieldError[]>([]);
@@ -174,7 +177,7 @@ function PaymentForm({ invoiceId, open, accounts, preferred, onDone }: FormProps
   const accountOptions = accounts.map((a) => ({ value: a.id, label: `${accountName(a)} · ${accountDetail(a)}` }));
 
   const save = async () => {
-    const checked = readPayment(draft, lang, { open, accounts: accounts.map((a) => a.id) });
+    const checked = readPayment(draft, lang, { open, accounts: accounts.map((a) => a.id), today: isoDateOf(new Date()) });
     if (!checked.ok) {
       setErrors(checked.error);
       focusFirstError('payment-form');
@@ -197,7 +200,16 @@ function PaymentForm({ invoiceId, open, accounts, preferred, onDone }: FormProps
       <h3 id="payment-new" tabIndex={-1}>
         {t('payments.formTitle')}
       </h3>
-      <TextField className="w-date" type="date" label={t('payments.date')} value={draft.date} onChange={(date) => set({ date })} error={err('date')} required />
+      <TextField
+        className="w-date"
+        type="date"
+        label={t('payments.date')}
+        hint={paymentBeforeInvoice(draft.date, invoiceDate) ? t('payments.dateBeforeInvoice', { date: formatDate(invoiceDate) }) : undefined}
+        value={draft.date}
+        onChange={(date) => set({ date })}
+        error={err('date')}
+        required
+      />
       <TextField
         className="w-num"
         label={t('payments.amount')}

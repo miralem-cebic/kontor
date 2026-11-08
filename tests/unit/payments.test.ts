@@ -156,6 +156,16 @@ describe('recording a payment', () => {
     const inv = await issuedInvoice();
     expect(await recordPayment(inv.id, content({ accountId: 'unknown' }), payCtx())).toEqual({ ok: false, failure: 'notReady' });
   });
+
+  it('refuses a payment dated after today, the day of the recording (#79)', async () => {
+    const inv = await issuedInvoice();
+    // payCtx records on 2026-11-02
+    expect(await recordPayment(inv.id, content({ date: '2026-11-03' }), payCtx())).toEqual({ ok: false, failure: 'dateInFuture' });
+    expect(await recordPayment(inv.id, content({ date: '2027-11-02' }), payCtx())).toEqual({ ok: false, failure: 'dateInFuture' });
+    const written = root.children.get('payments');
+    expect(written?.kind === 'directory' ? written.children.size : 0).toBe(0);
+    expect(await recordPayment(inv.id, content({ date: '2026-11-02' }), payCtx())).toMatchObject({ ok: true });
+  });
 });
 
 describe('removing a payment', () => {

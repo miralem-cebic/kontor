@@ -8,6 +8,7 @@ import {
   MAX_PAYMENT_AMOUNT,
   openAmount,
   paidAmount,
+  paymentBeforeInvoice,
   paymentStateOf,
   readPayment,
   type PaymentDraft,
@@ -27,7 +28,7 @@ const draft = (over: Partial<PaymentDraft> = {}): PaymentDraft => ({
   ...over,
 });
 
-const checkWith = (d: PaymentDraft, locale: 'de' | 'en' = 'de', amountOpen: Cents = open) => readPayment(d, locale, { open: amountOpen, accounts: ACCOUNTS });
+const checkWith = (d: PaymentDraft, locale: 'de' | 'en' = 'de', amountOpen: Cents = open) => readPayment(d, locale, { open: amountOpen, accounts: ACCOUNTS, today: TODAY });
 
 describe('paidAmount and openAmount', () => {
   it('counts the active payments only; a deleted payment is no payment', () => {
@@ -122,6 +123,20 @@ describe('readPayment', () => {
 
   it('the date must be a date', () => {
     expect(checkWith(draft({ date: '31.10.2026' }))).toEqual({ ok: false, error: [{ field: 'date', problem: 'date' }] });
+  });
+
+  it('the date may not be after today: a typo in the year would book the income in a later year (#79)', () => {
+    expect(checkWith(draft({ date: '2026-11-01' }))).toEqual({ ok: false, error: [{ field: 'date', problem: 'dateInFuture' }] });
+    expect(checkWith(draft({ date: '2027-10-31' }))).toEqual({ ok: false, error: [{ field: 'date', problem: 'dateInFuture' }] });
+    expect(checkWith(draft({ date: TODAY }))).toMatchObject({ ok: true, value: { date: TODAY } });
+  });
+
+  it('a date before the invoice date is accepted (a prepayment); the form points it out (paymentBeforeInvoice)', () => {
+    expect(checkWith(draft({ date: '2026-01-15' }))).toMatchObject({ ok: true, value: { date: '2026-01-15' } });
+    expect(paymentBeforeInvoice('2026-10-30', '2026-10-31')).toBe(true);
+    expect(paymentBeforeInvoice('2026-10-31', '2026-10-31')).toBe(false);
+    expect(paymentBeforeInvoice('2026-11-01', '2026-10-31')).toBe(false);
+    expect(paymentBeforeInvoice('31.10.2026', '2026-11-30')).toBe(false);
   });
 
   it('the account must be an active account of the company', () => {

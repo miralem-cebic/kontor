@@ -1,3 +1,4 @@
+import { isoDateOf } from '../domain/dates';
 import { invoiceTotals } from '../domain/invoice';
 import { openAmount, paidAmount, type PaymentContent } from '../domain/payment';
 import type { DocumentId, PaymentId } from '../data/ids';
@@ -16,10 +17,11 @@ import { flushWrites, openRepository } from './session';
 
 /**
  * `notReady`: the invoice takes no payment (a draft, a cancelled invoice, a cancellation) or the account is not one of
- * the company; `tooHigh`: more than the open amount; `notPositive`: not more than 0; `gone`: no such payment, or it is
- * removed already. The others are storage failures (StorageErrorKind).
+ * the company; `tooHigh`: more than the open amount; `notPositive`: not more than 0; `dateInFuture`: dated after the
+ * day of the recording; `gone`: no such payment, or it is removed already. The others are storage failures
+ * (StorageErrorKind).
  */
-export type PaymentFailure = 'notReady' | 'tooHigh' | 'notPositive' | 'gone' | StorageErrorKind;
+export type PaymentFailure = 'notReady' | 'tooHigh' | 'notPositive' | 'dateInFuture' | 'gone' | StorageErrorKind;
 
 type Failed = { ok: false; failure: PaymentFailure };
 
@@ -62,6 +64,7 @@ export async function recordPayment(invoiceId: DocumentId, content: PaymentConte
   const open = openAmount(gross, paidAmount(paymentsOf(ctx.payments, invoice.id)));
   if (content.amount <= 0) return fail('notPositive');
   if (content.amount > open) return fail('tooHigh');
+  if (content.date > isoDateOf(ctx.now)) return fail('dateInFuture');
 
   const payment = makePayment(invoice.id, { ...content, accountId: account.id });
   const saved = await ctx.repo.savePayment(payment);

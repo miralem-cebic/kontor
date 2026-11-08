@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { APP_URL, openSettings, readCompanyFile, setUpCompany, switcher, watchErrors } from './helpers';
+import { APP_URL, expect, openSettings, readCompanyFile, setUpCompany, switcher, test, watchErrors } from './helpers';
 
 test('several companies: add a second one, switch, and the choice survives a reload', async ({ page }) => {
   const errors = watchErrors(page);

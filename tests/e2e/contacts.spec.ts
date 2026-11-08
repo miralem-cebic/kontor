@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, readFolders, setUpCompany, switcher, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, readFolders, setUpCompany, switcher, test, watchErrors } from './helpers';
 
 interface ContactJson {
   id: string;

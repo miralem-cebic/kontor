@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { APP_URL, isoToday, PNG, readCompanyFile, readFolders, switcher, watchErrors } from './helpers';
+import { APP_URL, expect, isoToday, PNG, readCompanyFile, readFolders, switcher, test, watchErrors } from './helpers';
 
 test('the setup assistant checks each step and writes the company folder', async ({ page }) => {
   const errors = watchErrors(page);

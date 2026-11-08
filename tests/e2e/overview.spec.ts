@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { APP_URL, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, setUpCompany, test, watchErrors } from './helpers';
 
 test('the overview shows this year net: the expense without the VAT that comes back, the twelve months, the limits', async ({ page }) => {
   const errors = watchErrors(page);

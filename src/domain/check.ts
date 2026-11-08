@@ -39,6 +39,7 @@ export type FieldProblem =
   | 'accountRemoved'
   | 'feeNegative'
   | 'date'
+  | 'dateInFuture'
   | 'validUntil'
   | 'periodEnd'
   | 'payerRemoved'

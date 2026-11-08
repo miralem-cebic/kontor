@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { buildReports, type NamedGroupReport, type ReportsView as ReportsData } from '../../app/reports';
 import { exportReportCsv, type ReportKind } from '../../app/reportsExport';
 import { buildSearchEntries } from '../../app/search';
@@ -7,6 +7,7 @@ import { currentLang, fmt, t, type MessageKey } from '../../i18n';
 import type { ComparisonReport } from '../../domain/reports';
 import { searchEntries, MIN_SEARCH_LENGTH, type SearchKind } from '../../domain/search';
 import { formatCents, type Cents } from '../../domain/money';
+import { tabIndexForKey } from '../../lib/tabs';
 import { useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
 
@@ -49,6 +50,17 @@ export function ReportsView() {
   const [tab, setTab] = useState<ReportKind>('turnover');
   const tabsId = useId();
 
+  // the tabs pattern: the arrow keys, Home and End select the tab they move to and focus it (only the selected tab is in
+  // the Tab order); the report is computed already, so showing it right away costs nothing
+  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const next = tabIndexForKey(e.key, TABS.findIndex((x) => x.kind === tab), TABS.length);
+    const target = next === null ? undefined : TABS[next];
+    if (!target) return;
+    e.preventDefault();
+    setTab(target.kind);
+    document.getElementById(`${tabsId}-${target.kind}`)?.focus();
+  };
+
   const view = useMemo(() => buildReports(company, contacts, documents, payments, expenses, payouts, year, now), [company, contacts, documents, payments, expenses, payouts, year, now]);
 
   if (!view) {
@@ -75,9 +87,19 @@ export function ReportsView() {
       <GlobalSearch />
 
       <div className="list-tools report-tools">
-        <div className="seg" role="tablist" aria-label={t('reports.tabsLabel')}>
+        <div className="seg" role="tablist" aria-label={t('reports.tabsLabel')} onKeyDown={onTabKey}>
           {TABS.map((x) => (
-            <button key={x.kind} type="button" role="tab" id={`${tabsId}-${x.kind}`} aria-selected={tab === x.kind} aria-controls={`${tabsId}-panel`} className={tab === x.kind ? 'on' : ''} onClick={() => setTab(x.kind)}>
+            <button
+              key={x.kind}
+              type="button"
+              role="tab"
+              id={`${tabsId}-${x.kind}`}
+              aria-selected={tab === x.kind}
+              aria-controls={`${tabsId}-panel`}
+              tabIndex={tab === x.kind ? 0 : -1}
+              className={tab === x.kind ? 'on' : ''}
+              onClick={() => setTab(x.kind)}
+            >
               {t(x.label)}
             </button>
           ))}

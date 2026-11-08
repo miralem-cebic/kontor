@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { APP_URL, readFolders, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, readFolders, setUpCompany, test, watchErrors } from './helpers';
 
 const contactFiles = async (page: Parameters<typeof readFolders>[0]) => {
   const files = await readFolders(page);

@@ -155,12 +155,14 @@ export const emptyPaymentDraft = (today: string, accountId: string, open: Cents,
 });
 
 /**
- * Checks a payment draft against the open amount of its invoice and the active accounts of the company. Every problem
- * is reported at once, so that the form can show all of them.
+ * Checks a payment draft against the open amount of its invoice, the active accounts of the company and today. Every
+ * problem is reported at once, so that the form can show all of them. A payment cannot have arrived after today: a date
+ * in the future (a typo in the year) would count the income in a later year and still lower the open amount now.
  */
-export function readPayment(d: PaymentDraft, locale: MoneyLocale, against: { open: Cents; accounts: readonly string[] }): Result<PaymentContent, PaymentFieldError[]> {
+export function readPayment(d: PaymentDraft, locale: MoneyLocale, against: { open: Cents; accounts: readonly string[]; today: string }): Result<PaymentContent, PaymentFieldError[]> {
   const c = new Checker<PaymentField>();
   if (!isIsoDate(d.date)) c.add('date', 'date');
+  else if (d.date > against.today) c.add('date', 'dateInFuture');
 
   let amount = cents(0);
   const typed = d.amount.trim();
@@ -179,3 +181,9 @@ export function readPayment(d: PaymentDraft, locale: MoneyLocale, against: { ope
   const note = c.optionalText('note', d.note, PAYMENT_NOTE_LIMIT);
   return c.done(() => ({ date: d.date, amount, accountId: d.accountId, note }));
 }
+
+/**
+ * A payment dated before its invoice: possible (a prepayment), but more often a typo, so the form points it out without
+ * refusing it. False for a date that is not a valid ISO date (the check reports that one).
+ */
+export const paymentBeforeInvoice = (date: string, invoiceDate: string): boolean => isIsoDate(date) && date < invoiceDate;

@@ -49,6 +49,7 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   tooManyLines: 'problem.tooManyLines',
   negativeTotal: 'problem.negativeTotal',
   date: 'problem.date',
+  dateInFuture: 'problem.dateInFuture',
   amount: 'problem.amount',
   amountNotPositive: 'problem.amountNotPositive',
   amountTooHigh: 'problem.amountTooHigh',
@@ -295,6 +296,8 @@ export function paymentFailureText(f: PaymentFailure): string {
       return t('payments.tooHigh');
     case 'notPositive':
       return t('problem.amountNotPositive');
+    case 'dateInFuture':
+      return t('payments.dateInFuture');
     case 'gone':
       return t('payments.gone');
     case 'permission':

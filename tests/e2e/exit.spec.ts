@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
 import { readZip } from '../../src/data/import/zip';
-import { APP_URL, openSettings, setUpCompany, watchErrors } from './helpers';
+import { APP_URL, expect, openSettings, setUpCompany, test, watchErrors } from './helpers';
 
 test('the company folder exports as a ZIP file: the folder as it is, every list as CSV, and a readme', async ({ page }) => {
   const errors = watchErrors(page);

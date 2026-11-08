@@ -53,10 +53,12 @@ export const useSession = create<SessionState>()(() => ({
 }));
 const set = useSession.setState;
 
-/* ---------- Test mode: company folders in localStorage (Playwright, ?e2e) ---------- */
+/* ---------- Test mode: company folders in localStorage (Playwright) ---------- */
 
-const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
-const E2E = params.has('e2e');
+// Switched on only by a flag the Playwright setup sets before the app's script runs (addInitScript, tests/e2e/helpers.ts).
+// It used to be the URL parameter ?e2e, so a link or a shortcut could keep a whole company in localStorage, which every
+// file:// page can read, without a folder permission prompt (#83). Another page cannot set a global of this document.
+const E2E = typeof window !== 'undefined' && window.__kontorE2E === true;
 const E2E_COUNTER = 'kontor.e2e.counter';
 /** Folder the next simulated folder picker returns (test hook), or a new one when unset */
 let e2eNextFolder: string | null = null;

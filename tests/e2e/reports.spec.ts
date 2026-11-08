@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { APP_URL, isoToday, setUpCompany, watchErrors } from './helpers';
+import type { Page } from '@playwright/test';
+import { APP_URL, expect, isoToday, setUpCompany, test, watchErrors } from './helpers';
 
 const nav = (page: Page, name: string) => page.getByRole('navigation').getByRole('button', { name }).click();
 const line = (page: Page, n: number) => page.getByRole('group', { name: `Position ${n}`, exact: true });
@@ -73,6 +73,27 @@ test('reports: income per customer, expenses per category, open items, the year 
   const comparison = page.getByRole('region', { name: `${year} im Vergleich zu ${Number(year) - 1} (Schätzung)` });
   await expect(comparison.getByRole('row', { name: /^Summe/ })).toContainText('252,10');
   await expect(comparison.getByRole('row', { name: /^Summe/ })).toContainText('42,01');
+
+  // the tabs work with the keyboard (WAI-ARIA tabs pattern): only the selected tab is in the Tab order, the arrow keys
+  // wrap around, Home and End go to the first and the last tab, and the tab moved to is selected and focused
+  const tab = (name: string) => page.getByRole('tab', { name });
+  await expect(tab('Vorjahresvergleich')).toHaveAttribute('tabindex', '0');
+  await expect(tab('Einnahmen je Kunde')).toHaveAttribute('tabindex', '-1');
+  await tab('Vorjahresvergleich').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(tab('Einnahmen je Kunde')).toBeFocused();
+  await expect(tab('Einnahmen je Kunde')).toHaveAttribute('aria-selected', 'true');
+  await expect(turnover).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(tab('Vorjahresvergleich')).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(tab('Einnahmen je Kunde')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(tab('Ausgaben je Kategorie')).toHaveAttribute('aria-selected', 'true');
+  await expect(categories).toBeVisible();
+  await page.keyboard.press('End');
+  await expect(tab('Vorjahresvergleich')).toBeFocused();
+  await expect(comparison).toBeVisible();
 
   // the search finds the invoice by its number, with the kind of record
   await page.getByLabel('Alles durchsuchen').fill(`RE-${year}-0001`);

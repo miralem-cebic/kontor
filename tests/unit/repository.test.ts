@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
@@ -326,6 +326,21 @@ describe('issued invoices in the folder', () => {
     expect(must(await repo.listIssuedFiles('invoice'))).toEqual(['RE-2026-0001.pdf']);
     expect((await repo.writeIssuedFile('invoice', '../company.json', new Uint8Array([1]))).ok).toBe(false);
     expect((await repo.readIssuedFile('invoice', '../company.json')).ok).toBe(false);
+  });
+
+  it('listing the issued files reads only the names, not the files (#88)', async () => {
+    must(await repo.writeIssuedFile('invoice', 'RE-2026-0001.pdf', new Uint8Array([37, 80, 68, 70])));
+    must(await repo.writeIssuedFile('invoice', 'RE-2026-0002.pdf', new Uint8Array([37, 80, 68, 70])));
+    const issued = await (await root.getDirectoryHandle('documents')).getDirectoryHandle('issued');
+    await writeFile(issued.asHandle(), '.DS_Store', 'x');
+    await writeFile(issued.asHandle(), 'RE-2026-0003.pdf.crswap', 'x');
+    const getFile = vi.spyOn(MemFile.prototype, 'getFile');
+    try {
+      expect(must(await repo.listIssuedFiles('invoice')).sort()).toEqual(['RE-2026-0001.pdf', 'RE-2026-0002.pdf']);
+      expect(getFile).not.toHaveBeenCalled();
+    } finally {
+      getFile.mockRestore();
+    }
   });
 
   it('the PDFs of finalized quotes are kept in documents/quotes/, apart from the invoices', async () => {

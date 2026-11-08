@@ -47,11 +47,21 @@ async function attempt<T>(run: () => Promise<T>): Promise<Result<T, StorageError
   }
 }
 
-/** Files of a directory (without helper files such as .crswap, .DS_Store, ~$…), with lastModified and size */
+/** Helper files of the system, the browser or a sync client (.DS_Store, ~$…, .crswap, .tmp), never read */
+const isHelperFile = (name: string) => name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp');
+
+/** Names of the files of a directory, without helper files. Opens no file, so it stays cheap for thousands of entries. */
+async function listFileNames(dir: FileSystemDirectoryHandle): Promise<string[]> {
+  const names: string[] = [];
+  for await (const [name, h] of dir.entries()) if (h.kind === 'file' && !isHelperFile(name)) names.push(name);
+  return names;
+}
+
+/** Files of a directory (without helper files), with lastModified and size: one getFile() per file */
 async function listFiles(dir: FileSystemDirectoryHandle): Promise<Map<string, { lastModified: number; size: number }>> {
   const out = new Map<string, { lastModified: number; size: number }>();
   for await (const [name, h] of dir.entries()) {
-    if (h.kind !== 'file' || name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp')) continue;
+    if (h.kind !== 'file' || isHelperFile(name)) continue;
     try {
       const f = await (h as FileSystemFileHandle).getFile();
       out.set(name, { lastModified: f.lastModified, size: f.size });
@@ -264,7 +274,7 @@ export class FsRepository implements Repository {
   }
 
   listIssuedFiles(range: NumberRange) {
-    return attempt(async () => [...(await listFiles(await this.issuedDir(range))).keys()]);
+    return attempt(async () => listFileNames(await this.issuedDir(range)));
   }
 
   writeIssuedFile(range: NumberRange, name: string, data: Uint8Array) {

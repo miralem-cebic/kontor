@@ -164,6 +164,93 @@ describe('Persister: trying again (#94)', () => {
   });
 });
 
+describe('Persister: a record the folder refuses for good (#95)', () => {
+  const contactsOnDisk = async () => must(await new FsRepository(root.asHandle()).loadContacts()).contacts;
+  const newer = () => err({ kind: 'newerSchema' as const, cause: new Error('written by a newer kontor') });
+  const copyOf = () => JSON.parse(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id)) ?? 'null');
+
+  it('waits apart: the other records are written, the status is saved, and the record is listed as unsaved', async () => {
+    const orig = repo.saveContact.bind(repo);
+    const stuckId = A.addContact(sampleContact({ name: 'Neuer auf der Platte' }));
+    repo.saveContact = async (c) => (c.id === stuckId ? newer() : orig(c));
+    const otherId = A.addContact(sampleContact({ name: 'Andere GmbH', customerNumber: 'K-0002' }));
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+
+    expect((await contactsOnDisk()).map((c) => c.id)).toEqual([otherId]);
+    expect((await onDisk()).owner).toBe('Erika M.');
+    expect(A.useApp.getState().save).toEqual({ state: 'saved' });
+    expect(A.useApp.getState().unsaved).toEqual([{ key: `contact:${stuckId}`, kind: 'newerSchema' }]);
+    expect(persister.pending).toBe(false);
+    // the change is kept in the browser until it is written or discarded
+    expect(copyOf().contacts.map((c: { id: string }) => c.id)).toEqual([stuckId]);
+  });
+
+  it('is not tried again on every flush, but on "Try again" and when it changes again', async () => {
+    const orig = repo.saveContact.bind(repo);
+    const save = vi.fn(async () => newer());
+    repo.saveContact = save;
+    const id = A.addContact(sampleContact());
+    await persister.flush();
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+    expect(save).toHaveBeenCalledOnce();
+
+    A.updateContact(id, sampleContact({ name: 'Kunde AG' }));
+    await persister.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+
+    repo.saveContact = orig;
+    await persister.retry();
+    expect((await contactsOnDisk()).map((c) => c.name)).toEqual(['Kunde AG']);
+    expect(A.useApp.getState().unsaved).toEqual([]);
+    expect(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id))).toBeNull();
+  });
+
+  it('can be discarded: it leaves the list and the emergency copy and is not written again', async () => {
+    const save = vi.fn(async () => newer());
+    repo.saveContact = save;
+    const id = A.addContact(sampleContact());
+    await persister.flush();
+    persister.discard(`contact:${id}`);
+    expect(A.useApp.getState().unsaved).toEqual([]);
+    expect(localStorage.getItem(emergencyKey(A.useApp.getState().company!.id))).toBeNull();
+    await persister.retry();
+    expect(save).toHaveBeenCalledOnce();
+    expect(persister.pending).toBe(false);
+  });
+
+  it('a discarded record leaves the other unsaved ones in the emergency copy', async () => {
+    const orig = repo.saveContact.bind(repo);
+    const discarded = A.addContact(sampleContact({ name: 'Weg damit' }));
+    const kept = A.addContact(sampleContact({ name: 'Behalten', customerNumber: 'K-0002' }));
+    repo.saveContact = async (c) => (c.id === discarded ? newer() : err({ kind: 'invalid', cause: new Error('foreign file') }));
+    await persister.flush();
+    expect(A.useApp.getState().unsaved.map((u) => u.key).sort()).toEqual([`contact:${discarded}`, `contact:${kept}`].sort());
+    persister.discard(`contact:${discarded}`);
+    expect(copyOf().contacts.map((c: { id: string }) => c.id)).toEqual([kept]);
+    repo.saveContact = orig;
+  });
+});
+
+describe('Persister: the emergency copy (#95)', () => {
+  it('a copy the browser cannot keep (storage full) is reported, not dropped silently', async () => {
+    repo.saveCompany = async () => err({ kind: 'permission', cause: new Error('denied') });
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    try {
+      A.updateCompany({ owner: 'Erika M.' });
+      await persister.flush();
+      expect(A.useApp.getState().emergencyCopyFailed).toBe(true);
+    } finally {
+      setItem.mockRestore();
+    }
+    persister.writeEmergencyCopy();
+    expect(A.useApp.getState().emergencyCopyFailed).toBe(false);
+  });
+});
+
 describe('updateCompany', () => {
   it('stamps only the fields that changed', () => {
     const before = A.useApp.getState().company!;

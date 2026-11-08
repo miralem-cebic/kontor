@@ -40,6 +40,16 @@ import type {
 
 export type SaveStatus = { state: 'saved' } | { state: 'saving' } | { state: 'error'; kind: StorageErrorKind };
 
+/**
+ * A change the folder refuses for a reason that trying again does not fix (a newer or damaged file, a conflict). It
+ * waits apart, so that the other records are written and the work goes on; it can be tried again or discarded.
+ * `key` is the persister's key of the record: `company`, or the kind and the ID (`contact:<id>`).
+ */
+export interface UnsavedWrite {
+  key: string;
+  kind: StorageErrorKind;
+}
+
 export interface Toast {
   id: string;
   msg: string;
@@ -67,10 +77,14 @@ export interface AppState {
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
+  /** Changes the folder refused for good; empty when there are none */
+  unsaved: readonly UnsavedWrite[];
+  /** The browser could not keep the emergency copy of the unsaved changes (its storage is full or blocked) */
+  emergencyCopyFailed: boolean;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -98,7 +112,7 @@ export interface CompanyRecords {
 
 /** A company and its records as read from the folder */
 export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), expenses: byId(expenses), payouts: byId(payouts), save: { state: 'saved' } });
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), expenses: byId(expenses), payouts: byId(payouts), save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
@@ -500,6 +514,10 @@ export function setLogoUrl(url: string | null) {
 }
 
 export const setSaveStatus = (save: SaveStatus) => set({ save });
+export const setUnsaved = (unsaved: readonly UnsavedWrite[]) => set({ unsaved });
+export const setEmergencyCopyFailed = (emergencyCopyFailed: boolean) => {
+  if (get().emergencyCopyFailed !== emergencyCopyFailed) set({ emergencyCopyFailed });
+};
 
 let toastSeq = 0;
 export function showToast(msg: string) {

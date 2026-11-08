@@ -459,10 +459,25 @@ export function retrySave() {
   return persister?.retry(handle ? () => ensureReadWrite(handle, true) : undefined);
 }
 
+/**
+ * User gesture: drops a change the folder refused for good (#95) and reads the company from the folder again, so that
+ * the views show what the folder holds. Other refused changes stay in the emergency copy and come back after loading.
+ */
+export async function discardUnsaved(key: string) {
+  const entry = entries.find((e) => e.id === useSession.getState().currentId);
+  if (!persister || !entry) return;
+  persister.discard(key);
+  await closeCurrent();
+  await load(entry);
+}
+
 /** The folder of the open company, for the actions that need it beyond loading and saving (issuing, issued PDFs) */
 export const openRepository = (): Repository | null => repo;
 
-/** Writes what is pending now; true when everything is saved */
+/**
+ * Writes what is pending now; true when everything that can be written was. A change the folder refused for good
+ * (`unsaved` in the store) does not count: it must not stop issuing, payments or the export of other records (#95).
+ */
 export async function flushWrites(): Promise<boolean> {
   await persister?.flush();
   return useApp.getState().save.state === 'saved';

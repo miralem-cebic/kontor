@@ -1,4 +1,4 @@
-import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenPayout, integrateWrittenQuoteStatus, setSaveStatus, useApp, type AppState } from '../store/appStore';
+import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenPayout, integrateWrittenQuoteStatus, setEmergencyCopyFailed, setSaveStatus, setUnsaved, useApp, type AppState } from '../store/appStore';
 import type { CompanyId } from './ids';
 import { classifyError, type Repository, type StorageError, type StorageErrorKind } from './repository';
 import { err, ok, type Result } from './result';
@@ -6,13 +6,38 @@ import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, 
 
 // Watches the app state and writes what changed, debounced. Objects that come from the folder or were already
 // written are kept in `clean` and do not trigger another write. When a write fails, the change stays in the queue
-// and an emergency copy is kept in localStorage until it was written.
+// and an emergency copy is kept in localStorage until it was written. A change the folder refuses for good (a newer or
+// damaged file, a conflict) waits apart in `stuck`: the other records are still written, the status is "saved", and
+// the change is listed until it is written ("Try again", a new change of it) or discarded.
 
 export const DEBOUNCE_MS = 400;
 /** After a failure that may pass by itself (a file in use, an unexpected error), the queue is tried again after these delays */
 export const RETRY_DELAYS_MS: readonly number[] = [2_000, 10_000, 30_000, 60_000, 120_000];
 /** Failures that can pass without the person doing anything; the others wait for "Try again" or a new change */
 const RETRIED: readonly StorageErrorKind[] = ['locked', 'other'];
+/** Failures of one record that trying again does not fix: the record waits apart and does not hold up the others */
+const PERMANENT: readonly StorageErrorKind[] = ['newerSchema', 'invalid', 'conflict'];
+
+/** The collection of the store a persister key (`contact:<id>`) belongs to; `company` is the company itself */
+const COLLECTIONS = {
+  contact: 'contacts',
+  item: 'items',
+  document: 'documents',
+  payment: 'payments',
+  dunning: 'dunnings',
+  quoteStatus: 'quoteStatuses',
+  expense: 'expenses',
+  payout: 'payouts',
+} as const satisfies Record<string, keyof AppState>;
+
+/** The record of the store a persister key stands for, or undefined */
+function recordOf(state: AppState, key: string): object | null | undefined {
+  if (key === 'company') return state.company;
+  const at = key.indexOf(':');
+  const collection = COLLECTIONS[key.slice(0, at) as keyof typeof COLLECTIONS] as (typeof COLLECTIONS)[keyof typeof COLLECTIONS] | undefined;
+  if (at < 0 || !collection) return undefined;
+  return (state[collection] as ReadonlyMap<string, object>).get(key.slice(at + 1));
+}
 export const emergencyKey = (id: CompanyId) => `kontor.unsaved.v1.${id}`;
 
 type Job = () => Promise<Result<void, StorageError>>;
@@ -20,6 +45,8 @@ type Job = () => Promise<Result<void, StorageError>>;
 export class Persister {
   private clean = new WeakSet<object>();
   private queue = new Map<string, Job>();
+  /** Changes the folder refused for good, by key; they are not in the queue */
+  private stuck = new Map<string, { job: Job; kind: StorageErrorKind }>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running: Promise<void> | null = null;
   private unsubscribe: (() => void) | null = null;
@@ -180,6 +207,7 @@ export class Persister {
 
   private enqueue(key: string, job: Job) {
     this.queue.set(key, job); // a newer version replaces an older one
+    if (this.stuck.delete(key)) this.publishStuck(); // and is tried again
     if (useApp.getState().save.state !== 'error') setSaveStatus({ state: 'saving' });
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), DEBOUNCE_MS);
@@ -202,11 +230,18 @@ export class Persister {
         this.queue.delete(key);
         // a failed result is the normal case; an exception in the job itself counts as a failure too
         const r: Result<void, StorageError> = await job().catch((cause: unknown) => err({ kind: classifyError(cause), cause }));
+        if (!r.ok && PERMANENT.includes(r.error.kind)) {
+          // trying again does not help: the record waits apart (unless it changed meanwhile) and the others go on
+          if (!this.queue.has(key)) this.stuck.set(key, { job, kind: r.error.kind });
+          console.warn('The folder refused a change', key, r.error.cause);
+          continue;
+        }
         if (!r.ok) {
           if (!this.queue.has(key)) this.queue.set(key, job);
           this.failed = true;
           this.lastFailure = r.error.kind;
           setSaveStatus({ state: 'error', kind: r.error.kind });
+          this.publishStuck();
           this.writeEmergencyCopy();
           console.warn('Saving failed', key, r.error.cause);
           this.scheduleRetry(r.error.kind);
@@ -216,7 +251,9 @@ export class Persister {
       this.lastFailure = null;
       this.retries = 0;
       setSaveStatus({ state: 'saved' });
-      this.clearEmergencyCopy();
+      this.publishStuck();
+      // the stuck changes stay in the copy; without them, there is nothing to keep
+      this.writeEmergencyCopy();
     })();
     try {
       await this.running;
@@ -243,8 +280,29 @@ export class Persister {
       if (!granted) return;
     }
     this.retries = 0;
+    // the changes the folder refused are tried again too: the file may have been fixed in the meantime
+    for (const [key, { job }] of this.stuck) if (!this.queue.has(key)) this.queue.set(key, job);
+    this.stuck.clear();
     setSaveStatus({ state: 'saving' });
     return this.flush();
+  }
+
+  /**
+   * Drops a change the folder refused: it is not written, and it leaves the list and the emergency copy. The store
+   * still holds it; the session reads the company from the folder again afterwards.
+   */
+  discard(key: string) {
+    if (!this.stuck.delete(key)) return;
+    const record = recordOf(useApp.getState(), key);
+    if (record) this.clean.add(record);
+    this.publishStuck();
+    this.writeEmergencyCopy();
+  }
+
+  private publishStuck() {
+    const unsaved = [...this.stuck].map(([key, { kind }]) => ({ key, kind }));
+    const current = useApp.getState().unsaved;
+    if (unsaved.length || current.length) setUnsaved(unsaved);
   }
 
   /** Copy of the unsaved company and records in the browser, in case the folder cannot be reached (also after a crash) */
@@ -264,17 +322,22 @@ export class Persister {
       expenses: dirty(expenses),
       payouts: dirty(payouts),
     };
-    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length && !copy.quoteStatuses.length && !copy.expenses.length && !copy.payouts.length) return;
+    // nothing unsaved: an older copy has nothing left to keep
+    if (!copy.company && !copy.contacts.length && !copy.items.length && !copy.documents.length && !copy.payments.length && !copy.dunnings.length && !copy.quoteStatuses.length && !copy.expenses.length && !copy.payouts.length) return this.clearEmergencyCopy();
     try {
       localStorage.setItem(emergencyKey(company.id), JSON.stringify(copy));
-    } catch {
-      /* storage not available */
+      setEmergencyCopyFailed(false);
+    } catch (e) {
+      // the storage is full (about 5 MB) or blocked: the changes are only in this window, and the person is told so
+      console.warn('Could not keep the emergency copy', e);
+      setEmergencyCopyFailed(true);
     }
   }
 
   private clearEmergencyCopy() {
     const company = useApp.getState().company;
     if (!company) return;
+    setEmergencyCopyFailed(false);
     try {
       localStorage.removeItem(emergencyKey(company.id));
     } catch {

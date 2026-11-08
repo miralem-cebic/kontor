@@ -14,6 +14,7 @@ import { documentTotals, draftFromLine, linesReadable, readDocumentDiscount, rea
 import { discountDraft, NO_DISCOUNT_DRAFT, type Discount, type DiscountDraft } from './discount';
 import { cents, quantity, type Cents, type MoneyLocale } from './money';
 import type { QuoteContent } from './quote';
+import { smallBusinessRefusal, type ExemptionEnd, type TurnoverEntry } from './smallBusiness';
 import { isPlausibleEuVatId, isPlausibleLeitwegId, normalizeVatId } from './taxIds';
 import { isEuMemberState } from './vat';
 
@@ -325,8 +326,11 @@ export function readInvoice(
  *   reverse charge with a customer in another EU state (§ 14a Abs. 1 and 3 UStG).
  * - `ownVatId`: the company's own VAT ID, in the same cases.
  * - `accountRemoved`: the account the invoice is paid to was removed in the settings.
+ * - `smallBusinessLimit`: the invoice is dated after the day the 100,000 € limit of the year was crossed, so it needs VAT
+ *   (§ 19 Abs. 1 UStG). `smallBusinessPreviousYear`: the turnover of the year before was above 25,000 €, so the small
+ *   business scheme does not apply to any invoice of the year.
  */
-export type IssueProblem = 'noCustomer' | 'noLines' | 'customerAddress' | 'customerVatId' | 'ownVatId' | 'accountRemoved';
+export type IssueProblem = 'noCustomer' | 'noLines' | 'customerAddress' | 'customerVatId' | 'ownVatId' | 'accountRemoved' | 'smallBusinessLimit' | 'smallBusinessPreviousYear';
 
 export interface IssueFacts {
   lineCount: number;
@@ -337,6 +341,19 @@ export interface IssueFacts {
   /** The company's USt-IdNr.; empty when it has none */
   ownVatId: string;
   accountActive: boolean;
+  /** Why the small business treatment is refused for this invoice's date (`smallBusinessRefusalOf`), or null */
+  smallBusinessRefusal: ExemptionEnd | null;
+}
+
+/**
+ * Is a small business not allowed to write this invoice without VAT, because of its date? Only the treatment "no VAT,
+ * § 19" is refused: a service not taxable in Germany shows no VAT anyway, and a regular business charges VAT. An older
+ * invoice (dated before the crossing) stays possible. `entries` are the payments of the company by day, see
+ * `smallBusiness.ts` for what is counted and what is not verified.
+ */
+export function smallBusinessRefusalOf(inv: Pick<InvoiceContent, 'date' | 'taxTreatment'>, smallBusiness: boolean, entries: readonly TurnoverEntry[]): ExemptionEnd | null {
+  if (!smallBusiness || effectiveTaxTreatment(inv.taxTreatment, true) !== 'standard') return null;
+  return smallBusinessRefusal(inv.date, entries);
 }
 
 /** Is the VAT ID one of another EU state than Germany? */
@@ -355,6 +372,7 @@ export function issueProblems(f: IssueFacts): IssueProblem[] {
   if (customer && bothVatIds && !isForeignEuVatId(customer.vatId)) problems.push('customerVatId');
   if (bothVatIds && !f.ownVatId) problems.push('ownVatId');
   if (!f.accountActive) problems.push('accountRemoved');
+  if (f.smallBusinessRefusal) problems.push(f.smallBusinessRefusal.reason === 'previousYear' ? 'smallBusinessPreviousYear' : 'smallBusinessLimit');
   return problems;
 }
 

@@ -67,6 +67,30 @@ describe('company.json validation', () => {
     expect(() => read(file({ [field]: value }))).toThrow(InvalidFileError);
   });
 
+  it.each([
+    'Tue Jan 01 3000',
+    '2026-10-31',
+    '2026-10-31T10:00:00Z',
+    '2026-10-31T10:00:00.000+02:00',
+    '2026-10-31T10:00:00.000z',
+    ' 2026-10-31T10:00:00.000Z',
+    '2026-02-30T10:00:00.000Z',
+    '2026-10-31T24:00:00.000Z',
+    '9999-12-31T00:00:00.000Z',
+    '3000-01-01T00:00:00.000Z',
+  ])('rejects the timestamp %j: only the canonical form, not far in the future', (createdAt) => {
+    expect(() => read(file({ createdAt }))).toThrow(InvalidFileError);
+    expect(() => read(file({ fieldUpdatedAt: { name: createdAt } }))).toThrow(InvalidFileError);
+  });
+
+  it('accepts timestamps as the app writes them, also a device whose clock runs a day or two ahead', () => {
+    const ahead = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+    for (const createdAt of ['2026-10-31T10:00:00.000Z', '1970-01-01T00:00:00.000Z', ahead(0), ahead(2), ahead(300)]) {
+      expect(read(file({ createdAt })).createdAt).toBe(createdAt);
+    }
+    expect(() => read(file({ createdAt: ahead(400) }))).toThrow(InvalidFileError);
+  });
+
   it('accepts a footer without some of its parts', () => {
     const invoiceDefaults = { ...sampleProfile().invoiceDefaults, footerParts: { address: true, phone: false, email: false } };
     expect(read(file({ invoiceDefaults })).invoiceDefaults.footerParts).toEqual({ address: true, phone: false, email: false });

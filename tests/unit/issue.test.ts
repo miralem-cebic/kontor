@@ -5,12 +5,13 @@ import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
 import { cancellationId, type DocumentId } from '../../src/data/ids';
 import { err, must } from '../../src/data/result';
-import { makeContact, makeInvoice, makeQuote } from '../../src/data/schema';
+import { makeContact, makeInvoice, makePayment, makeQuote } from '../../src/data/schema';
 import { nextVersionOf, type CompanyFile, type ContactFile, type DocumentFile, type InvoiceFile, type QuoteFile } from '../../src/data/types';
 import { invoiceTotals } from '../../src/domain/invoice';
-import { cents, quantity } from '../../src/domain/money';
+import { basisPoints, cents, quantity } from '../../src/domain/money';
+import type { PaymentFile } from '../../src/data/types';
 import { sha256Hex } from '../../src/lib/sha256';
-import { sampleCompany, sampleContact, sampleInvoice, sampleLine, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleLine, sampleQuote } from './fixtures';
 
 let root: MemDir;
 let repo: FsRepository;
@@ -32,6 +33,7 @@ const ctx = (over: Partial<IssueContext> = {}): IssueContext => ({
   company,
   contacts: new Map([[customer.id, customer]]),
   documents,
+  payments: new Map(),
   logo: null,
   device: 'device-1',
   now: new Date('2026-10-31T10:00:00Z'),
@@ -144,6 +146,69 @@ describe('issue', () => {
     expect((await issueOk((await draft()).id)).issued?.number).toBe('RE-2026-0002');
   });
 
+  /** An interrupted attempt: the reservation and the PDF are written, the record is not saved */
+  async function interrupted(id: DocumentId, over: Partial<IssueContext> = {}): Promise<void> {
+    const save = repo.saveDocument.bind(repo);
+    repo.saveDocument = async () => err({ kind: 'permission', cause: new Error('denied') });
+    expect(await issue(id, ctx(over))).toEqual({ ok: false, failure: 'permission' });
+    repo.saveDocument = save;
+  }
+
+  /** The draft with another content, saved in the folder and in the documents of the context */
+  async function edit(inv: InvoiceFile, over: Partial<InvoiceFile>): Promise<void> {
+    const edited = { ...inv, ...over };
+    must(await repo.saveDocument(edited));
+    documents.set(edited.id, edited);
+  }
+
+  it('a reservation from an interrupted attempt is not reused when the invoice date moved into another year', async () => {
+    const inv = await draft({ date: '2026-12-30' });
+    await interrupted(inv.id);
+    await edit(inv, { date: '2027-01-05' });
+    const issued = await issueOk(inv.id);
+    expect(issued.issued).toMatchObject({ number: 'RE-2027-0001', counter: 1, counterKey: '2027', pdf: { file: 'RE-2027-0001.pdf' } });
+    // the old reservation stays as a gap; the next invoice of 2026 does not reuse its number
+    expect((await issueOk((await draft({ date: '2026-12-31' })).id)).issued?.number).toBe('RE-2026-0002');
+  });
+
+  it('stops when the draft was edited after an interrupted attempt: the stale PDF is not recorded, and not overwritten', async () => {
+    const inv = await draft();
+    await interrupted(inv.id);
+    const stale = must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'));
+    await edit(inv, { lines: [sampleLine({ unitPrice: cents(1_753_038) })] });
+    expect(await issue(inv.id, ctx({ now: new Date('2026-10-31T10:05:00Z') }))).toEqual({ ok: false, failure: 'fileDiffers' });
+    // nothing changed: the file as it was, no issued record, no audit entry
+    expect(must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'))).toEqual(stale);
+    const [onDisk] = must(await new FsRepository(root.asHandle()).loadDocuments()).documents;
+    expect(onDisk?.issued).toBeNull();
+    await expect(root.getDirectoryHandle('audit')).rejects.toThrow();
+    // putting the draft back as it was lets the retry finish with the file of the first attempt
+    await edit(inv, { lines: inv.lines });
+    const issued = await issueOk(inv.id, { now: new Date('2026-10-31T10:07:00Z') });
+    expect(issued.issued?.pdf.sha256).toBe(await sha256Hex(stale.slice()));
+  });
+
+  it('stops when the file of the number is not a PDF made from this document', async () => {
+    const inv = await draft();
+    await interrupted(inv.id);
+    must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'));
+    const junk = new Uint8Array([1, 2, 3]);
+    const handle = await (await root.getDirectoryHandle('documents')).getDirectoryHandle('issued');
+    const w = await (await handle.getFileHandle('RE-2026-0001.pdf')).createWritable();
+    await w.write(junk);
+    await w.close();
+    expect(await issue(inv.id, ctx())).toEqual({ ok: false, failure: 'fileDiffers' });
+    expect(must(await repo.readIssuedFile('invoice', 'RE-2026-0001.pdf'))).toEqual(junk);
+  });
+
+  it('a reservation is not reused when the month of the number moved', async () => {
+    company = sampleCompany({ invoiceDefaults: { ...sampleCompany().invoiceDefaults, numberPattern: 'R{YYYY}{MM}-{NNN}', quotePattern: 'A{NNN}', paymentTermDays: 14, footer: '' } });
+    const inv = await draft({ date: '2026-10-30' });
+    await interrupted(inv.id);
+    await edit(inv, { date: '2026-11-02' });
+    expect((await issueOk(inv.id)).issued?.number).toBe('R202611-002');
+  });
+
   it('an issued invoice is returned as it is', async () => {
     const issued = await issueOk((await draft()).id);
     expect(await issue(issued.id, ctx())).toEqual({ ok: true, document: issued, auditWritten: true });
@@ -223,6 +288,17 @@ describe('cancel', () => {
     const original = await issueOk((await draft({ date: '2026-12-30' })).id);
     const c = await cancelOk(original.id, { now: new Date('2027-01-04T09:00:00Z') });
     expect(c.issued?.number).toBe('RE-2027-0001');
+  });
+
+  it('a reservation from an interrupted attempt is not reused when the retry falls into the next year', async () => {
+    const original = await issueOk((await draft({ date: '2026-12-01' })).id);
+    const save = repo.saveDocument.bind(repo);
+    repo.saveDocument = async () => err({ kind: 'permission', cause: new Error('denied') });
+    expect(await cancel(original.id, ctx({ now: new Date('2026-12-31T09:00:00Z') }))).toEqual({ ok: false, failure: 'permission' });
+    repo.saveDocument = save;
+    const c = await cancelOk(original.id, { now: new Date('2027-01-04T09:00:00Z') });
+    expect(c.issued).toMatchObject({ number: 'RE-2027-0001', counterKey: '2027' });
+    expect(c.date).toBe('2027-01-04');
   });
 
   it('an invoice is cancelled once: a second call returns its cancellation', async () => {
@@ -374,5 +450,60 @@ describe('issueQuote', () => {
     expect((await finalizeOk(a.id)).issued?.number).toBe('AN-2026-0001-2');
     expect(await issueQuote(b.id, ctx())).toEqual({ ok: false, failure: 'notReady' });
     expect(must(await repo.listIssuedFiles('quote'))).toEqual(['AN-2026-0001.pdf', 'AN-2026-0001-2.pdf']);
+  });
+});
+
+describe('issuing for a small business after the 100,000 € limit was crossed (§ 19 Abs. 1 UStG)', () => {
+  const SMALL_TAX = { taxNumber: '12/345/67890', vatId: '', vat: { kind: 'smallBusiness' as const }, business: { kind: 'freelance' as const } };
+  let payments: Map<string, PaymentFile>;
+
+  /** An invoice of 100,000.01 € without VAT, issued earlier and paid on the given day: the limit is crossed that day */
+  const crossOn = (day: string) => {
+    const big = {
+      ...makeInvoice(customer.id, company.bank.defaultAccountId, sampleInvoice({ date: '2026-03-01', lines: [sampleLine({ quantity: quantity(1000), unitPrice: cents(10_000_001), vatRate: basisPoints(0) })] }), null),
+      issued: sampleIssued('RE-2026-0001'),
+    };
+    documents.set(big.id, big);
+    const p = makePayment(big.id, { date: day, amount: cents(10_000_001), accountId: company.bank.defaultAccountId, note: '' });
+    payments.set(p.id, p);
+  };
+
+  beforeEach(() => {
+    company = sampleCompany({ tax: SMALL_TAX });
+    payments = new Map();
+  });
+
+  it('refuses a draft dated after the crossing day, and writes nothing', async () => {
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-06-03' });
+    expect(await issue(inv.id, ctx({ payments }))).toEqual({ ok: false, failure: 'notReady' });
+    expect(must(await repo.readNumbering('invoice'))).toBeNull();
+    expect(must(await repo.listIssuedFiles('invoice'))).toEqual([]);
+  });
+
+  it('issues a draft dated before the crossing, also when it is issued late', async () => {
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-05-20' });
+    const done = await issue(inv.id, ctx({ payments }));
+    expect(done.ok).toBe(true);
+  });
+
+  it('issues a service not taxable in Germany after the crossing: it shows no VAT either way', async () => {
+    crossOn('2026-06-02');
+    customer = makeContact(sampleContact({ address: { street: 'Main St 1', postalCode: '10001', city: 'New York', country: 'US' } }));
+    const inv = await draft({ date: '2026-06-03', taxTreatment: 'notTaxable' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
+  });
+
+  it('does not refuse a company with regular VAT, which charges VAT', async () => {
+    company = sampleCompany();
+    crossOn('2026-06-02');
+    const inv = await draft({ date: '2026-06-03' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
+  });
+
+  it('issues without payments, as before', async () => {
+    const inv = await draft({ date: '2026-06-03' });
+    expect((await issue(inv.id, ctx({ payments }))).ok).toBe(true);
   });
 });

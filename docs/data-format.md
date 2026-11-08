@@ -21,6 +21,7 @@ Eine Firma hat einen Ordner. Er enthält diese Dateien und Unterordner:
 | `dunnings/<id>.json` | Mahnungen zu ausgestellten Rechnungen |
 | `quoteStatus/<id>.json` | Die Entscheidung des Kunden zu einem Angebot (angenommen oder abgelehnt) |
 | `expenses/<id>.json` | Ausgaben |
+| `payouts/<id>.json` | Auszahlungen ohne eigene Rechnung (Apple, Google, Stripe, PayPal …) |
 | `belege/<jahr>/<id>-<name>` | Die Belege zu den Ausgaben, als Datei kopiert |
 | `numbering/<bereich>.json` | Der Zähler der Nummernkreise (Rechnungen, Angebote) |
 | `audit/<JJJJ-MM>.jsonl` | Das Protokoll: eine JSON-Zeile je Vorgang, nur angehängt |
@@ -32,7 +33,7 @@ Versteckte Dateien (sie beginnen mit einem Punkt) und Hilfsdateien von Sync-Prog
 
 ## Die Dateien
 
-Die Datensätze sind JSON in UTF-8, jeder hat ein Feld `schemaVersion`; die aktuelle Version ist 16. PDFs, Belege und das Logo sind Dateien wie sie sind. Ältere Versionen werden beim Lesen auf die aktuelle gebracht, und ältere Versionen von kontor lehnen Dateien einer neueren Version ab, statt sie zu überschreiben.
+Die Datensätze sind JSON in UTF-8, jeder hat ein Feld `schemaVersion`; die aktuelle Version ist 17. PDFs, Belege und das Logo sind Dateien wie sie sind. Ältere Versionen werden beim Lesen auf die aktuelle gebracht, und ältere Versionen von kontor lehnen Dateien einer neueren Version ab, statt sie zu überschreiben.
 
 Die wichtigsten Felder:
 
@@ -44,8 +45,9 @@ Die wichtigsten Felder:
 - **Mahnungen** (`dunnings/`): `invoiceId`, `level`, `date`, `open`, `interest`, `flatFee`, `fee`, `payBy`. Eine Mahnung ändert sich nicht.
 - **Entscheidungen zu Angeboten** (`quoteStatus/`): `quoteId`, `decision` (`accepted` oder `declined`), `date`.
 - **Ausgaben** (`expenses/`): `date` (der Tag der Zahlung), `supplier`, `reference` (Belegnummer des Lieferanten), `gross` (Brutto), `taxTreatment` (`domestic`, `euReverseCharge`, `thirdCountry` oder `noVat`), `vatRate`, `category`, `accountId`, `note`, `receipt` (der Beleg, siehe unten).
+- **Auszahlungen** (`payouts/`): `date` (der Tag des Zahlungseingangs), `accountId`, `amount` (in Cent), `payerId` (der Kontakt, der gezahlt hat), `period` (der abgedeckte Monat `JJJJ-MM`, kann leer sein), `taxTreatment` (`domesticTaxed`, `euB2bNotTaxable`, `thirdCountryB2bNotTaxable`, `smallBusiness` oder `platformCollectsVat`; du wählst sie selbst, kontor rät sie nie), `vatRate` (nur bei `domesticTaxed` ungleich 0), `statementUrl` (leer oder ein https-Link zur Abrechnung), `note`. Bei `domesticTaxed` ist die Umsatzsteuer im Betrag enthalten und nur der Nettobetrag ist Einnahme; bei allen anderen Behandlungen ist der ganze Betrag Einnahme. Die Auszahlungen sind eine Schätzung zur Orientierung und kommen noch nicht in die Umsatzsteuer-Voranmeldung.
 - **Belege**: Ein Beleg in `expenses/` ist entweder `{ "kind": "file", "year", "name", "type", "size", "sha256" }` für eine Datei in `belege/<year>/<name>`, oder `{ "kind": "link", "url" }` für einen Link (nur http oder https). Eine Datei ist `application/pdf`, `image/png` oder `image/jpeg`.
-- **Protokoll** (`audit/`): eine Zeile je Vorgang mit `at` (Zeitpunkt), `action` (zum Beispiel `issue`, `cancel`, `recordPayment`, `dunning`, `send`, `attachReceipt`), dem Dokument oder der Ausgabe und dem Gerät, auf dem der Vorgang geschah.
+- **Protokoll** (`audit/`): eine Zeile je Vorgang mit `at` (Zeitpunkt), `action` (zum Beispiel `issue`, `cancel`, `recordPayment`, `dunning`, `send`, `attachReceipt`, `bookPayout`), dem Dokument oder der Ausgabe und dem Gerät, auf dem der Vorgang geschah.
 - **Nummern** (`numbering/`): der höchste Zähler je Schlüssel, und die letzten Reservierungen.
 
 ## Zahlen, Daten, Kennungen
@@ -53,13 +55,13 @@ Die wichtigsten Felder:
 - **Geldbeträge** sind ganze Zahlen in Cent. `1250` bedeutet 12,50 €.
 - **Umsatzsteuersätze** sind Basispunkte: `1900` bedeutet 19 %, `700` bedeutet 7 %, `0` bedeutet 0 %.
 - **Mengen** sind Tausendstel: `1500` bedeutet 1,5.
-- **Daten** sind ISO-Daten `JJJJ-MM-TT`, Zeitpunkte sind ISO-Zeitstempel in UTC.
+- **Daten** sind ISO-Daten `JJJJ-MM-TT`, Zeitpunkte sind ISO-Zeitstempel in UTC in genau dieser Form: `2026-10-31T10:00:00.000Z` (mit Millisekunden und `Z`). Andere Schreibweisen und Zeitpunkte, die mehr als ein Jahr nach der Uhr dieses Geräts liegen, werden beim Lesen abgelehnt.
 - **Kennungen** (`id`, `customerId` und so weiter) sind UUIDs.
 - **Dateien mit Prüfsumme**: Das PDF einer Rechnung, das PDF eines Angebots und jeder Beleg haben einen SHA-256-Wert im Datensatz, der zu der Datei passen muss.
 
 ## Die Listen als CSV
 
-Im ZIP-Export liegt jede Liste im Ordner `listen/` als CSV-Datei: Kontakte, Artikel, Angebote, Rechnungen und Ausgaben. Die Dateien haben:
+Im ZIP-Export liegt jede Liste im Ordner `listen/` als CSV-Datei: Kontakte, Artikel, Angebote, Rechnungen, Ausgaben und Auszahlungen. Die Dateien haben:
 
 - Semikolon als Trennzeichen,
 - Dezimalkomma bei Beträgen, ohne Tausendertrennzeichen,

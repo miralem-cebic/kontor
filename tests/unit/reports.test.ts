@@ -11,6 +11,7 @@ import {
   type ReportExpense,
   type ReportInput,
   type ReportInvoice,
+  type ReportPayout,
 } from '../../src/domain/reports';
 import type { OverviewPayment } from '../../src/domain/overview';
 
@@ -28,14 +29,30 @@ const invoice = (over: Partial<ReportInvoice> = {}): ReportInvoice => ({
   net: cents(10_000),
   gross: cents(11_900),
   dueDate: '2026-03-24',
+  taxableInGermany: true,
   ...over,
 });
 
 const expense = (over: Partial<ReportExpense> = {}): ReportExpense => ({ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900), category: 'Telefon', ...over });
 
-const input = (over: Partial<ReportInput> = {}): ReportInput => ({ year: 2026, today: TODAY, smallBusiness: false, invoices: [invoice()], payments: [], expenses: [], ...over });
+const input = (over: Partial<ReportInput> = {}): ReportInput => ({ year: 2026, today: TODAY, smallBusiness: false, invoices: [invoice()], payments: [], expenses: [], payouts: [], ...over });
+
+const payout = (over: Partial<ReportPayout> = {}): ReportPayout => ({ date: '2026-11-03', amount: cents(123_456), vat: cents(0), payerId: 'p1', ...over });
 
 const pay = (invoiceId: string, date: string, amount: number): OverviewPayment => ({ invoiceId, date, amount: cents(amount) });
+
+describe('turnoverByCustomer: part payments (cumulative shares)', () => {
+  it('a fully paid invoice paid in four parts counts exactly its net amount, as the overview and the comparison do', () => {
+    const data = input({
+      invoices: [invoice({ net: cents(1_000), gross: cents(1_190) })],
+      payments: [297, 297, 297, 299].map((a, i) => ({ id: `p${i}`, invoiceId: 'r1', date: `2026-04-0${i + 1}`, amount: cents(a) })),
+    });
+    const report = turnoverByCustomer(data);
+    expect(report.total).toBe(1_000);
+    expect(overview(data).income).toBe(1_000);
+    expect(yearComparison(data).current.income).toBe(1_000);
+  });
+});
 
 describe('turnoverByCustomer: income per customer and month, on the cash basis', () => {
   it('counts the net part of each payment in the month it arrived', () => {
@@ -87,6 +104,37 @@ describe('turnoverByCustomer: income per customer and month, on the cash basis',
     const c = invoice({ id: 'c', customerId: 'kc', net: cents(50_000), gross: cents(59_500) });
     const report = turnoverByCustomer(input({ invoices: [b, a, c], payments: [pay('a', '2026-04-02', 11_900), pay('b', '2026-04-02', 11_900), pay('c', '2026-04-02', 59_500)] }));
     expect(report.rows.map((r) => r.key)).toEqual(['kc', 'ka', 'kb']);
+  });
+});
+
+describe('turnoverByCustomer with payouts', () => {
+  it('counts a payout under its payer in the month it arrived, next to the payments of invoices', () => {
+    const report = turnoverByCustomer(input({ payments: [pay('r1', '2026-11-20', 11_900)], payouts: [payout(), payout({ date: '2026-12-02', amount: cents(1_000) })] }));
+    expect(report.rows.map((r) => [r.key, r.total])).toEqual([['p1', 124_456], ['k1', 10_000]]);
+    expect(report.rows[0]?.months[10]).toBe(123_456);
+    expect(report.rows[0]?.months[11]).toBe(1_000);
+    expect(report.total).toBe(134_456);
+  });
+
+  it('counts a domestic payout without its VAT, and a payer who is also a customer on one row', () => {
+    const report = turnoverByCustomer(input({ payments: [pay('r1', '2026-04-02', 11_900)], payouts: [payout({ payerId: 'k1', amount: cents(11_900), vat: cents(1_900) })] }));
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]).toMatchObject({ key: 'k1', total: 20_000 });
+  });
+
+  it('leaves out the payouts of other years', () => {
+    const report = turnoverByCustomer(input({ invoices: [], payouts: [payout({ date: '2025-12-31' }), payout({ date: '2027-01-01' })] }));
+    expect(report.rows).toEqual([]);
+    expect(report.total).toBe(0);
+  });
+});
+
+describe('yearComparison with payouts', () => {
+  it('has the payouts in the income of both years', () => {
+    const c = yearComparison(input({ invoices: [], payouts: [payout(), payout({ date: '2025-11-03', amount: cents(40_000) })] }));
+    expect(c.current.income).toBe(123_456);
+    expect(c.previous.income).toBe(40_000);
+    expect(c.months[10]).toMatchObject({ income: 123_456, previousIncome: 40_000 });
   });
 });
 
@@ -252,16 +300,20 @@ const expensesArb = fc.array(fc.record({ date: dateArb, gross: amountArb, vatSha
   list.map((e) => expense({ date: e.date, gross: cents(e.gross), vat: cents(Math.floor((e.gross * e.vatShare) / 119)), category: e.category })),
 );
 
+const payoutsArb = fc.array(fc.record({ date: dateArb, amount: amountArb, vatShare: fc.integer({ min: 0, max: 19 }), payerId: fc.constantFrom('k1', 'p1', 'p2') }), { maxLength: 8 }).map((list) =>
+  list.map((p) => payout({ date: p.date, amount: cents(p.amount), vat: cents(Math.floor((p.amount * p.vatShare) / 119)), payerId: p.payerId })),
+);
+
 const sumOf = (values: readonly Cents[]): number => values.reduce((a, b) => a + b, 0);
 
 describe('properties: the rows add up to the totals, and the totals are the overview', () => {
   it('turnover per customer: the customers add up to the totals per month and to the income of the overview', () => {
     fc.assert(
       fc.property(
-        invoicesArb.chain((invoices) => paymentsArb(invoices.length).map((payments) => ({ invoices, payments }))),
+        invoicesArb.chain((invoices) => paymentsArb(invoices.length).chain((payments) => payoutsArb.map((payouts) => ({ invoices, payments, payouts })))),
         fc.boolean(),
-        ({ invoices, payments }, smallBusiness) => {
-          const data = input({ invoices, payments, smallBusiness });
+        ({ invoices, payments, payouts }, smallBusiness) => {
+          const data = input({ invoices, payments, payouts, smallBusiness });
           const report = turnoverByCustomer(data);
           expect(sumOf(report.rows.map((r) => r.total))).toBe(report.total);
           for (let m = 0; m < 12; m++) expect(sumOf(report.rows.map((r) => r.months[m] ?? 0))).toBe(report.months[m]);
@@ -310,9 +362,9 @@ describe('properties: the rows add up to the totals, and the totals are the over
   it('comparison: the months add up to the totals of both years', () => {
     fc.assert(
       fc.property(
-        invoicesArb.chain((invoices) => paymentsArb(invoices.length).chain((payments) => expensesArb.map((expenses) => ({ invoices, payments, expenses })))),
-        ({ invoices, payments, expenses }) => {
-          const c = yearComparison(input({ invoices, payments, expenses }));
+        invoicesArb.chain((invoices) => paymentsArb(invoices.length).chain((payments) => expensesArb.chain((expenses) => payoutsArb.map((payouts) => ({ invoices, payments, expenses, payouts }))))),
+        ({ invoices, payments, expenses, payouts }) => {
+          const c = yearComparison(input({ invoices, payments, expenses, payouts }));
           expect(sumOf(c.months.map((m) => m.income))).toBe(c.current.income);
           expect(sumOf(c.months.map((m) => m.expenses))).toBe(c.current.expenses);
           expect(sumOf(c.months.map((m) => m.profit))).toBe(c.current.profit);

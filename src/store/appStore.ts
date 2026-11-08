@@ -3,13 +3,14 @@ import { MAX_ACCOUNTS, type AccountDetails } from '../domain/bankAccount';
 import type { ContactProfile } from '../domain/contact';
 import type { Receipt } from '../domain/receipt';
 import type { ExpenseProfile } from '../domain/expense';
+import type { PayoutProfile } from '../domain/payout';
 import type { InvoiceContent } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type QuoteStatusId } from '../data/ids';
-import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergeQuoteStatus, sameJson } from '../data/merge';
+import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type PayoutId, type QuoteStatusId } from '../data/ids';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
 import type { StorageErrorKind } from '../data/repository';
-import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makeQuote, nowIso } from '../data/schema';
+import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makePayout, makeQuote, nowIso } from '../data/schema';
 import type {
   BankAccount,
   Banking,
@@ -26,6 +27,8 @@ import type {
   DunningFile,
   MergeableField,
   PaymentFile,
+  PayoutFile,
+  PayoutMergeableField,
   QuoteFile,
   QuoteStatusFile,
   QuoteMergeableField,
@@ -59,13 +62,15 @@ export interface AppState {
   quoteStatuses: ReadonlyMap<QuoteStatusId, QuoteStatusFile>;
   /** Expenses by ID, removed ones included (they are hidden in the UI) */
   expenses: ReadonlyMap<ExpenseId, ExpenseFile>;
+  /** Payouts (income without an invoice) by ID, removed ones included (they count as no income) */
+  payouts: ReadonlyMap<PayoutId, PayoutFile>;
   /** Object URL of the logo for display; not stored */
   logoUrl: string | null;
   save: SaveStatus;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -88,15 +93,16 @@ export interface CompanyRecords {
   dunnings: readonly DunningFile[];
   quoteStatuses: readonly QuoteStatusFile[];
   expenses: readonly ExpenseFile[];
+  payouts: readonly PayoutFile[];
 }
 
 /** A company and its records as read from the folder */
-export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses }: CompanyRecords) {
-  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), expenses: byId(expenses), save: { state: 'saved' } });
+export function loadCompany(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts }: CompanyRecords) {
+  set({ company, contacts: byId(contacts), items: byId(items), documents: byId(documents), payments: byId(payments), dunnings: byId(dunnings), quoteStatuses: byId(quoteStatuses), expenses: byId(expenses), payouts: byId(payouts), save: { state: 'saved' } });
 }
 
 /** Unsaved changes from an earlier session, merged into the loaded state; the persister writes them */
-export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses }: CompanyRecords) {
+export function applyRecovered(company: CompanyFile, { contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts }: CompanyRecords) {
   if (get().company?.id !== company.id) return;
   set((s) => ({
     company,
@@ -107,6 +113,7 @@ export function applyRecovered(company: CompanyFile, { contacts, items, document
     dunnings: dunnings.length ? new Map([...s.dunnings, ...byId(dunnings)]) : s.dunnings,
     quoteStatuses: quoteStatuses.length ? new Map([...s.quoteStatuses, ...byId(quoteStatuses)]) : s.quoteStatuses,
     expenses: expenses.length ? new Map([...s.expenses, ...byId(expenses)]) : s.expenses,
+    payouts: payouts.length ? new Map([...s.payouts, ...byId(payouts)]) : s.payouts,
   }));
 }
 
@@ -328,6 +335,51 @@ export function integrateWrittenExpense(sent: ExpenseFile, written: ExpenseFile)
   const current = get().expenses.get(written.id);
   if (!current) return;
   putExpense(current === sent ? written : mergeExpense(current, written));
+}
+
+/* ---------- Payouts ---------- */
+
+function putPayout(payout: PayoutFile) {
+  set((s) => ({ payouts: new Map(s.payouts).set(payout.id, payout) }));
+}
+
+/** The contact with that ID, as its own ID; null when there is none (the form has checked it against the contact list) */
+const contactIdOf = (id: string): ContactId | null => [...get().contacts.keys()].find((k) => k === id) ?? null;
+
+/** A new payout from a checked profile (the form's draft is never stored). Returns its ID, or null when the account or the payer is not known. */
+export function addPayout(profile: PayoutProfile): PayoutId | null {
+  const accountId = accountIdOf(profile.accountId);
+  const payerId = contactIdOf(profile.payerId);
+  if (accountId === null || payerId === null) return null;
+  const payout = makePayout({ ...profile, accountId, payerId });
+  putPayout(payout);
+  return payout.id;
+}
+
+/** Changes a payout to a checked profile; false when it is gone, removed, or the account or payer is not known */
+export function updatePayout(id: PayoutId, profile: PayoutProfile): boolean {
+  const current = get().payouts.get(id);
+  const accountId = accountIdOf(profile.accountId);
+  const payerId = contactIdOf(profile.payerId);
+  if (!current || current.deletedAt || accountId === null || payerId === null) return false;
+  const next = withChanges<PayoutMergeableField, PayoutFile>(current, { ...profile, accountId, payerId });
+  if (next !== current) putPayout(next);
+  return true;
+}
+
+/** Soft delete: the file stays, the payout is hidden and counts as no income */
+export function deletePayout(id: PayoutId) {
+  const current = get().payouts.get(id);
+  if (!current || current.deletedAt) return;
+  const at = nowIso();
+  putPayout(withChanges<PayoutMergeableField, PayoutFile>(current, { deletedAt: at }, at));
+}
+
+/** Like `integrateWrittenItem`, for one payout */
+export function integrateWrittenPayout(sent: PayoutFile, written: PayoutFile) {
+  const current = get().payouts.get(written.id);
+  if (!current) return;
+  putPayout(current === sent ? written : mergePayout(current, written));
 }
 
 /* ---------- Quotes and invoices ---------- */

@@ -1,6 +1,7 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { cents } from '../../src/domain/money';
-import { netShareOf, overview, smallBusinessLimitState, type OverviewExpense, type OverviewInvoice, type OverviewPayment } from '../../src/domain/overview';
+import { netShareOf, overview, smallBusinessLimitState, turnoverEntries, type OverviewExpense, type OverviewInvoice, type OverviewPayment, type OverviewPayout } from '../../src/domain/overview';
 
 const TODAY = '2026-06-01';
 
@@ -14,11 +15,12 @@ const invoice = (over: Partial<OverviewInvoice> = {}): OverviewInvoice => ({
   net: cents(10_000),
   gross: cents(11_900),
   dueDate: '2026-03-24',
+  taxableInGermany: true,
   ...over,
 });
 
-const run = (over: { invoices?: OverviewInvoice[]; payments?: OverviewPayment[]; expenses?: OverviewExpense[]; smallBusiness?: boolean; year?: number } = {}) =>
-  overview({ year: over.year ?? 2026, today: TODAY, smallBusiness: over.smallBusiness ?? false, invoices: over.invoices ?? [invoice()], payments: over.payments ?? [], expenses: over.expenses ?? [] });
+const run = (over: { invoices?: OverviewInvoice[]; payments?: OverviewPayment[]; expenses?: OverviewExpense[]; payouts?: OverviewPayout[]; smallBusiness?: boolean; year?: number } = {}) =>
+  overview({ year: over.year ?? 2026, today: TODAY, smallBusiness: over.smallBusiness ?? false, invoices: over.invoices ?? [invoice()], payments: over.payments ?? [], expenses: over.expenses ?? [], payouts: over.payouts ?? [] });
 
 describe('netShareOf: the net part of a payment', () => {
   it('takes the share of the invoice that the amount pays, rounded once', () => {
@@ -48,7 +50,7 @@ describe('overview of a regular business', () => {
       payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }],
       expenses: [{ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900) }],
     });
-    expect(o).toMatchObject({ income: 5_000, expenses: 10_000, profit: -5_000, turnover: 10_000 });
+    expect(o).toMatchObject({ income: 5_000, expenses: 10_000, profit: -5_000, turnover: 5_000 });
     expect(o.months[3]).toEqual({ month: 4, income: 5_000, expenses: 10_000, profit: -5_000 });
   });
 
@@ -57,12 +59,11 @@ describe('overview of a regular business', () => {
     expect(o).toMatchObject({ openReceivables: 5_950, overdueReceivables: 5_950, overdueCount: 1 });
   });
 
-  it('leaves out drafts and cancelled invoices from what is open, and a cancellation reduces the turnover', () => {
+  it('leaves out drafts and cancelled invoices from what is open', () => {
     const draft = invoice({ id: 'd1', issued: false });
     const cancelled = invoice({ id: 'c1', cancelled: true });
     const cancellation = invoice({ id: 's1', date: '2026-04-01', isCancellation: true, net: cents(-10_000), gross: cents(-11_900), dueDate: '' });
     const o = run({ invoices: [draft, cancelled, cancellation] });
-    // the cancelled invoice and its cancellation cancel out in the turnover; the draft is not counted
     expect(o).toMatchObject({ openReceivables: 0, overdueReceivables: 0, overdueCount: 0, turnover: 0 });
   });
 
@@ -71,7 +72,7 @@ describe('overview of a regular business', () => {
       payments: [{ invoiceId: 'r1', date: '2025-12-30', amount: cents(5_950) }],
       expenses: [{ date: '2027-01-02', gross: cents(11_900), vat: cents(0) }],
     });
-    expect(o).toMatchObject({ income: 0, expenses: 0, turnover: 10_000 });
+    expect(o).toMatchObject({ income: 0, expenses: 0, turnover: 0 });
   });
 });
 
@@ -84,7 +85,71 @@ describe('overview of a small business', () => {
       payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }],
       expenses: [{ date: '2026-04-05', gross: cents(11_900), vat: cents(1_900) }],
     });
-    expect(o).toMatchObject({ income: 5_950, expenses: 11_900, profit: -5_950, turnover: 11_900 });
+    expect(o).toMatchObject({ income: 5_950, expenses: 11_900, profit: -5_950, turnover: 5_950 });
+  });
+});
+
+describe('the turnover of the small business limits (§ 19 Abs. 2 UStG: vereinnahmte Entgelte)', () => {
+  const pay = (invoiceId: string, date: string, amount: number): OverviewPayment => ({ invoiceId, date, amount: cents(amount) });
+
+  it('is the net part of the payments, on the day they arrived, not the invoices of the year', () => {
+    // issued in December 2025, paid in January 2026: it belongs to 2026
+    const december = invoice({ date: '2025-12-20', dueDate: '2026-01-03' });
+    const paid = run({ invoices: [december], payments: [pay('r1', '2026-01-10', 11_900)] });
+    expect(paid.turnover).toBe(10_000);
+    expect(run({ invoices: [december], year: 2025 }).turnover).toBe(0);
+  });
+
+  it('leaves out a service that is not taxable in Germany (place of supply abroad), which is no domestic supply', () => {
+    const abroad = invoice({ id: 'a1', net: cents(10_000), gross: cents(10_000), taxableInGermany: false });
+    const o = run({ invoices: [invoice(), abroad], payments: [pay('r1', '2026-04-02', 11_900), pay('a1', '2026-04-03', 10_000)] });
+    expect(o.income).toBe(20_000);
+    expect(o.turnover).toBe(10_000);
+  });
+
+  it('turnoverEntries lists the net part of each payment with its date, without those of a service not taxable in Germany', () => {
+    const abroad = invoice({ id: 'a1', net: cents(10_000), gross: cents(10_000), taxableInGermany: false });
+    const entries = turnoverEntries([invoice(), abroad], [pay('r1', '2026-04-02', 5_950), pay('a1', '2026-04-03', 10_000), pay('gone', '2026-04-04', 700)]);
+    // a payment of an unknown invoice counts with its whole amount, like in the income
+    expect(entries).toEqual([
+      { date: '2026-04-02', amount: 5_000 },
+      { date: '2026-04-04', amount: 700 },
+    ]);
+  });
+});
+
+describe('overview with payouts (income without an invoice)', () => {
+  const payout = (over: Partial<OverviewPayout> = {}): OverviewPayout => ({ date: '2026-11-03', amount: cents(123_456), vat: cents(0), ...over });
+
+  it('counts the whole amount of a payout without German VAT in the month the money arrived', () => {
+    const o = run({ invoices: [], payouts: [payout()] });
+    expect(o).toMatchObject({ income: 123_456, expenses: 0, profit: 123_456 });
+    expect(o.months[10]).toEqual({ month: 11, income: 123_456, expenses: 0, profit: 123_456 });
+  });
+
+  it('counts a domestic payout without the VAT inside it', () => {
+    const o = run({ invoices: [], payouts: [payout({ amount: cents(11_900), vat: cents(1_900) })] });
+    expect(o.income).toBe(10_000);
+  });
+
+  it('adds payouts to the payments of invoices', () => {
+    const o = run({ payments: [{ invoiceId: 'r1', date: '2026-04-02', amount: cents(5_950) }], payouts: [payout({ amount: cents(1_000) })], expenses: [{ date: '2026-05-01', gross: cents(400), vat: cents(0) }] });
+    expect(o).toMatchObject({ income: 6_000, expenses: 400, profit: 5_600 });
+  });
+
+  it('counts only the payouts of the year', () => {
+    const o = run({ invoices: [], payouts: [payout({ date: '2025-12-31' }), payout({ date: '2027-01-01' }), payout({ date: '2026-01-01', amount: cents(500) })] });
+    expect(o.income).toBe(500);
+  });
+
+  it('a payout is no invoice: it is neither receivable nor part of the turnover compared with the small business limits (open question 2 of #30)', () => {
+    const o = run({ invoices: [], payouts: [payout()] });
+    expect(o).toMatchObject({ openReceivables: 0, overdueReceivables: 0, turnover: 0 });
+  });
+
+  it('counts the same for a small business (no VAT inside, whole amount)', () => {
+    const o = run({ smallBusiness: true, invoices: [], payouts: [payout()] });
+    expect(o.income).toBe(123_456);
   });
 });
 
@@ -96,5 +161,71 @@ describe('the small business limits (§ 19 UStG, as an orientation)', () => {
       previousAbove: false,
       currentAbove: true,
     });
+  });
+});
+
+const sumMonths = (months: readonly { income: number }[]): number => months.reduce((a, m) => a + m.income, 0);
+
+describe('the net parts of part payments add up to the net amount of the invoice (cumulative shares)', () => {
+  const small = (): OverviewInvoice => invoice({ net: cents(1_000), gross: cents(1_190) });
+  const parts = (...amounts: number[]): OverviewPayment[] => amounts.map((a, i) => ({ id: `p${i}`, invoiceId: 'r1', date: `2026-04-0${i + 1}`, amount: cents(a) }));
+
+  it('a fully paid invoice of 10.00 € net / 11.90 € gross paid in four parts counts exactly 10.00 € (not 10.01 €)', () => {
+    const o = run({ invoices: [small()], payments: parts(297, 297, 297, 299) });
+    expect(o.income).toBe(1_000);
+    expect(sumMonths(o.months)).toBe(1_000);
+  });
+
+  it('puts each part in the month it arrived, with the rounding difference in the part that causes it', () => {
+    const payments: OverviewPayment[] = [
+      { id: 'a', invoiceId: 'r1', date: '2026-04-01', amount: cents(297) },
+      { id: 'b', invoiceId: 'r1', date: '2026-05-01', amount: cents(297) },
+      { id: 'c', invoiceId: 'r1', date: '2026-06-01', amount: cents(297) },
+      { id: 'd', invoiceId: 'r1', date: '2026-07-01', amount: cents(299) },
+    ];
+    const o = run({ invoices: [small()], payments });
+    // cumulative: 297 -> 250, 594 -> 499, 891 -> 749, 1190 -> 1000
+    expect(o.months.slice(3, 7).map((m) => m.income)).toEqual([250, 249, 250, 251]);
+  });
+
+  it('does not depend on the order the payments are listed in (date, then ID decides)', () => {
+    const list = parts(297, 297, 297, 299);
+    const a = run({ invoices: [small()], payments: list });
+    const b = run({ invoices: [small()], payments: [...list].reverse() });
+    expect(b.months.map((m) => m.income)).toEqual(a.months.map((m) => m.income));
+  });
+
+  it('counts a payment above the gross amount only up to the net amount', () => {
+    const o = run({ payments: parts(11_900, 500) });
+    expect(o.income).toBe(10_000);
+  });
+
+  it('property: for any split of the gross amount into payments, the net parts add up to the net amount', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 5_000_000 }),
+        fc.constantFrom(0, 700, 1900),
+        fc.array(fc.integer({ min: 1, max: 1_000_000 }), { minLength: 1, maxLength: 12 }),
+        fc.array(fc.integer({ min: 1, max: 28 }), { minLength: 12, maxLength: 12 }),
+        (net, rate, weights, days) => {
+          const gross = net + Math.round((net * rate) / 10_000);
+          // split the gross amount in proportion to the weights; the last part takes the rest, so that the parts add up
+          const total = weights.reduce((a, b) => a + b, 0);
+          const amounts: number[] = [];
+          let given = 0;
+          weights.forEach((w, i) => {
+            const part = i === weights.length - 1 ? gross - given : Math.floor((gross * w) / total);
+            amounts.push(part);
+            given += part;
+          });
+          const payments = amounts.flatMap((amount, i): OverviewPayment[] =>
+            amount > 0 ? [{ id: `p${i}`, invoiceId: 'r1', date: `2026-03-${String(days[i]).padStart(2, '0')}`, amount: cents(amount) }] : [],
+          );
+          const o = run({ invoices: [invoice({ net: cents(net), gross: cents(gross) })], payments });
+          expect(o.income).toBe(net);
+          expect(sumMonths(o.months)).toBe(net);
+        },
+      ),
+    );
   });
 });

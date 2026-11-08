@@ -3,6 +3,9 @@
 // them. The balance is what the customer owes (positive) or what is to be credited to them (negative): a payment above
 // what is owed, or a payment on an invoice that was cancelled later, leaves a credit that is to be refunded.
 //
+// Payouts of the customer (money received without an invoice of kontor) are listed beside the account and add up to what
+// they brought in; they are no payment of an invoice and do not change the balance.
+//
 // The functions take plain values. The caller (features/contacts) takes the issued documents and the active payments of
 // one customer and passes them in, with the gross amounts as the invoices show them.
 
@@ -34,6 +37,18 @@ export interface AccountPayment {
   note: string;
 }
 
+/** A payout of the customer without an invoice of kontor: money received, shown beside the account but not part of the balance */
+export interface AccountPayout {
+  id: string;
+  date: string;
+  /** The month it covers (YYYY-MM); empty when not given */
+  period: string;
+  /** What arrived */
+  amount: Cents;
+  /** What counts as income: the amount without the VAT inside it */
+  income: Cents;
+}
+
 export type AccountEntryKind = 'invoice' | 'cancellation' | 'payment';
 
 export interface AccountEntry {
@@ -62,13 +77,21 @@ export interface CustomerAccount {
   balance: Cents;
   /** The open amounts of invoices past their due date, cancelled invoices excluded */
   overdue: Cents;
+  /** The payouts without an invoice, in date order. They are income, not payments of an invoice, so they are not in `entries`. */
+  payouts: AccountPayout[];
+  /** What the payouts brought in, as it arrived */
+  payoutsReceived: Cents;
+  /** Of that, what counts as income */
+  payoutsIncome: Cents;
 }
 
 const KIND_ORDER: Record<AccountEntryKind, number> = { invoice: 0, cancellation: 1, payment: 2 };
 
 /** The account of a customer as of `today` (YYYY-MM-DD, for what is overdue) */
-export function customerAccount(invoices: readonly AccountInvoice[], payments: readonly AccountPayment[], today: string): CustomerAccount {
-  const paidOf = (invoiceId: string): Cents => sum(payments.filter((p) => p.invoiceId === invoiceId).map((p) => p.amount));
+export function customerAccount(invoices: readonly AccountInvoice[], payments: readonly AccountPayment[], today: string, payouts: readonly AccountPayout[] = []): CustomerAccount {
+  const paidBy = new Map<string, number>();
+  for (const p of payments) paidBy.set(p.invoiceId, (paidBy.get(p.invoiceId) ?? 0) + p.amount);
+  const paidOf = (invoiceId: string): Cents => cents(paidBy.get(invoiceId) ?? 0);
 
   const unsorted: AccountEntry[] = [
     ...invoices.map((inv): AccountEntry => ({ kind: inv.kind, id: inv.id, date: inv.date, number: inv.number, text: inv.subject, amount: inv.gross, balance: cents(0) })),
@@ -86,5 +109,15 @@ export function customerAccount(invoices: readonly AccountInvoice[], payments: r
   const overdue = sum(
     invoices.filter((inv) => inv.kind === 'invoice' && !inv.cancelled && inv.due < today).map((inv) => openAmount(inv.gross, paidOf(inv.id))),
   );
-  return { entries, invoiced, paid, balance: cents(running), overdue };
+  const sortedPayouts = [...payouts].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  return {
+    entries,
+    invoiced,
+    paid,
+    balance: cents(running),
+    overdue,
+    payouts: sortedPayouts,
+    payoutsReceived: sum(sortedPayouts.map((p) => p.amount)),
+    payoutsIncome: sum(sortedPayouts.map((p) => p.income)),
+  };
 }

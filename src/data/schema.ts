@@ -2,13 +2,14 @@ import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { ExpenseProfile } from '../domain/expense';
+import type { PayoutProfile } from '../domain/payout';
 import { cancellationContent, type InvoiceContent, type IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
 import { stampNow } from './clock';
-import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newExpenseId, newItemId, newPaymentId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId, type ImportBatchId } from './ids';
+import { newAccountId, newCompanyId, newContactId, newDocumentId, newDunningId, newExpenseId, newItemId, newPaymentId, newPayoutId, newQuoteStatusId, type AccountId, type ContactId, type DocumentId, type ImportBatchId } from './ids';
 import {
   CONTACT_MERGEABLE_FIELDS,
   EXPENSE_MERGEABLE_FIELDS,
@@ -18,6 +19,9 @@ import {
   ITEM_MERGEABLE_FIELDS,
   MERGEABLE_FIELDS,
   PAYMENT_MERGEABLE_FIELDS,
+  PAYOUT_MERGEABLE_FIELDS,
+  type PayoutFile,
+  type PayoutMergeableField,
   QUOTE_STATUS_MERGEABLE_FIELDS,
   QUOTE_MERGEABLE_FIELDS,
   type BankAccount,
@@ -40,7 +44,7 @@ import {
 } from './types';
 
 /** Version of every file in the company folder. Increase it for every change of a file format (see migrations.ts). */
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const nowIso = (): string => stampNow();
 
@@ -148,4 +152,15 @@ export function makeExpense(profile: Omit<ExpenseProfile, 'accountId'> & { accou
   const fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>> = {};
   for (const f of EXPENSE_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
   return { schemaVersion: SCHEMA_VERSION, id: newExpenseId(), ...profile, receipt: null, createdAt: at, deletedAt: null, fieldUpdatedAt };
+}
+
+/**
+ * A new payout. Every field counts as changed at creation time. `accountId` and `payerId` are an active account of the
+ * company and a contact, checked by the form (readPayout); the payout keeps them when they are removed later.
+ */
+export function makePayout(profile: Omit<PayoutProfile, 'accountId' | 'payerId'> & { accountId: AccountId; payerId: ContactId }): PayoutFile {
+  const at = nowIso();
+  const fieldUpdatedAt: Partial<Record<PayoutMergeableField, string>> = {};
+  for (const f of PAYOUT_MERGEABLE_FIELDS) fieldUpdatedAt[f] = at;
+  return { schemaVersion: SCHEMA_VERSION, id: newPayoutId(), ...profile, createdAt: at, deletedAt: null, fieldUpdatedAt };
 }

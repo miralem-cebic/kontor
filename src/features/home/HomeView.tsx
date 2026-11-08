@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import { buildOverview } from '../../app/overview';
 import { currentLang, fmt, t, type MessageKey } from '../../i18n';
 import { formatCents } from '../../domain/money';
+import type { LimitWarning } from '../../domain/smallBusiness';
 import type { Cents } from '../../domain/money';
 import { useApp } from '../../store/appStore';
+import { formatDate } from '../documents/common';
 
 // The overview ("Wo stehe ich?"): what came in and went out in this calendar year on the cash basis, what is open, the
 // months, and the small business limits. Every figure is an estimate for orientation (the note says so).
@@ -19,12 +21,25 @@ function Figure({ label, value, hint }: { label: MessageKey; value: Cents; hint:
   );
 }
 
+/** The text of the warning about the small business limits */
+function warningText(w: LimitWarning, currentLimit: Cents, previousLimit: Cents, turnover: Cents, lang: ReturnType<typeof currentLang>): string {
+  switch (w.kind) {
+    case 'close':
+      return t('smallBusiness.warnClose', { percent: w.percent, limit: formatCents(currentLimit, lang), turnover: formatCents(turnover, lang) });
+    case 'crossed':
+      return t('smallBusiness.warnCrossed', { limit: formatCents(currentLimit, lang), date: formatDate(w.day) });
+    case 'previousYear':
+      return t('smallBusiness.warnPreviousYear', { limit: formatCents(previousLimit, lang) });
+  }
+}
+
 export function HomeView() {
   const company = useApp((s) => s.company);
   const documents = useApp((s) => s.documents);
   const payments = useApp((s) => s.payments);
   const expenses = useApp((s) => s.expenses);
-  const view = useMemo(() => buildOverview(company, documents, payments, expenses, new Date()), [company, documents, payments, expenses]);
+  const payouts = useApp((s) => s.payouts);
+  const view = useMemo(() => buildOverview(company, documents, payments, expenses, payouts, new Date()), [company, documents, payments, expenses, payouts]);
   const lang = currentLang();
 
   if (!view) {
@@ -38,7 +53,7 @@ export function HomeView() {
     );
   }
 
-  const { figures, previousTurnover, limits } = view;
+  const { figures, previousTurnover, limits, warning, reverseChargeExpenses } = view;
   const now = new Date();
   const asOf = t('overview.asOf', { year: figures.year, date: fmt(now, 'P') });
   const limitLine = (turnover: Cents, limit: Cents, above: boolean) => `${formatCents(turnover, lang)} ${t('overview.of')} ${formatCents(limit, lang)} ${above ? t('overview.above') : t('overview.below')}`;
@@ -49,6 +64,18 @@ export function HomeView() {
         <h1>{t('home.title')}</h1>
       </header>
       <p className="lead">{asOf}</p>
+
+      {warning && (
+        <div className="note warn" role="status" aria-label={t('overview.limitsTitle')}>
+          <p>{warningText(warning, limits.currentLimit, limits.previousLimit, figures.turnover, lang)}</p>
+          <p>{t('smallBusiness.warnScope')}</p>
+        </div>
+      )}
+      {reverseChargeExpenses > 0 && (
+        <div className="note warn" role="status">
+          <p>{t('smallBusiness.reverseCharge', { n: reverseChargeExpenses })}</p>
+        </div>
+      )}
 
       <div className="overview-grid">
         <Figure label="overview.income" value={figures.income} hint="overview.incomeHint" />

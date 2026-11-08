@@ -1,8 +1,8 @@
 import { DEFAULT_FOOTER_PARTS } from '../domain/company';
 import { DEFAULT_CONTACT_PATTERN, DEFAULT_ITEM_PATTERN, DEFAULT_QUOTE_PATTERN } from '../domain/numbering';
 import { SCHEMA_VERSION } from './schema';
-import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateExpense, validateItem, validateNumbering, validatePayment, validateQuoteStatus, type Check } from './validate';
-import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, PaymentFile, QuoteStatusFile } from './types';
+import { InvalidRecordError, isRecord, validateCompany, validateContact, validateDocument, validateDunning, validateExpense, validateItem, validateNumbering, validatePayment, validatePayout, validateQuoteStatus, type Check } from './validate';
+import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, PaymentFile, PayoutFile, QuoteStatusFile } from './types';
 
 // Migration layer: every file is upgraded to SCHEMA_VERSION when it is read, then validated.
 // New format version: increase SCHEMA_VERSION and add a step { from: n, up } for every file kind
@@ -19,6 +19,7 @@ interface FileTypes {
   dunning: DunningFile;
   quoteStatus: QuoteStatusFile;
   expense: ExpenseFile;
+  payout: PayoutFile;
 }
 export type FileKind = keyof FileTypes;
 
@@ -32,6 +33,7 @@ const VALIDATORS: { [K in FileKind]: Check<FileTypes[K]> } = {
   dunning: validateDunning,
   quoteStatus: validateQuoteStatus,
   expense: validateExpense,
+  payout: validatePayout,
 };
 
 export interface Migration {
@@ -239,11 +241,12 @@ const snapshotLanguage: Migration = {
  * Version 15 gives expenses a receipt (`receipt`, null when there is none); no other file changes.
  * Version 16 lets a company choose the parts of the footer (F26): company.json gets `invoiceDefaults.footerParts`, and the
  * company in an issued document's snapshot gets it too; no other file changes.
+ * Version 17 adds payouts, income without an invoice (payouts/), a new kind of file; no existing file changes.
  */
 export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
-  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), footerParts],
-  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15)],
-  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15)],
+  company: [severalAccounts, unchanged(2), unchanged(3), unchanged(4), quotePattern, unchanged(6), unchanged(7), unchanged(8), numberPatterns, unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), footerParts, unchanged(16)],
+  contact: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), contactLanguage, unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15), unchanged(16)],
+  item: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), importBatch, unchanged(14), unchanged(15), unchanged(16)],
   document: [
     unchanged(1),
     unchanged(2),
@@ -260,12 +263,14 @@ export const MIGRATIONS: Record<FileKind, readonly Migration[]> = {
     unchanged(13),
     unchanged(14),
     snapshotFooterParts,
+    unchanged(16),
   ],
-  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
-  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
-  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
-  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15)],
-  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), expenseReceipt, unchanged(15)],
+  numbering: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15), unchanged(16)],
+  payment: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15), unchanged(16)],
+  dunning: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15), unchanged(16)],
+  quoteStatus: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15), unchanged(16)],
+  expense: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), expenseReceipt, unchanged(15), unchanged(16)],
+  payout: [unchanged(1), unchanged(2), unchanged(3), unchanged(4), unchanged(5), unchanged(6), unchanged(7), unchanged(8), unchanged(9), unchanged(10), unchanged(11), unchanged(12), unchanged(13), unchanged(14), unchanged(15), unchanged(16)],
 };
 
 export class NewerSchemaError extends Error {

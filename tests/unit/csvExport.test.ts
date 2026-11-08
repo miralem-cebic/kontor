@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cancellationOf } from '../../src/data/types';
 import { encodeCsv } from '../../src/data/export/csv';
-import { makeCancellation, makeContact, makeExpense, makeInvoice, makeItem, makeQuote } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeExpense, makeInvoice, makeItem, makePayout, makeQuote } from '../../src/data/schema';
 import type { ContactFile, DocumentFile, InvoiceFile, ItemFile, QuoteFile } from '../../src/data/types';
 import { basisPoints, cents } from '../../src/domain/money';
-import { expensesTable, invoicesTable, contactsTable, itemsTable, quotesTable, type Table } from '../../src/app/csvExport';
+import { expensesTable, invoicesTable, contactsTable, itemsTable, payoutsTable, quotesTable, type Table } from '../../src/app/csvExport';
 import { accountName } from '../../src/lib/labels';
 import { usePrefs } from '../../src/store/prefs';
-import { sampleCompany, sampleContact, sampleExpense, sampleIssued, sampleInvoice, sampleItem, sampleQuote } from './fixtures';
+import { sampleCompany, sampleContact, sampleExpense, sampleIssued, sampleInvoice, sampleItem, samplePayout, sampleQuote } from './fixtures';
 
 beforeEach(() => usePrefs.setState({ language: 'de' }));
 
@@ -80,6 +80,33 @@ describe('expensesTable', () => {
     expect(second[4]).toBe('49,99');
     expect(second[7]).toBe('7,98');
     expect(second[8]).toBe(accountName(COMPANY.bank.accounts[0]!));
+  });
+});
+
+describe('payoutsTable', () => {
+  const apple = makeContact(sampleContact({ name: 'Apple Distribution International' }));
+  const google = makeContact(sampleContact({ name: 'Google Ireland', customerNumber: 'K-1002' }));
+  const contacts = new Map<ContactFile['id'], ContactFile>([apple, google].map((c) => [c.id, c]));
+
+  it('lists the payouts oldest first, with the payer by name, the tax treatment in words and the VAT inside the amount', () => {
+    const later = makePayout(samplePayout(ACCOUNT_ID, apple.id, { statementUrl: 'https://reportingitc.apple.com/s', note: 'Okt' }));
+    const earlier = makePayout(samplePayout(ACCOUNT_ID, google.id, { date: '2026-10-05', period: '2026-09', amount: cents(11_900), taxTreatment: 'domesticTaxed', vatRate: basisPoints(1_900) }));
+    const table = payoutsTable([later, earlier], contacts, COMPANY.bank.accounts);
+    expect(cellsOf(table, 0)).toEqual(['Datum', 'Zahler', 'Monat', 'Betrag', 'Steuerliche Behandlung', 'USt-Satz', 'USt im Betrag', 'Einnahme netto', 'Konto', 'Link zur Abrechnung', 'Notiz']);
+    expect(cellsOf(table, 1)).toEqual(['2026-10-05', 'Google Ireland', '2026-09', '119,00', 'Deutscher Zahler, Umsatzsteuer enthalten', '19', '19,00', '100,00', accountName(COMPANY.bank.accounts[0]!), '', '']);
+    const second = cellsOf(table, 2);
+    expect(second.slice(0, 8)).toEqual(['2026-11-03', 'Apple Distribution International', '2026-10', '1234,56', 'Unternehmen in der EU, nicht steuerbar (§ 3a Abs. 2 UStG)', '0', '0,00', '1234,56']);
+    expect(second.slice(9)).toEqual(['https://reportingitc.apple.com/s', 'Okt']);
+  });
+
+  it('leaves out deleted payouts', () => {
+    const gone = { ...makePayout(samplePayout(ACCOUNT_ID, apple.id)), deletedAt: '2026-11-04T10:00:00.000Z' };
+    expect(payoutsTable([gone], contacts, COMPANY.bank.accounts).rows).toEqual([]);
+  });
+
+  it('protects a note that a spreadsheet could read as a formula', () => {
+    const p = makePayout(samplePayout(ACCOUNT_ID, apple.id, { note: '=HYPERLINK("x")' }));
+    expect(csvText(payoutsTable([p], contacts, COMPANY.bank.accounts))).toContain("'=HYPERLINK");
   });
 });
 

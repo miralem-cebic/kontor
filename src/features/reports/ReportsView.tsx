@@ -43,12 +43,13 @@ export function ReportsView() {
   const documents = useApp((s) => s.documents);
   const payments = useApp((s) => s.payments);
   const expenses = useApp((s) => s.expenses);
+  const payouts = useApp((s) => s.payouts);
   const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
   const [tab, setTab] = useState<ReportKind>('turnover');
   const tabsId = useId();
 
-  const view = useMemo(() => buildReports(company, contacts, documents, payments, expenses, year, now), [company, contacts, documents, payments, expenses, year, now]);
+  const view = useMemo(() => buildReports(company, contacts, documents, payments, expenses, payouts, year, now), [company, contacts, documents, payments, expenses, payouts, year, now]);
 
   if (!view) {
     return (

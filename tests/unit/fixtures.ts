@@ -7,6 +7,7 @@ import { NO_DISCOUNT } from '../../src/domain/discount';
 import type { InvoiceContent, IssuedInfo } from '../../src/domain/invoice';
 import type { ExpenseProfile } from '../../src/domain/expense';
 import type { ItemProfile } from '../../src/domain/item';
+import type { PayoutProfile } from '../../src/domain/payout';
 import { basisPoints, cents, quantity } from '../../src/domain/money';
 import type { QuoteContent } from '../../src/domain/quote';
 import { makeCompany } from '../../src/data/schema';
@@ -108,6 +109,20 @@ export const sampleExpense = (over: Partial<ExpenseProfile> = {}): ExpenseProfil
   vatRate: basisPoints(1900),
   category: 'Telefon',
   accountId: null,
+  note: '',
+  ...over,
+});
+
+/** A payout of 1,234.56 € from an EU platform for October 2026; the account and the payer are those of the test */
+export const samplePayout = (accountId: string, payerId: string, over: Partial<PayoutProfile> = {}): PayoutProfile => ({
+  date: '2026-11-03',
+  accountId,
+  amount: cents(123_456),
+  payerId,
+  period: '2026-10',
+  taxTreatment: 'euB2bNotTaxable',
+  vatRate: basisPoints(0),
+  statementUrl: '',
   note: '',
   ...over,
 });

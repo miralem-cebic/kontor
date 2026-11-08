@@ -19,6 +19,7 @@ import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
 import { t, tIn, type Lang, type MessageKey } from '../i18n';
 import type { ExpenseTaxTreatment } from '../domain/expense';
+import type { PayoutTaxTreatment } from '../domain/payout';
 
 // Texts for codes from the domain and the data layer. Call them at render time, not at module load.
 
@@ -57,6 +58,12 @@ const PROBLEM_KEY: Record<FieldProblem, MessageKey> = {
   feeNegative: 'problem.feeNegative',
   validUntil: 'problem.validUntil',
   periodEnd: 'problem.periodEnd',
+  payerRemoved: 'payouts.problemPayerRemoved',
+  payerVatId: 'payouts.problemPayerVatId',
+  vatForSmallBusiness: 'payouts.problemVatForSmallBusiness',
+  smallBusinessOnly: 'payouts.problemSmallBusinessOnly',
+  httpsLink: 'payouts.problemHttpsLink',
+  month: 'payouts.problemMonth',
   'iban.format': 'problem.ibanFormat',
   'iban.country': 'problem.ibanCountry',
   'iban.length': 'problem.ibanLength',
@@ -132,6 +139,26 @@ const EXPENSE_TREATMENT_KEY: Record<ExpenseTaxTreatment, MessageKey> = {
   thirdCountry: 'expenses.treatmentThirdCountry',
   noVat: 'expenses.treatmentNoVat',
 };
+const PAYOUT_TREATMENT_KEY: Record<PayoutTaxTreatment, MessageKey> = {
+  domesticTaxed: 'payouts.treatmentDomesticTaxed',
+  euB2bNotTaxable: 'payouts.treatmentEuB2bNotTaxable',
+  thirdCountryB2bNotTaxable: 'payouts.treatmentThirdCountryB2bNotTaxable',
+  smallBusiness: 'payouts.treatmentSmallBusiness',
+  platformCollectsVat: 'payouts.treatmentPlatformCollectsVat',
+};
+/** The tax treatment of a payout in words, as the form, the list and the CSV export show it */
+export const payoutTreatmentText = (v: PayoutTaxTreatment): string => t(PAYOUT_TREATMENT_KEY[v]);
+
+const PAYOUT_EXPLAIN_KEY: Record<PayoutTaxTreatment, MessageKey> = {
+  domesticTaxed: 'payouts.explainDomesticTaxed',
+  euB2bNotTaxable: 'payouts.explainEuB2bNotTaxable',
+  thirdCountryB2bNotTaxable: 'payouts.explainThirdCountryB2bNotTaxable',
+  smallBusiness: 'payouts.explainSmallBusiness',
+  platformCollectsVat: 'payouts.explainPlatformCollectsVat',
+};
+/** One sentence on what a tax treatment of a payout means, ending in "check the document" */
+export const payoutTreatmentExplanation = (v: PayoutTaxTreatment): string => t(PAYOUT_EXPLAIN_KEY[v]);
+
 /** The VAT treatment of an expense in words, as the form and the CSV export show it */
 export const expenseTreatmentText = (v: ExpenseTaxTreatment): string => t(EXPENSE_TREATMENT_KEY[v]);
 
@@ -176,9 +203,12 @@ const ISSUE_PROBLEM_KEY: Record<IssueProblem, MessageKey> = {
   customerVatId: 'issue.customerVatId',
   ownVatId: 'issue.ownVatId',
   accountRemoved: 'issue.accountRemoved',
+  smallBusinessLimit: 'smallBusiness.issueLimit',
+  smallBusinessPreviousYear: 'smallBusiness.issuePreviousYear',
 };
 
-export const issueProblemText = (p: IssueProblem): string => t(ISSUE_PROBLEM_KEY[p]);
+/** `values` fill the placeholders of the small business texts: the crossing `date` and the `limit` of the previous year */
+export const issueProblemText = (p: IssueProblem, values?: Record<string, string | number>): string => t(ISSUE_PROBLEM_KEY[p], values);
 
 const QUOTE_PROBLEM_KEY: Record<QuoteProblem, MessageKey> = {
   noCustomer: 'issue.noCustomer',
@@ -195,6 +225,8 @@ export function issueFailureText(f: IssueFailure): string {
       return t('invoices.issueNotReady');
     case 'numberTaken':
       return t('invoices.issueNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':
@@ -212,6 +244,8 @@ export function finalizeFailureText(f: IssueFailure): string {
       return t('quotes.finalizeNotReady');
     case 'numberTaken':
       return t('quotes.finalizeNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':
@@ -229,6 +263,8 @@ export function cancelFailureText(f: IssueFailure): string {
       return t('invoices.cancelNotPossible');
     case 'numberTaken':
       return t('invoices.issueNumberTaken');
+    case 'fileDiffers':
+      return t('issue.fileDiffers');
     case 'permission':
     case 'notFound':
     case 'quota':

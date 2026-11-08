@@ -22,6 +22,7 @@ const P = {
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   chart: 'M4 20h16M7 17v-5M12 17V6M17 17v-9',
+  payout: 'M12 3v11M7 9l5 5 5-5M4 17v3h16v-3',
 } as const;
 
 export type IconName = keyof typeof P;

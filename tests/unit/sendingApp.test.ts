@@ -38,6 +38,7 @@ const issueCtx = (): IssueContext => ({
   company,
   contacts: new Map([[customer.id, customer]]),
   documents,
+  payments: new Map(),
   logo: null,
   device: 'device-1',
   now: new Date('2026-10-31T10:00:00Z'),

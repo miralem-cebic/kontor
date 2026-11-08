@@ -1,7 +1,7 @@
 import type { AccountDetails } from '../domain/bankAccount';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
-import { effectiveTaxTreatment, invoiceTotals, issueProblems, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
+import { effectiveTaxTreatment, invoiceTotals, issueProblems, smallBusinessRefusalOf, type IssuedInfo, type IssueSnapshot } from '../domain/invoice';
 import { isoDateOf } from '../domain/dates';
 import { counterKey, nextCounter, numberFor } from '../domain/numbering';
 import { quoteProblems } from '../domain/quote';
@@ -20,6 +20,7 @@ import {
   type InvoiceFile,
   type NumberingFile,
   type NumberRange,
+  type PaymentFile,
   type QuoteFile,
   type Reservation,
 } from '../data/types';
@@ -28,6 +29,7 @@ import { sha256Hex } from '../lib/sha256';
 import { makeDocumentPdf, type LogoImage } from '../pdf/documentPdf';
 import { putIssuedDocument, useApp } from '../store/appStore';
 import { logoImage } from './documentPdf';
+import { companyTurnoverEntries } from './overview';
 import { flushWrites, openRepository } from './session';
 
 // Issuing an invoice (ADR 0004): the number is reserved in numbering/invoice.json and read back, the PDF is written
@@ -39,9 +41,10 @@ import { flushWrites, openRepository } from './session';
 
 /**
  * `notReady`: the draft is incomplete (issueProblems, quoteProblems), or the invoice cannot be cancelled (not issued,
- * or a cancellation itself); `numberTaken`: the next number exists already, the range file fell behind
+ * or a cancellation itself); `numberTaken`: the next number exists already, the range file fell behind;
+ * `fileDiffers`: the PDF of the reserved number, left by an earlier attempt, is not what the document gives now
  */
-export type IssueFailure = 'notReady' | 'numberTaken' | StorageErrorKind;
+export type IssueFailure = 'notReady' | 'numberTaken' | 'fileDiffers' | StorageErrorKind;
 
 type Failed = { ok: false; failure: IssueFailure };
 
@@ -53,6 +56,8 @@ export interface IssueContext {
   company: CompanyFile;
   contacts: ReadonlyMap<string, ContactFile>;
   documents: ReadonlyMap<string, DocumentFile>;
+  /** The payments of the company: they decide the small business limit (§ 19 Abs. 1 and 2 UStG) */
+  payments: ReadonlyMap<string, PaymentFile>;
   logo: LogoImage | null;
   /** The browser that issues, for the reservation and the audit log */
   device: string;
@@ -144,7 +149,10 @@ function slotFor(doc: DocumentFile, ctx: IssueContext, numbering: NumberingFile,
 
 /**
  * The number of the document: its reservation from an earlier attempt, or its next number (slotFor), reserved and read
- * back. Every number known in the range (issued, reserved or as a file) is taken.
+ * back. Every number known in the range (issued, reserved or as a file) is taken. A reservation from an earlier attempt
+ * is used again only while it still fits the document: its counter key and its number are those the document's date
+ * gives now. If the date moved (into another year, or another month in a pattern with {MM}), the old reservation stays
+ * in the range file as a gap, as any abandoned reservation, and the document gets a new number.
  */
 async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true; reservation: Reservation; files: string[] } | Failed> {
   const range: NumberRange = doc.kind;
@@ -153,12 +161,15 @@ async function reserve(doc: DocumentFile, ctx: IssueContext): Promise<{ ok: true
   const listed = await ctx.repo.listIssuedFiles(range);
   if (!listed.ok) return fail(listed.error.kind);
   const numbering: NumberingFile = read.value ?? { schemaVersion: SCHEMA_VERSION, range, counters: [], reservations: [] };
-  const own = numbering.reservations.find((r) => r.documentId === doc.id);
-  if (own) return { ok: true, reservation: own, files: listed.value };
 
   const issued = issuedIn(ctx.documents, range);
   const slot = slotFor(doc, ctx, numbering, issued);
   if (!slot) return fail('notReady');
+  const fits = (r: Reservation): boolean =>
+    r.documentId === doc.id && r.counterKey === slot.key && r.number === (doc.kind === 'quote' && doc.revises ? slot.number : numberFor(patternOf(ctx.company, doc.kind), doc.date, r.counter));
+  const own = numbering.reservations.find(fits);
+  if (own) return { ok: true, reservation: own, files: listed.value };
+
   const { number, counter, key } = slot;
   const taken = new Set([...issued.map((i) => i.number), ...numbering.reservations.map((r) => r.number), ...listed.value.map((f) => f.replace(/\.pdf$/, ''))]);
   if (taken.has(number)) return fail('numberTaken');
@@ -194,6 +205,7 @@ export async function issue(id: DocumentId, ctx: IssueContext): Promise<IssueRes
     customer: customer ?? null,
     ownVatId: company.tax.vatId,
     accountActive: !!account && !account.deletedAt,
+    smallBusinessRefusal: smallBusinessRefusalOf(inv, smallBusiness, smallBusiness ? companyTurnoverEntries(company, ctx.documents, ctx.payments) : []),
   });
   if (problems.length > 0 || !customer || !account) return fail('notReady');
   return finalize(inv, { company: companyProfile(company), customer: contactProfile(customer), account: accountDetails(account) }, ctx);
@@ -242,6 +254,8 @@ function auditEntry(doc: DocumentFile, base: Omit<DocumentAuditEntry, 'action' |
   }
 }
 
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+
 /** Reserves the number, writes the PDF, saves the document as issued and appends the audit entry */
 async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot, ctx: IssueContext): Promise<IssueResult<D>> {
   const range: NumberRange = doc.kind;
@@ -249,19 +263,21 @@ async function finalize<D extends DocumentFile>(doc: D, snapshot: IssueSnapshot,
   if (!reserved.ok) return reserved;
   const { number, counter, counterKey: key } = reserved.reservation;
 
-  // the PDF is written once; a file of this number from an earlier attempt of this document is kept
+  // The PDF is written once and never overwritten. It is made with the time of the reservation as its creation date, so
+  // the same document always gives the same bytes. A file of this number from an earlier attempt is recorded only if
+  // it is byte for byte what the document gives now; if the draft was edited since (or the file is not ours), the
+  // record and the PDF would disagree, so nothing is issued and the file stays as it is.
+  // the PDF is in the language of the customer, and stays so
   const file = `${number}.pdf`;
-  let bytes: Uint8Array;
+  const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: snapshot.customer.language, number }, ctx.logo, new Date(reserved.reservation.at));
+  const bytes = pdf.bytes;
   if (reserved.files.includes(file)) {
     const existing = await ctx.repo.readIssuedFile(range, file);
     if (!existing.ok) return fail(existing.error.kind);
-    bytes = existing.value;
+    if (!sameBytes(existing.value, bytes)) return fail('fileDiffers');
   } else {
-    // the PDF is in the language of the customer, and stays so: the file is written once
-    const pdf = await makeDocumentPdf({ company: snapshot.company, document: doc, customer: snapshot.customer, account: snapshot.account, lang: snapshot.customer.language, number }, ctx.logo, ctx.now);
-    const written = await ctx.repo.writeIssuedFile(range, file, pdf.bytes);
+    const written = await ctx.repo.writeIssuedFile(range, file, bytes);
     if (!written.ok) return fail(written.error.kind);
-    bytes = pdf.bytes;
   }
   const sha256 = await sha256Hex(bytes.slice());
 
@@ -297,11 +313,11 @@ async function inOpenCompany<D extends DocumentFile>(step: (ctx: IssueContext) =
   const repo = openRepository();
   if (!repo) return fail('notFound');
   if (!(await flushWrites())) return fail('other');
-  const { company, contacts, documents } = useApp.getState();
+  const { company, contacts, documents, payments } = useApp.getState();
   if (!company) return fail('notFound');
   let result: IssueResult<D>;
   try {
-    result = await step({ repo, company, contacts, documents, logo: await logoImage(), device: deviceId(), now: new Date() });
+    result = await step({ repo, company, contacts, documents, payments, logo: await logoImage(), device: deviceId(), now: new Date() });
   } catch (e) {
     // for example the PDF could not be made; a reservation already written is used again by the next attempt
     console.error('Could not issue the document', e);

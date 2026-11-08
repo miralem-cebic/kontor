@@ -4,7 +4,7 @@ kontor is a local web app (React 18, TypeScript, Vite, zustand) for invoicing an
 
 ## Setup
 
-Requirements: Node.js 20 or newer (CI uses Node 22) and an installed Google Chrome for the browser tests.
+Requirements: Node.js `^22.13.0 || ^24.0.0 || >=26.0.0` and an installed Google Chrome for the browser tests. That is the range in which the locked toolchain (Vitest 5, ESLint 10, Vite 8) supports Node; Node 20, 22.0 to 22.12, 23 and 25 are outside it. `.nvmrc` pins the major version CI uses (`node-version-file` in `ci.yml` and `build.yml`), so `nvm use` picks the same one. When an update of the toolchain changes its Node ranges, change `engines` in `package.json` and this line together.
 
 ```bash
 npm ci             # install exact dependencies from package-lock.json
@@ -18,14 +18,52 @@ The project should not live inside a synced folder such as OneDrive, because `no
 | Script | Purpose |
 | --- | --- |
 | `npm run dev` | Vite development server |
-| `npm run build` | Type check and production build into `dist/` |
+| `npm run build` | Type check (`tsc --noEmit`) and production build into `dist/` |
 | `npm run typecheck` | TypeScript check only |
-| `npm run lint` | ESLint (type-aware for `src/`) |
+| `npm run lint` | ESLint over the whole repository, fails on any warning (`--max-warnings 0`); type-aware for `src/` |
+| `npm run lint:md` | markdownlint-cli2 over all Markdown files, with the rules in `.markdownlint.jsonc` (the same tool and rules as the CI job `markdown-lint`) |
 | `npm test` | Unit and property tests (Vitest, `tests/unit`) |
 | `npm run test:e2e` | Build, then Playwright tests against `dist/index.html` via `file://` in the installed Chrome |
 | `npm run check:file` | Build acceptance test: opens `dist/index.html` via `file://` and checks console, secure context, API, font |
+| `npm run verify` | The definition of done: `lint:md`, `lint`, `test`, `build` and `check:file`, in this order, stopping at the first failure. It does not run `typecheck` separately, because `build` does |
+| `npm run verify:full` | `verify`, then `test:e2e`. Needs an installed Chrome and takes longer, which is why e2e is not part of `verify` |
 
 Playwright uses the installed Chrome (`channel: 'chrome'`), so no browsers are downloaded. `HEADED=1` shows the window.
+
+## Lint rules and CI
+
+`eslint.config.js` starts from `@eslint/js` and `typescript-eslint` recommended. On top of that:
+
+- `react-hooks/rules-of-hooks` is an error; `react-hooks/exhaustive-deps` is a warning. Because `npm run lint` runs with `--max-warnings 0`, that warning blocks as well: fix the dependency list, or explain a deliberate exception in a comment next to a disable directive.
+- In `src/`: `no-non-null-assertion` and `no-explicit-any` are errors; type-aware `switch-exhaustiveness-check` and `no-floating-promises` are errors. Tests keep the looser defaults.
+
+CI (`.github/workflows/ci.yml`) runs these jobs for every pull request and for `main`:
+
+| Job | What it runs | Required status check |
+| --- | --- | --- |
+| `pr-title` | Conventional Commits check of the pull request title (cannot be run locally) | yes |
+| `markdown-lint` | markdownlint-cli2 on `**/*.md`; locally `npm run lint:md` | yes |
+| `e2e` | `npm run build`, `npm run check:file`, `npx playwright test` in the Chrome of the runner image; locally `npm run test:e2e` | yes |
+| `build / package` | `.github/workflows/build.yml`: typecheck, lint, tests, build, then `npm audit --omit=dev --audit-level=high`, then the zip with its SHA-256 | yes |
+| `conformance` | Checks the repository against [engineering-baseline](https://github.com/miralem-cebic/engineering-baseline), see below | no |
+
+`npm run verify` covers the Markdown lint and everything in `build / package` except `npm audit` (it needs the network). It does not cover `e2e` (use `npm run verify:full`), `pr-title` or `conformance`. Both workflows read the Node version from `.nvmrc`.
+
+### Conformance (engineering-baseline)
+
+`baseline.json` in the repository root selects the rule set (`ecosystems`, `topology`), names the baseline version and lists the waivers. The `conformance` job runs the baseline checker against the repository and fails on a violated `must` rule (`strict: false`, so `should` rules are reported but do not fail the job). The job and the checker are pinned to a fixed version; the comment above the job in `ci.yml` explains how to update both together with `baseline` in `baseline.json`.
+
+To run it locally after `npm ci` (the ESLint-based rules need `node_modules`):
+
+```bash
+npx github:miralem-cebic/engineering-baseline#v0.1.0 check
+```
+
+If a rule fails, fix the cause. If it cannot be fixed in the same change, add a waiver with a reason and an expiry date to `baseline.json`; once the date has passed the rule fails again:
+
+```json
+"waivers": [{ "rule": "TS-010", "reason": "why this cannot be fixed yet", "expires": "2026-12-31" }]
+```
 
 ## Building for `file://`
 
@@ -51,7 +89,10 @@ src/
                                (reusing the encoder of csvExport.ts); the records as entries for the search
   app/issue.ts                 Issuing and cancelling an invoice, finalizing a quote (ADR 0004): reserve the number,
                                write the PDF once, the record, audit
+  app/customerAccount.ts       The invoices and payments of one customer mapped into the rows of the customer account
+  app/vatStatus.ts             The VAT status of a day from the issued invoices (expenses have no snapshot; #70)
   app/ustva.ts                 Advance VAT return: the records of the company mapped into the domain, copy values, CSV
+  app/zm.ts                    Summary report (ZM, R8): the issued invoices mapped into the domain, the check against Kz 21, copy values, CSV
   app/sending.ts               E-mail to the customer (F04): the mail as .eml with the PDF attached, or a mailto: link;
                                the text from the templates, a changed PDF is not sent, the audit line `send`
   domain/                      Pure logic, no I/O:
@@ -60,12 +101,16 @@ src/
     vat.ts, units.ts           VAT rates (§ 12 UStG), EU member states; units as UN/ECE Rec. 20 codes (e-invoice BT-130)
     dates.ts                   Calendar days as ISO strings (YYYY-MM-DD), without time zones
     iban.ts, taxIds.ts         IBAN/BIC, Steuernummer, USt-IdNr. (check digit)
-    links.ts                   Which URLs may become a link (http: and https: only; the mailto: link of the sending, F04)
+    links.ts                   Which URLs may become a link (http: and https: only; https only for a statement link; the mailto: link of the sending, F04)
     sending.ts                 E-mail (F04): placeholders, the .eml file with the PDF (base64, RFC 2047 subject), mail checks
     tax/params/<year>.ts       Values that depend on the tax year, each with its legal source; tax/params/index.ts
                                picks the year (an unknown later year gets the last known one)
     tax/tradeTax.ts            Trade tax: the minimum multiplier of a year
+    smallBusiness.ts           Small business scheme (§ 19 UStG): the day the limit is crossed, when the exemption ends, the refusal by invoice
+                               date, the warning on the overview, the § 13b expense count; what is not verified is listed in its header
+    payout.ts                  Payouts (platform income without an invoice): tax treatment chosen by the person, checks, net part
     ustva.ts                   Advance VAT return (R1): periods, due date, the fields of the form from invoices, payments and expenses
+    zm.ts                      Summary report (R8): per recipient VAT ID the services and supplies of a period, VAT ID checks, due date, check against Kz 21
     numbering.ts               Number patterns of invoices and quotes ("RE-{YYYY}-{NNNN}", "AN-{YYYY}-{NNNN}")
     company.ts                 Company profile types, the form draft, checks per section, logo checks
     contact.ts                 Customers and suppliers: profile, form draft, checks, search
@@ -78,6 +123,7 @@ src/
     invoice.ts                 Invoices: content, tax treatment, form draft, checks, what is missing before issuing
     reports.ts                 Reports (F11): income per customer, expenses per category, open items, the year against the year
                                before; the same cash-basis rules as overview.ts, and sums that equal its totals
+    vatStatus.ts               The VAT status on a day, from the status of the issued invoices around it (expenses have no snapshot; #70)
     search.ts                  Global search (F11): the words of a query against the fields of an entry, ordered by kind
   data/
     types.ts                   File formats (company.json, backups)
@@ -131,7 +177,7 @@ src/
 2. `Persister` compares object references and queues what changed; objects that are saved are kept in a `WeakSet`.
 3. After 400 ms it writes through the `Repository`. Repository operations return a `Result`; exceptions from the browser API are turned into results once, in `FsRepository`.
 4. A failed write stays in the queue; the status in the sidebar offers "Try again", and an emergency copy of the unsaved company, contacts, items and documents is kept in `localStorage` (`kontor.unsaved.v1.<companyId>`) until the write succeeds.
-5. `saveCompany`, `saveContact`, `saveItem` and `saveDocument` check the file's `lastModified`. If someone else changed it since the last read, they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
+5. `saveCompany`, `saveContact`, `saveItem` and `saveDocument` compare the file's `lastModified` and size with the last read or write. If they differ in any way (also an older time), they read the file again and merge field by field (`merge.ts`, newer `fieldUpdatedAt` wins). A file of another record or a newer format version is never overwritten.
 6. Deleting a contact, an item, a quote draft or an invoice draft sets `deletedAt` (a mergeable field with its own timestamp): the file stays, the record is hidden, and an edit made elsewhere later does not bring it back.
 7. Bank accounts are a list in `company.json` (`bank`), merged as one field: when two devices change accounts at the same time, the later change wins for the whole list. Removing an account sets its `deletedAt`; it stays in the list, because payments will refer to it by ID. The default account cannot be removed.
 
@@ -139,19 +185,19 @@ src/
 
 - Everything read from a company folder, a backup, IndexedDB or `localStorage` is checked (`validate.ts`, via `migrate`). Wrong types and unknown values are errors; unknown top-level fields are kept and written back. `fieldUpdatedAt` keeps only known keys.
 - Checks are structural plus what other code relies on for safety: IDs (`isValidId`), the logo file name (must match its hash and type), the number patterns (they produce file names). A value that is wrong but safe (an IBAN with a wrong check digit) passes and is reported by the forms.
-- `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`).
+- `switch` over a union must be exhaustive (`@typescript-eslint/switch-exhaustiveness-check`), and a promise must be awaited, returned or explicitly discarded with `void` (`@typescript-eslint/no-floating-promises`). Both apply to `src/` and are type-aware.
 
-## Data format (schema version 16)
+## Data format (schema version 17)
 
 The format is described for people who keep their data, in [docs/data-format.md](docs/data-format.md). What follows is the detail for the code.
 
-kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `expenses/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
+kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documents/issued/` and `documents/quotes/`), `payments/`, `expenses/`, `payouts/`, `numbering/`, `audit/`, `assets/` and `backups/`. The rest of the layout is planned (see [roadmap](docs/roadmap.md)):
 
 ```text
 <company folder>/
   company.json            { schemaVersion, id, name, owner, address, contact, logo, tax, invoiceDefaults, bank, createdAt, fieldUpdatedAt }
   assets/logo-<hash>.<ext> logo files, named after the start of their SHA-256, never overwritten
-  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses }
+  backups/<YYYY-MM-DD>.json { schemaVersion, createdAt, company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts }
   contacts/<id>.json      customers and suppliers, file name = contact ID; other names (conflict copies) are not read
   items/<id>.json         catalogue of items and services, named like contacts
   documents/<id>.json     quotes, invoices and cancellation invoices, named like contacts
@@ -162,9 +208,10 @@ kontor writes `company.json`, `contacts/`, `items/`, `documents/` (with `documen
   dunnings/<id>.json      dunnings (Mahnungen) of an issued invoice, named like contacts; never changed (see below)
   quoteStatus/<id>.json   the decision of the customer on a finalized quote (accepted or declined, with its date); never changed, only removed (soft delete), see below
   expenses/<id>.json      what the business paid for, edited like an item, removed by soft delete; `receipt` is the receipt (see below)
+  payouts/<id>.json       income without an invoice of kontor (platform payouts), edited like an expense, removed by soft delete (see below)
   belege/<year>/<id>-<name>  the receipt files of the expenses of that year, never overwritten (see below)
   eingang/                inbox: files waiting to be assigned (F06)                 (planned)
-  audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue' | 'cancel' | 'issueQuote' | 'recordPayment' | 'deletePayment' | 'dunning' | 'send' | 'quoteDecision' | 'deleteQuoteDecision', documentId, number, files, device, payment?, dunning?, send? }), only appended; `payment` is { id, date, amount } for the two payment actions, `dunning` is { id, level, date, amount } for a dunning, where amount is what it adds to the claim; `quoteDecision` and `deleteQuoteDecision` are { id, decision, date } for a decision on a quote recorded or removed (F21); `send` is { kind, channel, to, dunningId } for a mail that was prepared (`kind`: invoice, cancellation, quote or dunning; `channel`: eml or mailto), and `files` names the PDF it attached with its SHA-256 (a letter has none). The audit lines have no schema version and nothing reads them back in the app, so the new action needs no migration
+  audit/<YYYY-MM>.jsonl   one JSON line per action ({ at, action: 'issue' | 'cancel' | 'issueQuote' | 'recordPayment' | 'deletePayment' | 'dunning' | 'send' | 'quoteDecision' | 'deleteQuoteDecision' | 'bookPayout' | 'changePayout' | 'deletePayout', documentId, number, files, device, payment?, dunning?, send? }), only appended; `payment` is { id, date, amount } for the two payment actions, `dunning` is { id, level, date, amount } for a dunning, where amount is what it adds to the claim; `quoteDecision` and `deleteQuoteDecision` are { id, decision, date } for a decision on a quote recorded or removed (F21); `send` is { kind, channel, to, dunningId } for a mail that was prepared (`kind`: invoice, cancellation, quote or dunning; `channel`: eml or mailto), and `files` names the PDF it attached with its SHA-256 (a letter has none). The audit lines have no schema version and nothing reads them back in the app, so the new action needs no migration
   exports/                generated exports, such as the ZIP of the company folder (F12, planned). The CSV export of the lists (F35) is a download and writes nothing to the folder.
 ```
 
@@ -189,6 +236,8 @@ An item file (`items/<id>.json`, types in `src/domain/item.ts`) has `number` (un
 
 A contact or an item that an import made carries `importBatchId` (schema version 14): the ID of the import, `null` for a record typed in. An import is taken back by removing every record with its ID (`undoContactImport`, `undoItemImport`: a soft delete each). The importer (`src/data/import/`) reads CSV and Excel with the limits of the roadmap's importer rules; the rules that map columns to fields and check each row are in `src/domain/import.ts` and use the checks of the forms.
 
+A payout file (`payouts/<id>.json`, type `PayoutFile` in `src/data/types.ts`, the rules in `src/domain/payout.ts`) is income that arrives without an invoice of kontor, for example the payout of Apple, Google, Stripe or PayPal. It has `date` (`YYYY-MM-DD`, the day the money arrived: the EÜR counts income when it is received), `accountId` (an account of `company.json`, which may have been removed since), `amount` (integer cents, more than 0, in euros; foreign currencies are F15), `payerId` (a contact, the payer), `period` (the month the payout covers as `YYYY-MM`, or empty), `taxTreatment`, `vatRate` (`1900`, `700` or `0`; always `0` unless the treatment is `domesticTaxed`), `statementUrl` (empty or an https link; the file of the statement is not kept, the receipts of expenses are tied to the expense), `note`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. The tax treatment is chosen by the person and never guessed: `domesticTaxed` (German payer, VAT inside the amount; only the net part is income), `euB2bNotTaxable` (§ 3a Abs. 2 UStG; the payer needs a plausible VAT ID of another EU state, checked with `isPlausibleEuVatId`), `thirdCountryB2bNotTaxable`, `smallBusiness` (only for a small business) or `platformCollectsVat` (a manual treatment with a warning, epic #30 question 1). A small business cannot pick `domesticTaxed`, a company with regular VAT not `smallBusiness`. Except for `domesticTaxed` the whole amount is income (`payoutNet`). A payout is edited like an expense: every field is merged one by one, and a deletion wins. It counts in the overview, in the income report per payer and in the customer account of the payer (beside the account, without changing its balance), but not in the turnover that is compared with the small business limits (open question 2 of #30) and not in the UStVA (#34). Each booking appends a line to the audit log: `{ at, action: 'bookPayout' | 'changePayout' | 'deletePayout', payout: { id, date, amount, payerId, taxTreatment }, device }`; such a line has no `documentId`, `number` or `files`. Payouts were added in schema version 17 as a new kind of file.
+
 An expense file (`expenses/<id>.json`, type `ExpenseFile` in `src/data/types.ts`, the rules in `src/domain/expense.ts`) is what the business paid for. It has `date` (`YYYY-MM-DD`, the day it was paid: the EÜR counts expenses when they are paid), `supplier` (free text), `reference` (the receipt number of the supplier, may be empty), `gross` (integer cents, more than 0, VAT included), `taxTreatment` (`domestic`, `euReverseCharge`, `thirdCountry` or `noVat`), `vatRate` (`1900`, `700` or `0`; always `0` unless the treatment is `domestic`), `category` (free text, may be empty), `accountId` (an account of `company.json`, which may have been removed since, or `null` for cash or another payment), `note`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. It is edited like an item: every field is merged one by one, and a deletion wins. The VAT inside the gross amount is the difference to the net amount, rounded once (`splitGross`), and only for `domestic`. Expenses were added in schema version 13 as a new kind of file. `receipt` (schema version 15) is `null`, or `{ kind: 'file', year, name, type, size, sha256 }` for a file of `belege/<year>/<name>` (`type` is `application/pdf`, `image/png` or `image/jpeg`; `name` is the expense ID, a dash, and the original name without its extension, cleaned of the characters a file name cannot hold, plus the extension of the type), or `{ kind: 'link', url }` for an http or https link. A file is copied when the receipt is attached and never overwritten: the same bytes under that name are kept, other bytes are a conflict, and a second receipt of the expense gets the start of its SHA-256 in its name. Opening a receipt checks its size and SHA-256 first. Removing a receipt keeps its file. Each attach and detach appends a line to the audit log: `{ at, action: 'attachReceipt' | 'detachReceipt', expenseId, receipt, device }`, with `receipt` as the file (`year`, `name`, `sha256`) or the link (`url`); such a line has no `documentId`, `number` or `files`.
 
 A document file (`documents/<id>.json`, types in `src/data/types.ts`, `src/domain/quote.ts`, `src/domain/invoice.ts` and `src/domain/document.ts`) is a quote or an invoice, told apart by `kind`. Both have `customerId` (a contact), `date` (`YYYY-MM-DD`), `subject`, `introText`, `closingText`, `lines`, `createdAt`, `deletedAt` and `fieldUpdatedAt`. A line has `name`, `description`, `quantity` (thousandths, not 0, negative for a deduction), `unit`, `unitPrice` (cents, not negative) and `vatRate`; its amount stays within 999,999,999.99 €, so every total is an exact integer. The lines are one mergeable field.
@@ -208,7 +257,7 @@ Cancelling (`cancel` in the same file) makes the cancellation of an issued invoi
 
 A payment (`payments/<id>.json`, type `PaymentFile` in `src/data/types.ts`, the rules in `src/domain/payment.ts`) is money that arrived for an issued invoice. It has `invoiceId` (the invoice), `date` (`YYYY-MM-DD`, the day the money arrived, which does not have to match the invoice date: the EÜR is cash-based), `amount` (integer cents, from 1 to 99,999,999,999), `accountId` (an account of `company.json`; it stays when the account is removed later), `note` (up to 200 characters), `createdAt`, `deletedAt` and `fieldUpdatedAt`. A payment never changes. Only its deletion is a change (a soft delete), and the merge keeps a deletion made on another device. Every payment is a file of its own, so two devices that record payments for the same invoice never overwrite each other. Only an issued invoice takes a payment, and not a cancellation or a cancelled invoice; the payments made before a cancellation stay visible and are not refunded by the app. The open amount of an invoice is its gross amount less the active payments and is never below 0 (`openAmount`); its state is open, partly paid, paid or cancelled (`paymentStateOf`), and it is overdue when something is open after the due date (`isOverdue`). `recordPayment` and `removePayment` (`src/app/payments.ts`) check the invoice and the amount again against the state of the folder, because another device may have recorded a payment in the meantime, then write the payment file and append the audit line.
 
-A dunning (`dunnings/<id>.json`, type `DunningFile` in `src/data/types.ts`, the rules in `src/domain/dunning.ts`) is a letter of an issued invoice that went out: its `level` (`reminder`, `level1`, `level2` or `level3`), `date`, `debtor` (`business` or `consumer`, from the customer's kind at issue), the `open` amount it was made on, `interestFrom`, `interest`, `flatFee` (40 € once for a business customer), `fee` (typed in, 0 for none), `payBy` (the date plus 14 days) and `createdAt`. A dunning is never changed and never deleted. Its interest is counted for the days from `interestFrom` to its date at the base rate of each day (`BASE_RATES` in `src/domain/tax/params/baseRate.ts`, § 247 BGB, valid from each announcement) plus 9 points for a business customer or 5 points for a consumer (§ 288 BGB), rounded per period. The claim of an invoice is its open amount plus the interest, fees and flat fees of all its dunnings (`claimTotal`). A dunning needs an overdue invoice that is not cancelled, a date not before the last dunning and not in the future, and a base rate for every day it counts; `planDunning` reports every reason it is refused. `issueDunning` (`src/app/dunning.ts`) writes the file and appends the audit line `dunning`.
+A dunning (`dunnings/<id>.json`, type `DunningFile` in `src/data/types.ts`, the rules in `src/domain/dunning.ts`) is a letter of an issued invoice that went out: its `level` (`reminder`, `level1`, `level2` or `level3`), `date`, `debtor` (`business` or `consumer`, from the customer's kind at issue), the `open` amount it was made on, `interestFrom`, `interest`, `flatFee` (40 € once for a business customer), `fee` (typed in, 0 for none), `payBy` (the date plus 14 days) and `createdAt`. A dunning is never changed and never deleted. Its interest is counted for the days from `interestFrom` to its date at the base rate of each day (`BASE_RATES` in `src/domain/tax/params/baseRate.ts`, § 247 BGB, valid from each announcement and not past the half year of the last one: `baseRatesKnownUntil()`; interest for later days is refused as `rateUnknown` until the table has the next announcement) plus 9 points for a business customer or 5 points for a consumer (§ 288 BGB), rounded per period. The claim of an invoice is its open amount plus the interest, fees and flat fees of all its dunnings (`claimTotal`). A dunning needs an overdue invoice that is not cancelled, a date not before the last dunning and not in the future, and a base rate for every day it counts; `planDunning` reports every reason it is refused. `issueDunning` (`src/app/dunning.ts`) writes the file and appends the audit line `dunning`.
 
 A decision of the customer on a finalized quote (`quoteStatus/<id>.json`, type `QuoteStatusFile` in `src/data/types.ts`, the rules in `src/domain/quoteStatus.ts`, F21) has `quoteId`, `decision` (`accepted` or `declined`), `date` (the day the customer decided, not after today and not before the quote), `createdAt`, `deletedAt` and `fieldUpdatedAt`. It never changes; removing it is a soft delete, and only the deletion is merged. A quote takes one decision at a time: a second one is refused until the first is removed (`alreadyDecided`), and a quote that a later version replaced, or a draft, takes none. Two devices can record different decisions; the one created later counts (`activeDecision`). The state of a quote is `draft`, `open` (finalized, no decision), `accepted` or `declined`. The quote itself does not change (ADR 0004). `decideQuote` and `removeQuoteDecision` (`src/app/quoteStatus.ts`) write the file and then the audit line `quoteDecision` or `deleteQuoteDecision`.
 
@@ -237,10 +286,11 @@ To change a file format, increase `SCHEMA_VERSION` in `data/schema.ts` and add `
 | 14 | Contacts and items get `importBatchId`, the import they came from (`null` for records typed in). Every other kind gets `unchanged(13)`. An app of version 13 refuses a contact or an item of version 14, so it never drops a batch. |
 | 15 | Expenses get `receipt` (`null` when there is none). Every other kind gets `unchanged(14)`. An app of version 14 refuses an expense with a receipt, so it never drops one. |
 | 16 | The footer shows the parts of the master data the company chooses (F26): `company.json` gets `invoiceDefaults.footerParts` (all three `true` for existing companies, as their documents showed everything), and the company in the snapshot of an issued document gets it too, so that a dunning letter made later from the snapshot still prints the footer as before. Every other kind gets `unchanged(15)`. An app of version 15 refuses a company with the choice, so it never drops it. |
+| 17 | Payouts: income without an invoice of kontor, a new kind of file (`payouts/`). No existing file changes; every other kind gets `unchanged(16)`. An app of version 16 refuses a payout instead of dropping it. The daily backup holds the payouts as well. |
 
 ## Tests
 
-- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing, payments: paid and open amounts that add up to the gross amount (property), states, overdue, the checks of a payment in the language of the form), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness, the PDF (its content per document and tax treatment, wrapping and page layout with a property test that no text runs into the footer, and a rendered file with real fonts: metadata, output intent, embedded subsets, missing characters), issuing on an in-memory folder (numbers per year, a range file that fell behind, a taken number, a second attempt after an interruption, a reservation that does not hold), cancelling (the next number, the master data of the invoice, once per invoice, a second attempt; a property test that the totals are reversed exactly), finalizing quotes (a range and a folder of their own, numbers per year, what a quote needs, a second attempt), quote versions (numbers with a suffix and the counter of the first, one version at a time, what changed between two, chains with loops from other devices, how often quotes were changed), and that an issued invoice or a finalized quote is never overwritten; recording and removing payments on an in-memory folder (the file, the audit line, partial payments, a payment above the open amount refused, no payment on a draft, a cancelled invoice or a cancellation, a removed payment counting as no payment), payment files on the folder (saved and read, a broken file reported, a deletion from another device kept), and the payments the persister writes or keeps in the emergency copy.
+- **Unit** (`tests/unit`): domain checks (company, contacts, accounts, items, quotes, invoices and what they need before issuing, payments: paid and open amounts that add up to the gross amount (property), states, overdue, the checks of a payment in the language of the form), totals per rate and tax treatment, quantities and dates, validation, migrations (including a file of version 1), repository (merge, assets, backups) on an in-memory folder, persister including the error path, handle store on `fake-indexeddb`, i18n completeness, the PDF (its content per document and tax treatment, wrapping and page layout with a property test that no text runs into the footer, and a rendered file with real fonts: metadata, output intent, embedded subsets, missing characters), issuing on an in-memory folder (numbers per year, a range file that fell behind, a taken number, a second attempt after an interruption, a reservation that does not hold), cancelling (the next number, the master data of the invoice, once per invoice, a second attempt; a property test that the totals are reversed exactly), finalizing quotes (a range and a folder of their own, numbers per year, what a quote needs, a second attempt), quote versions (numbers with a suffix and the counter of the first, one version at a time, what changed between two, chains with loops from other devices, how often quotes were changed), and that an issued invoice or a finalized quote is never overwritten; recording and removing payments on an in-memory folder (the file, the audit line, partial payments, a payment above the open amount refused, no payment on a draft, a cancelled invoice or a cancellation, a removed payment counting as no payment), payment files on the folder (saved and read, a broken file reported, a deletion from another device kept), and the payments the persister writes or keeps in the emergency copy. The VAT reference scenarios (`tests/fixtures/vat`, run by `tests/unit/vatScenarios.test.ts`): worked examples with exact cents for the advance return (19 % and 7 % with half cents, supplies into Kz 41, 21, 45 and 60, quarter and month boundaries, cash against accrual, a small business, expenses without German input tax) and the small business limits, each with its paragraph and URL in a comment and what could not be verified marked as such, a property test that net plus tax is the gross amount for any rate and amount, the summary report (ZM) built from invoices, and the scenarios that wait for payouts or § 13b expenses as `it.todo`. The summary report (`tests/unit/zm.test.ts`, `zmApp.test.ts`): quarter and month boundaries, several recipients, a small business, cancellations, supplies against services, the VAT ID checks, the due date, whole euros, and properties that the quarters add up to the year and that the services equal Kz 21.
 - **Property-based** (fast-check): money sums and rounding, gross/net splits, parsing and formatting, IBAN check digits, profile normalization. CI uses a fixed seed (`CI` is set); locally the seed is random. `FC_SEED=<seed>` repeats a failing run, `FC_RUNS=<n>` runs more cases.
 - **E2E** (`tests/e2e`): the real build under `file://`. The assistant with all checks, the written folder, a folder that is not empty, an existing company folder, two companies with switching and reload, settings, English, contacts (checks, search, filter, edit, soft delete, reload, separate per company), bank accounts (checks, default, removal, reload), a company folder of version 1 that is upgraded, the catalogue (checks, search, edit, delete, reload, English prices, small business) unsaved items restored from the emergency copy, quotes (lines from the catalogue and free lines, totals per rate, checks per line, order, edit, delete, reload, small business, expired, the PDF with an SVG logo), and invoices (defaults from the customer, period of service, tax treatment, due date, what is missing before issuing, edit, delete, reload, the PDF download, an invoice made from a quote, small business, issuing with the files in the folder and the read-only view), finalizing a quote (what is missing, the number, the final PDF and the files in the folder, the read-only view, an invoice and a copy made from it), and quote versions (a new version with a suffix, the links between the versions, what changed, how often quotes were changed), and dunnings (the base rate of each half year and the interest across a change of it, the flat fee once, the levels and the reasons a dunning is refused, the claim, the property that the interest does not depend on splitting a period), and customer accounts (the entries in date order with the balance after each, a credit after a cancellation, overdue, the balance equal to the open amounts of the invoices as a property test), and payments (a part payment leaves the rest open, the list shows the state and counts the open invoices, a payment above the open amount is refused, a removal asks first and reopens the amount, the audit log). Dunnings (an overdue invoice: the preview of the reminder with its interest and the flat fee, the reminder recorded with its interest and the log). Sending (an issued invoice and a dunning: the form filled in from the document, the .eml file with the PDF attached and its audit line, the mailto: link with the PDF downloaded beside it, the audit log of both).
 

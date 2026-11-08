@@ -5,6 +5,7 @@ import type { SendChannel, SendKind } from '../domain/sending';
 import type { CompanyProfile } from '../domain/company';
 import type { ContactProfile } from '../domain/contact';
 import type { ExpenseProfile } from '../domain/expense';
+import type { PayoutProfile } from '../domain/payout';
 import type { Receipt } from '../domain/receipt';
 import type { InvoiceContent, IssuedInfo } from '../domain/invoice';
 import type { ItemProfile } from '../domain/item';
@@ -13,7 +14,7 @@ import type { Debtor, DunningLevel } from '../domain/dunning';
 import type { PaymentContent } from '../domain/payment';
 import type { QuoteDecision } from '../domain/quoteStatus';
 import type { QuoteContent } from '../domain/quote';
-import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type QuoteStatusId } from './ids';
+import { keysOf, type AccountId, type CompanyId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type PayoutId, type QuoteStatusId } from './ids';
 
 /**
  * An account in company.json. Payments will refer to it by its ID, so removing it is a soft delete: it stays in
@@ -330,6 +331,38 @@ export interface ExpenseFile extends Omit<ExpenseProfile, 'accountId'> {
   fieldUpdatedAt: Partial<Record<ExpenseMergeableField, string>>;
 }
 
+/** Payout fields merged one by one; like expenses, a deletion survives edits made elsewhere */
+const PAYOUT_MERGEABLE: Record<keyof PayoutProfile | 'deletedAt', true> = {
+  date: true,
+  accountId: true,
+  amount: true,
+  payerId: true,
+  period: true,
+  taxTreatment: true,
+  vatRate: true,
+  statementUrl: true,
+  note: true,
+  deletedAt: true,
+};
+export const PAYOUT_MERGEABLE_FIELDS = keysOf(PAYOUT_MERGEABLE);
+export type PayoutMergeableField = keyof PayoutProfile | 'deletedAt';
+
+/**
+ * payouts/<id>.json: income without an invoice of kontor, for example the payout of a platform (domain/payout.ts). Edited
+ * like an expense; a removed payout stays in its file and is hidden in the app. `accountId` is the account the money arrived
+ * on and may have been removed since; `payerId` is the contact that paid.
+ */
+export interface PayoutFile extends Omit<PayoutProfile, 'accountId' | 'payerId'> {
+  schemaVersion: number;
+  id: PayoutId;
+  accountId: AccountId;
+  payerId: ContactId;
+  createdAt: string;
+  /** Soft delete: a deleted payout stays in its file, is hidden in the app and counts as no income */
+  deletedAt: string | null;
+  fieldUpdatedAt: Partial<Record<PayoutMergeableField, string>>;
+}
+
 /** documents/<id>.json: quotes and invoices, told apart by `kind` */
 export type DocumentFile = QuoteFile | InvoiceFile;
 
@@ -344,6 +377,16 @@ export const nextVersionOf = (q: QuoteFile & { issued: IssuedInfo }): RevisedQuo
   firstNumber: q.revises?.firstNumber ?? q.issued.number,
   version: (q.revises?.version ?? 1) + 1,
 });
+
+/**
+ * The IDs of the invoices that a cancellation exists for, built in one pass. Use it instead of calling `cancellationOf`
+ * once per invoice, which scans every document each time (O(n²) over a list).
+ */
+export function cancelledIds(documents: Iterable<DocumentFile>): Set<DocumentId> {
+  const ids = new Set<DocumentId>();
+  for (const d of documents) if (d.kind === 'invoice' && d.cancels) ids.add(d.cancels.id);
+  return ids;
+}
 
 /** The cancellation of an invoice, if it has one */
 export function cancellationOf(documents: Iterable<DocumentFile>, id: DocumentId): InvoiceFile | undefined {
@@ -403,10 +446,11 @@ export type AuditEntry =
   | (AuditBase & { action: 'send'; send: AuditSend })
   | (AuditBase & { action: 'quoteDecision'; quoteStatus: AuditQuoteDecision })
   | (AuditBase & { action: 'deleteQuoteDecision'; quoteStatus: AuditQuoteDecision })
-  | AuditExpenseEntry;
+  | AuditExpenseEntry
+  | AuditPayoutEntry;
 
-/** The audit lines about documents (issue, cancel, payments, dunnings, mails, quote decisions); not the ones about receipts */
-export type DocumentAuditEntry = Exclude<AuditEntry, AuditExpenseEntry>;
+/** The audit lines about documents (issue, cancel, payments, dunnings, mails, quote decisions); not the ones about receipts or payouts */
+export type DocumentAuditEntry = Exclude<AuditEntry, AuditExpenseEntry | AuditPayoutEntry>;
 
 /** The receipt as an audit line names it: the file in belege/ with its SHA-256, or the link */
 export type AuditReceipt = { kind: 'file'; year: string; name: string; sha256: string } | { kind: 'link'; url: string };
@@ -420,6 +464,26 @@ export interface AuditExpenseEntry {
   action: 'attachReceipt' | 'detachReceipt';
   expenseId: ExpenseId;
   receipt: AuditReceipt;
+  device: string;
+}
+
+/** The payout a line of the audit log is about: what the books count, and the tax treatment the person chose */
+export interface AuditPayout {
+  id: PayoutId;
+  date: string;
+  amount: Cents;
+  payerId: ContactId;
+  taxTreatment: PayoutProfile['taxTreatment'];
+}
+
+/**
+ * A line of audit/<YYYY-MM>.jsonl about a payout: `bookPayout` when it was booked, `changePayout` when it was edited (the
+ * line holds the state after the change), `deletePayout` when it was removed (soft delete).
+ */
+export interface AuditPayoutEntry {
+  at: string;
+  action: 'bookPayout' | 'changePayout' | 'deletePayout';
+  payout: AuditPayout;
   device: string;
 }
 
@@ -467,6 +531,7 @@ export interface BackupSnapshot {
   dunnings: readonly DunningFile[];
   quoteStatuses: readonly QuoteStatusFile[];
   expenses: readonly ExpenseFile[];
+  payouts: readonly PayoutFile[];
 }
 
 /** backups/<YYYY-MM-DD>.json: the state of the company folder on that day */

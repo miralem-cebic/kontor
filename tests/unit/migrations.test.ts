@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { classifyError } from '../../src/data/repository';
 import { InvalidFileError, MIGRATED_ACCOUNT_ID, migrate, MIGRATIONS, NewerSchemaError, unchanged, upgrade, type Migration } from '../../src/data/migrations';
-import { makeContact, makeDunning, makeExpense, makeInvoice, makeItem, makePayment, makeQuote, makeQuoteStatus, SCHEMA_VERSION } from '../../src/data/schema';
+import { makeContact, makeDunning, makeExpense, makeInvoice, makeItem, makePayment, makePayout, makeQuote, makeQuoteStatus, SCHEMA_VERSION } from '../../src/data/schema';
 import type { InvoiceFile } from '../../src/data/types';
 import { brandId } from '../../src/data/ids';
 import { cents } from '../../src/domain/money';
-import { STANDARD_RATE } from '../../src/domain/vat';
+import { STANDARD_RATE, ZERO_RATE } from '../../src/domain/vat';
 import type { IssuedInfo } from '../../src/domain/invoice';
 import { sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleItem, sampleQuote } from './fixtures';
 
@@ -29,8 +29,8 @@ const companyV1 = (): Record<string, unknown> => ({
 
 describe('migrate', () => {
   it('reads the current version', () => {
-    expect(SCHEMA_VERSION).toBe(16);
-    expect(migrate('company', company()).schemaVersion).toBe(16);
+    expect(SCHEMA_VERSION).toBe(17);
+    expect(migrate('company', company()).schemaVersion).toBe(17);
   });
 
   it('a file without version counts as version 1', () => {
@@ -310,6 +310,67 @@ describe('version 13 → 14: the import of contacts and items', () => {
   it('an app that knows only version 13 refuses a contact of version 14, so it never drops a batch', () => {
     const raw = JSON.parse(JSON.stringify(makeContact(sampleContact()))) as Record<string, unknown>;
     expect(() => upgrade('contact', { ...raw, schemaVersion: 14 }, MIGRATIONS.contact, 13)).toThrow(NewerSchemaError);
+  });
+});
+
+describe('version 16 → 17: payouts, income without an invoice', () => {
+  const asV16 = (file: object) => ({ ...JSON.parse(JSON.stringify(file)), schemaVersion: 16 }) as Record<string, unknown>;
+  const payer = makeContact(sampleContact({ name: 'Apple Distribution International' }));
+  const payout = makePayout({
+    date: '2026-11-03',
+    accountId: sampleCompany().bank.defaultAccountId,
+    amount: cents(123_456),
+    payerId: payer.id,
+    period: '2026-10',
+    taxTreatment: 'euB2bNotTaxable',
+    vatRate: ZERO_RATE,
+    statementUrl: 'https://reportingitc.apple.com/statement/2026-10',
+    note: '',
+  });
+  const raw = (over: Record<string, unknown> = {}) => ({ ...(JSON.parse(JSON.stringify(payout)) as Record<string, unknown>), ...over });
+
+  it('a payout file is read with its checks', () => {
+    expect(migrate('payout', raw())).toEqual(payout);
+  });
+
+  it('a payout with a tax treatment that is not known is refused', () => {
+    expect(() => migrate('payout', raw({ taxTreatment: 'maybe' }))).toThrow(InvalidFileError);
+  });
+
+  it('a payout of no cents, with a float or with a bad ID is refused', () => {
+    for (const bad of [{ amount: 0 }, { amount: 12.5 }, { amount: -5 }, { payerId: '../x' }, { accountId: '__proto__' }, { id: 'constructor' }, { vatRate: 1234 }]) {
+      expect(() => migrate('payout', raw(bad)), JSON.stringify(bad)).toThrow(InvalidFileError);
+    }
+  });
+
+  it('a statement link is an https link or empty; any other scheme is refused', () => {
+    expect(migrate('payout', raw({ statementUrl: '' })).statementUrl).toBe('');
+    for (const url of ['http://example.com/s', 'javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,x', 'not a link']) {
+      expect(() => migrate('payout', raw({ statementUrl: url })), url).toThrow(InvalidFileError);
+    }
+  });
+
+  it('the month it covers is a month or empty', () => {
+    expect(migrate('payout', raw({ period: '' })).period).toBe('');
+    expect(() => migrate('payout', raw({ period: '2026-13' }))).toThrow(InvalidFileError);
+  });
+
+  it('the files of the other kinds of version 16 stay as they are', () => {
+    const files = {
+      company: asV16(sampleCompany()),
+      contact: asV16(payer),
+      item: asV16(makeItem(sampleItem())),
+      numbering: asV16({ range: 'invoice', counters: [{ key: '2026', last: 1 }], reservations: [] }),
+      expense: asV16(makeExpense({ date: '2026-10-28', supplier: 'Telekom', reference: '', gross: cents(4_999), taxTreatment: 'domestic', vatRate: STANDARD_RATE, category: 'Telefon', accountId: null, note: '' })),
+      document: asV16(makeInvoice(payer.id, sampleCompany().bank.defaultAccountId, sampleInvoice(), null)),
+    };
+    for (const [kind, file] of Object.entries(files) as [keyof typeof files, Record<string, unknown>][]) {
+      expect(migrate(kind, file)).toEqual({ ...file, schemaVersion: SCHEMA_VERSION });
+    }
+  });
+
+  it('an app that knows only version 16 refuses a payout, so it never drops income it does not know', () => {
+    expect(() => upgrade('payout', raw(), MIGRATIONS.payout, 16)).toThrow(NewerSchemaError);
   });
 });
 
@@ -682,11 +743,11 @@ describe('version 8 → 9: the language of the documents (F05)', () => {
 
 // Template for the next format change: write the step, test it here with `upgrade(kind, raw, steps, target)`,
 // then add it to MIGRATIONS and increase SCHEMA_VERSION.
-describe('migration template (version 16 → 17, not in use)', () => {
+describe('migration template (version 17 → 18, not in use)', () => {
   const steps: Migration[] = [
     ...MIGRATIONS.company,
     {
-      from: 16,
+      from: 17,
       up: (raw) => {
         const defaults = raw['invoiceDefaults'] as Record<string, unknown>;
         return { ...raw, invoiceDefaults: { ...defaults, example: ['a', 'b'] } };
@@ -695,13 +756,13 @@ describe('migration template (version 16 → 17, not in use)', () => {
   ];
 
   it('runs the step and sets the new version', () => {
-    const doc = upgrade('company', company(), steps, 17);
-    expect(doc['schemaVersion']).toBe(17);
+    const doc = upgrade('company', company(), steps, 18);
+    expect(doc['schemaVersion']).toBe(18);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['example']).toEqual(['a', 'b']);
   });
 
   it('runs every step from an older version', () => {
-    const doc = upgrade('company', companyV1(), steps, 17);
+    const doc = upgrade('company', companyV1(), steps, 18);
     expect((doc['bank'] as Record<string, unknown>)['defaultAccountId']).toBe(MIGRATED_ACCOUNT_ID);
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['quotePattern']).toBe('AN-{YYYY}-{NNNN}');
     expect((doc['invoiceDefaults'] as Record<string, unknown>)['example']).toEqual(['a', 'b']);
@@ -709,10 +770,10 @@ describe('migration template (version 16 → 17, not in use)', () => {
 
   it('a kind whose format did not change gets an empty step', () => {
     const raw = company();
-    expect(upgrade('company', raw, [unchanged(16)], 17)).toEqual({ ...raw, schemaVersion: 17 });
+    expect(upgrade('company', raw, [unchanged(17)], 18)).toEqual({ ...raw, schemaVersion: 18 });
   });
 
   it('fails when a step is missing', () => {
-    expect(() => upgrade('company', company(), [], 17)).toThrow(InvalidFileError);
+    expect(() => upgrade('company', company(), [], 18)).toThrow(InvalidFileError);
   });
 });

@@ -6,6 +6,7 @@ import { toSafeFileName } from '../data/fs/fileNames';
 import { ensureReadWrite } from '../data/fs/permission';
 import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
+import { acquireCompanyLock, waitForClosed, type ClosedMessage, type CompanyLock } from './companyLock';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
 import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
@@ -23,7 +24,8 @@ import { setLastCompany, usePrefs } from '../store/prefs';
 // Startup flow: check the browser → known company folders → permission → load → app.
 // "Add company" runs the setup assistant while the current company stays open until the new one is ready.
 
-export type Phase = 'checking' | 'unsupported' | 'setup' | 'reconnect' | 'loading' | 'failed' | 'ready';
+/** `busy`: the company is open in another window of this browser, which holds its lock (#97) */
+export type Phase = 'checking' | 'unsupported' | 'setup' | 'reconnect' | 'loading' | 'busy' | 'failed' | 'ready';
 
 /** Why opening or setting up a folder failed */
 export type SessionError = StorageErrorKind | 'otherCompany' | 'copiedCompany' | 'noFolder';
@@ -42,6 +44,8 @@ interface SessionState {
   error: SessionError | null;
   /** The setup assistant was opened from an open company ("Add company") and can be cancelled */
   setupCancelable: boolean;
+  /** In `busy`: true when this window had the company open and another window took it over */
+  takenOver: boolean;
 }
 
 export const useSession = create<SessionState>()(() => ({
@@ -50,6 +54,7 @@ export const useSession = create<SessionState>()(() => ({
   currentId: null,
   error: null,
   setupCancelable: false,
+  takenOver: false,
 }));
 const set = useSession.setState;
 
@@ -72,6 +77,12 @@ export function currentRepository(): FsRepository | null {
 let persister: Persister | null = null;
 /** The folder of the open company, to ask for its permission again when a write was refused */
 let openHandle: FileSystemDirectoryHandle | null = null;
+/** The lock of the open company: no other window of this browser opens it meanwhile (#97) */
+let companyLock: CompanyLock | null = null;
+/** Windows of kontor tell each other here that they closed a company they had open (companyLock.ts) */
+const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('kontor.session') : null;
+/** How long a window that takes a company over waits for the other window to save and close it */
+const TAKE_OVER_WAIT_MS = 3_000;
 let entries: CompanyEntry[] = [];
 let handleStore: HandleStore | null = null;
 /** The folder chosen in the setup assistant; nothing is written there before "Finish" */
@@ -158,19 +169,72 @@ async function closeCurrent() {
   repo = null;
   openHandle = null;
   resetApp();
+  releaseLock();
 }
 
-async function load(entry: CompanyEntry) {
+function releaseLock() {
+  companyLock?.release();
+  companyLock = null;
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The lock of a company for this window, or null when another window has it open. A lock of a window that was just
+ * reloaded or closed can take a moment to go away, so a refused lock is asked for a few times. With `takeOver`, the
+ * lock is taken from the other window, and the folder is read only after that window saved and closed the company.
+ */
+async function lockCompany(id: CompanyId, takeOver: boolean): Promise<CompanyLock | null> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  const onLost = () => void lostToAnotherWindow(id);
+  // taking over needs no patience: the lock is taken anyway
+  for (let attempt = 0; attempt < (takeOver ? 1 : 4); attempt++) {
+    if (attempt > 0) await pause(250);
+    const free = await acquireCompanyLock(locks, id, { steal: false, onLost });
+    if (free) return free;
+  }
+  if (!takeOver) return null;
+  const taken = await acquireCompanyLock(locks, id, { steal: true, onLost });
+  if (!(await waitForClosed(channel, id, TAKE_OVER_WAIT_MS))) console.warn('The other window did not say that it closed the company');
+  return taken;
+}
+
+/** Another window took the open company over: what is pending is written, the company is closed, and that window is told */
+async function lostToAnotherWindow(id: CompanyId) {
+  companyLock = null;
+  if (useSession.getState().currentId !== id) return;
+  await closeCurrent();
+  set({ phase: 'busy', takenOver: true, error: null });
+  channel?.postMessage({ closed: id } satisfies ClosedMessage);
+}
+
+async function load(entry: CompanyEntry, takeOver = false) {
   set({ phase: 'loading', error: null, currentId: entry.id });
   const r = new FsRepository(entry.handle);
   const res = await r.readCompany();
   if (!res.ok) return set({ phase: 'failed', error: res.error.kind });
   if (res.value.id !== entry.id) return set({ phase: 'failed', error: 'otherCompany' });
-  await openLoaded(r, entry, res.value);
+  await openLoaded(r, entry, res.value, takeOver);
 }
 
-/** Opens a company whose company.json was read: its records, the persister, a recovered emergency copy, the logo, the backup */
-async function openLoaded(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
+/** Opens a company whose company.json was read, once this window holds its lock; else it shows where it is open (#97) */
+async function openLoaded(r: FsRepository, entry: CompanyEntry, company: CompanyFile, takeOver = false) {
+  releaseLock();
+  const lock = await lockCompany(company.id, takeOver);
+  if (!lock) return set({ phase: 'busy', takenOver: false, currentId: company.id, error: null });
+  companyLock = lock;
+  // the other window wrote what was pending before it gave the company up: company.json is read again after that
+  const current = takeOver ? await r.readCompany() : null;
+  if (current && !current.ok) {
+    releaseLock();
+    return set({ phase: 'failed', error: current.error.kind, currentId: company.id });
+  }
+  await openRecords(r, entry, current?.value ?? company);
+  if (useSession.getState().phase !== 'ready') releaseLock();
+}
+
+/** Opens the company: its records, the persister, a recovered emergency copy, the logo, the backup */
+async function openRecords(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
   const loadedContacts = await r.loadContacts();
   if (!loadedContacts.ok) return set({ phase: 'failed', error: loadedContacts.error.kind, currentId: company.id });
   const loadedItems = await r.loadItems();
@@ -214,7 +278,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   if (told.length) showToast(told.join(' '));
   setLastCompany(company.id);
   if (entry.name !== company.name) await rememberCompany(entry.handle, company);
-  set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false });
+  set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false, takenOver: false });
   void loadLogo();
   void maintenance(r);
 }
@@ -299,13 +363,16 @@ async function maintenance(r: FsRepository) {
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }
 
-/** User gesture: renew the permission for the company waiting in 'reconnect' or 'failed' */
-export async function reconnect() {
+/**
+ * User gesture: renew the permission for the company waiting in 'reconnect' or 'failed'. In 'busy', `takeOver` opens
+ * it here and closes it in the other window (#97).
+ */
+export async function reconnect(takeOver = false) {
   const id = useSession.getState().currentId;
   const entry = entries.find((e) => e.id === id);
   if (!entry) return startSetup();
   try {
-    if (await ensureReadWrite(entry.handle, true)) await load(entry);
+    if (await ensureReadWrite(entry.handle, true)) await load(entry, takeOver);
   } catch (e) {
     set({ phase: 'failed', error: classifyError(e) });
   }

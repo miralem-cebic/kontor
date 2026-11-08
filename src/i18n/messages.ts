@@ -1784,6 +1784,17 @@ const MESSAGES_SRC = {
   'start.failedTitle': { de: 'Das Unternehmen konnte nicht geöffnet werden', en: 'The company could not be opened' },
   'start.retry': { de: 'Erneut versuchen', en: 'Try again' },
   'start.open': { de: '„{name}“ öffnen', en: 'Open “{name}”' },
+  'start.busyTitle': { de: '„{name}“ ist in einem anderen Fenster geöffnet', en: '“{name}” is open in another window' },
+  'start.busyText': {
+    de: 'kontor arbeitet mit einem Unternehmen in nur einem Fenster zur Zeit, damit zum Beispiel keine Rechnungsnummer doppelt vergeben wird. Bitte im anderen Fenster weiterarbeiten oder das Unternehmen hier öffnen: Das andere Fenster speichert dann, was offen ist, und schließt es.',
+    en: 'kontor works with a company in one window at a time, so that, for example, no invoice number is given twice. Please go on in the other window, or open the company here: the other window then saves what is open and closes it.',
+  },
+  'start.takenOverTitle': { de: '„{name}“ wurde in einem anderen Fenster geöffnet', en: '“{name}” was opened in another window' },
+  'start.takenOverText': {
+    de: 'Was in diesem Fenster noch nicht gespeichert war, wurde vorher gesichert. Um hier weiterzuarbeiten, das Unternehmen hier wieder öffnen.',
+    en: 'What was not saved yet in this window was kept first. To go on working here, open the company here again.',
+  },
+  'start.openHere': { de: 'Hier öffnen', en: 'Open here' },
 
   'toast.recovered': {
     de: 'Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.',

@@ -75,7 +75,7 @@ Architektur, Datenformat und alle Skripte stehen in [DEVELOPMENT.md](DEVELOPMENT
 ## Deine Daten
 
 - Ein Unternehmen ist ein Ordner mit JSON-Dateien (`company.json`, später Kontakte, Belege, Rechnungen). Du kannst ihn sichern, kopieren oder deiner Steuerberatung freigeben wie jeden anderen Ordner.
-- Öffne einen Unternehmensordner nicht gleichzeitig auf zwei Geräten zum Bearbeiten. Änderungen an verschiedenen Feldern werden zusammengeführt, aber Rechnungsnummern setzen voraus, dass jeweils nur ein Gerät schreibt.
+- Öffne einen Unternehmensordner nicht gleichzeitig auf zwei Geräten zum Bearbeiten. Änderungen an verschiedenen Feldern werden zusammengeführt, aber Rechnungsnummern setzen voraus, dass jeweils nur ein Gerät schreibt. Im selben Browser passt kontor selbst darauf auf: Ist ein Unternehmen schon in einem anderen Fenster oder Tab geöffnet, zeigt das neue Fenster das an und öffnet es erst auf „Hier öffnen“; das andere Fenster speichert dann und schließt es.
 - Welche Ordner du schon geöffnet hast, merkt sich nur dein Browser. Ein anderer Browser oder Rechner fragt beim ersten Mal nach dem Ordner.
 
 ## Dokumentation

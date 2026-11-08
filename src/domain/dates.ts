@@ -38,3 +38,10 @@ export function daysBetween(from: string, to: string): number {
   };
   return Math.round((ms(to) - ms(from)) / 86_400_000);
 }
+
+/** The last day of the month after the one that holds a valid ISO date (for 2026-01-31: 2026-02-28) */
+export function endOfNextMonth(iso: string): string {
+  const [y = 0, m = 1] = iso.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m + 1, 0));
+  return `${last.getUTCFullYear()}-${String(last.getUTCMonth() + 1).padStart(2, '0')}-${String(last.getUTCDate()).padStart(2, '0')}`;
+}

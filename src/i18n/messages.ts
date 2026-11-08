@@ -290,6 +290,10 @@ const MESSAGES_SRC = {
   'error.permission': { de: 'Kein Zugriff auf den Ordner. Bitte Zugriff erlauben oder den Ordner neu wählen.', en: 'No access to the folder. Please allow access or choose the folder again.' },
   'error.notFound': { de: 'Der Ordner oder eine Datei darin wurde nicht gefunden.', en: 'The folder or a file in it was not found.' },
   'error.quota': { de: 'Auf dem Speicherort ist kein Platz mehr frei.', en: 'There is no space left at the storage location.' },
+  'error.locked': {
+    de: 'Eine Datei im Ordner wird gerade von einem anderen Programm benutzt (zum Beispiel Excel, ein Virenscanner oder der Sync-Client). Bitte gleich noch einmal versuchen.',
+    en: 'A file in the folder is in use by another program (for example Excel, a virus scanner or the sync client). Please try again in a moment.',
+  },
   'error.newerSchema': {
     de: 'Dieser Ordner wurde mit einer neueren kontor-Version gespeichert. Bitte kontor aktualisieren.',
     en: 'This folder was saved by a newer version of kontor. Please update kontor.',
@@ -344,6 +348,27 @@ const MESSAGES_SRC = {
   'save.saved': { de: 'Gespeichert', en: 'Saved' },
   'save.failed': { de: 'Nicht gespeichert: {reason}', en: 'Not saved: {reason}' },
   'save.retry': { de: 'Erneut versuchen', en: 'Try again' },
+  'save.copyFailed': {
+    de: 'Die ungespeicherten Änderungen konnten auch im Browser nicht gesichert werden (Speicher voll oder gesperrt). Bitte das Fenster nicht schließen, bevor sie gespeichert sind.',
+    en: 'The unsaved changes could not be kept in the browser either (its storage is full or blocked). Please do not close this window before they are saved.',
+  },
+  'unsaved.title': { de: 'Nicht gespeichert, der Ordner nimmt diese Änderungen nicht an:', en: 'Not saved, the folder does not take these changes:' },
+  'unsaved.company': { de: 'Firmendaten', en: 'Company details' },
+  'unsaved.contact': { de: 'Kontakt „{name}“', en: 'Contact “{name}”' },
+  'unsaved.item': { de: 'Artikel „{name}“', en: 'Item “{name}”' },
+  'unsaved.quote': { de: 'Angebot „{name}“', en: 'Quote “{name}”' },
+  'unsaved.invoice': { de: 'Rechnung „{name}“', en: 'Invoice “{name}”' },
+  'unsaved.expense': { de: 'Ausgabe „{name}“', en: 'Expense “{name}”' },
+  'unsaved.payment': { de: 'Zahlung vom {date}', en: 'Payment of {date}' },
+  'unsaved.dunning': { de: 'Mahnung vom {date}', en: 'Dunning of {date}' },
+  'unsaved.payout': { de: 'Auszahlung vom {date}', en: 'Payout of {date}' },
+  'unsaved.quoteStatus': { de: 'Entscheidung zum Angebot vom {date}', en: 'Decision on a quote of {date}' },
+  'unsaved.discard': { de: 'Verwerfen', en: 'Discard' },
+  'unsaved.discardConfirm': {
+    de: 'Die Änderung an {what} verwerfen und den Stand aus dem Ordner laden?',
+    en: 'Discard the change to {what} and load what the folder holds?',
+  },
+  'unsaved.discardNow': { de: 'Ja, verwerfen', en: 'Yes, discard' },
 
   'contacts.title': { de: 'Kontakte', en: 'Contacts' },
   'contacts.new': { de: 'Neuer Kontakt', en: 'New contact' },
@@ -591,10 +616,6 @@ const MESSAGES_SRC = {
     de: 'Die Auszahlung ist gespeichert, aber der Eintrag im Protokoll konnte nicht geschrieben werden.',
     en: 'The payout is saved, but the entry in the audit log could not be written.',
   },
-  'payouts.unreadable': {
-    de: '{n} Auszahlungsdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} payout file(s) in the folder could not be read and are missing from the list.',
-  },
   'payouts.problemPayerRemoved': { de: 'Dieser Kontakt ist gelöscht oder kein Kunde. Bitte einen anderen Zahler wählen.', en: 'This contact is deleted or no customer. Please choose another payer.' },
   'payouts.problemPayerVatId': {
     de: 'Dafür braucht der Zahler eine gültige USt-IdNr. eines anderen EU-Staats (sie wird für die Zusammenfassende Meldung gebraucht). Bitte im Kontakt ergänzen.',
@@ -804,7 +825,10 @@ const MESSAGES_SRC = {
     de: 'In den Einstellungen ist „jährlich“ gewählt: Dann ist meist keine Voranmeldung nötig. Du kannst trotzdem einen Zeitraum wählen, zum Beispiel für eine Dauerfristverlängerung oder wenn das Finanzamt es verlangt.',
     en: 'The settings say “yearly”: then an advance return is usually not required. You can still pick a period, for example if the tax office asks for it.',
   },
-  'ustva.method.cash': { de: 'Nach vereinnahmten Entgelten (Ist-Versteuerung): Rechnungen zählen im Zeitraum der Zahlung, bei Teilzahlungen anteilig.', en: 'On the cash basis (Ist-Versteuerung): invoices count in the period of the payment, in part for part payments.' },
+  'ustva.method.cash': {
+    de: 'Nach vereinnahmten Entgelten (Ist-Versteuerung): Rechnungen zählen im Zeitraum der Zahlung, bei Teilzahlungen anteilig. Innergemeinschaftliche Lieferungen (41) zählen nach dem Rechnungsdatum, Leistungen an Unternehmen in anderen EU-Staaten (21) nach der Leistung, wie in der Zusammenfassenden Meldung (§ 18b UStG).',
+    en: 'On the cash basis (Ist-Versteuerung): invoices count in the period of the payment, in part for part payments. Intra-community supplies (41) count by the invoice date, services to businesses in other EU states (21) by the service, as in the summary report (§ 18b UStG).',
+  },
   'ustva.method.accrual': { de: 'Nach vereinbarten Entgelten (Soll-Versteuerung): Rechnungen zählen im Zeitraum, in dem die Leistung endet. Stornorechnungen zählen mit ihrem Datum.', en: 'On the accrual basis (Soll-Versteuerung): invoices count in the period in which the service ends. Cancellations count on their own date.' },
   'ustva.due': { de: 'Fällig am {date}', en: 'Due on {date}' },
   'ustva.dueExtension': { de: 'mit Dauerfristverlängerung (einen Monat später)', en: 'with permanent extension (one month later)' },
@@ -845,6 +869,10 @@ const MESSAGES_SRC = {
   'ustva.notCovered.prepayments': { de: 'Anzahlungen: Eine Rechnung zählt erst, wenn die Leistung endet (Soll) oder gezahlt wird (Ist), nicht schon bei einer Anzahlung davor.', en: 'Prepayments: an invoice counts only when the service ends (accrual) or is paid (cash), not at a prepayment before that.' },
   'ustva.notCovered.refunds': { de: 'Rückzahlungen an Kunden, Skonto und andere Minderungen des Entgelts, die nicht als Stornorechnung in kontor stehen.', en: 'Refunds to customers, discounts for early payment and other reductions of the price that are not a cancellation in kontor.' },
   'ustva.notCovered.corrections': { de: 'Berichtigung des Vorsteuerabzugs (§ 15a UStG), Vorsteuerausschluss und -aufteilung, private Nutzung und unentgeltliche Wertabgaben, unrichtig ausgewiesene Steuer (§ 14c UStG).', en: 'Correction of input tax (§ 15a UStG), excluded or split input tax, private use and gifts, wrongly shown tax (§ 14c UStG).' },
+  'ustva.notCovered.cashBases': {
+    de: 'Bei Ist-Versteuerung: Umsätze, für die der Kunde die Steuer schuldet (§ 13b Abs. 5 UStG, 60), und Umsätze mit Leistungsort im Ausland (45) ordnet kontor dem Zahlungseingang zu. Ob sie stattdessen in den Zeitraum der Leistung oder der Rechnung gehören, ist nicht geprüft; bitte mit der Steuerberatung klären.',
+    en: 'On the cash basis: kontor assigns supplies for which the customer owes the tax (§ 13b Abs. 5 UStG, 60) and supplies with a place of supply abroad (45) to the payment. Whether they belong to the period of the service or of the invoice instead is not verified; please check with your tax advisor.',
+  },
   'ustva.notCovered.extension': { de: 'Die Sondervorauszahlung bei Dauerfristverlängerung (39) und ihre Anrechnung.', en: 'The special prepayment for the permanent extension (39) and its set-off.' },
   'ustva.notCovered.otherCompanies': { de: 'Andere Firmen derselben Person: Die Voranmeldung ist eine für alle. Rechne ihre Werte von Hand dazu.', en: 'Other companies of the same person: there is one return for all. Add their values by hand.' },
   'ustva.notCovered.summaryReport': { de: 'Die Zusammenfassende Meldung (ZM) für innergemeinschaftliche Lieferungen und Leistungen: Sie ist eine eigene Meldung beim Bundeszentralamt für Steuern. kontor bereitet sie weiter unten auf dieser Seite vor.', en: 'The recapitulative statement (Zusammenfassende Meldung) for intra-community supplies and services: it is a separate report to the Federal Central Tax Office. kontor prepares it further down on this page.' },
@@ -906,10 +934,6 @@ const MESSAGES_SRC = {
   'zm.check.differs': {
     de: 'Die Leistungen der Meldung ({zm}) weichen von Kennzahl 21 der Voranmeldung ({ustva}) ab, Unterschied {difference}. Prüfe die Rechnungen und die Voranmeldung für dieses Quartal.',
     en: 'The services in the report ({zm}) differ from field 21 of the advance return ({ustva}), by {difference}. Check the invoices and the advance return for this quarter.',
-  },
-  'zm.check.cash': {
-    de: 'Bei Ist-Versteuerung zählt kontor Kennzahl 21 der Voranmeldung nach dem Zahlungseingang, die Meldung zählt nach der Leistung (§ 18a Abs. 8 UStG). Ein Unterschied kann deshalb an Rechnungen liegen, die noch nicht bezahlt sind.',
-    en: 'On the cash basis kontor counts field 21 of the advance return by the payment, while the report counts by the service (§ 18a Abs. 8 UStG). A difference can therefore come from invoices that are not paid yet.',
   },
   'zm.check.none': {
     de: 'In diesem Monat stehen keine Leistungen in der Meldung. Der Abgleich mit Kennzahl 21 gilt für das Quartal, dessen letzter Monat sie enthält.',
@@ -1029,7 +1053,11 @@ const MESSAGES_SRC = {
   'reports.kind.expense': { de: 'Ausgabe', en: 'Expense' },
   'exit.button': { de: 'Ordner als ZIP exportieren', en: 'Export the folder as a ZIP' },
   'exit.hint': { de: 'Eine Kopie aller Dateien und der Listen als CSV zum Mitnehmen. Der Ordner bleibt unverändert.', en: 'A copy of all files and the lists as CSV, to take away. The folder stays unchanged.' },
-  'exit.unsaved': { de: 'Es gibt Änderungen, die noch nicht gespeichert sind. Bitte zuerst speichern.', en: 'Some changes are not saved yet. Please save first.' },
+  'exit.unsaved': {
+    de: 'Einige Änderungen sind nicht im Ordner gespeichert (siehe links unten). Der Export enthält nur, was im Ordner steht.',
+    en: 'Some changes are not saved in the folder (see the bottom left). The export holds only what is in the folder.',
+  },
+  'exit.exportAnyway': { de: 'Ordner trotzdem exportieren, ohne diese Änderungen', en: 'Export the folder anyway, without these changes' },
   'exit.notReady': { de: 'Ohne geöffneten Ordner gibt es nichts zu exportieren.', en: 'There is no open folder to export.' },
   'exit.failed': { de: 'Der Export ist fehlgeschlagen: {reason}', en: 'The export failed: {reason}' },
   'exit.readme.intro': { de: 'Kopie des Ordners einer Firma aus kontor, Stand {date}. Sie ist vollständig und lässt sich ohne kontor lesen.', en: 'Copy of the folder of a company from kontor, as of {date}. It is complete and can be read without kontor.' },
@@ -1759,40 +1787,41 @@ const MESSAGES_SRC = {
   'start.failedTitle': { de: 'Das Unternehmen konnte nicht geöffnet werden', en: 'The company could not be opened' },
   'start.retry': { de: 'Erneut versuchen', en: 'Try again' },
   'start.open': { de: '„{name}“ öffnen', en: 'Open “{name}”' },
+  'start.busyTitle': { de: '„{name}“ ist in einem anderen Fenster geöffnet', en: '“{name}” is open in another window' },
+  'start.busyText': {
+    de: 'kontor arbeitet mit einem Unternehmen in nur einem Fenster zur Zeit, damit zum Beispiel keine Rechnungsnummer doppelt vergeben wird. Bitte im anderen Fenster weiterarbeiten oder das Unternehmen hier öffnen: Das andere Fenster speichert dann, was offen ist, und schließt es.',
+    en: 'kontor works with a company in one window at a time, so that, for example, no invoice number is given twice. Please go on in the other window, or open the company here: the other window then saves what is open and closes it.',
+  },
+  'start.takenOverTitle': { de: '„{name}“ wurde in einem anderen Fenster geöffnet', en: '“{name}” was opened in another window' },
+  'start.takenOverText': {
+    de: 'Was in diesem Fenster noch nicht gespeichert war, wurde vorher gesichert. Um hier weiterzuarbeiten, das Unternehmen hier wieder öffnen.',
+    en: 'What was not saved yet in this window was kept first. To go on working here, open the company here again.',
+  },
+  'start.openHere': { de: 'Hier öffnen', en: 'Open here' },
 
+  'toast.copyRejected': {
+    de: 'Eine Notfallkopie im Browser stammte nicht von diesem Ordner oder aus einer älteren kontor-Version. Sie wurde nicht übernommen und gelöscht.',
+    en: 'An emergency copy in the browser did not come from this folder or came from an older version of kontor. It was not used and was removed.',
+  },
   'toast.recovered': {
     de: 'Ungespeicherte Änderungen aus der letzten Sitzung wurden wiederhergestellt.',
     en: 'Unsaved changes from the last session were restored.',
   },
 
-  'toast.unreadableContacts': {
-    de: '{n} Kontaktdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} contact file(s) in the folder could not be read and are missing from the list.',
+  'toast.unreadable': {
+    de: '{n} Datei(en) im Ordner konnten nicht gelesen werden. Die Übersicht zeigt, welche.',
+    en: '{n} file(s) in the folder could not be read. The overview shows which.',
   },
-  'toast.unreadableQuoteStatuses': {
-    de: '{n} Entscheidungsdatei(en) zu Angeboten konnten nicht gelesen werden; die Entscheidungen fehlen in der Liste.',
-    en: '{n} decision file(s) on quotes could not be read; their decisions are missing from the list.',
+  'loadIssues.title': { de: '{n} Datei(en) im Ordner konnten nicht gelesen werden', en: '{n} file(s) in the folder could not be read' },
+  'loadIssues.text': {
+    de: 'Was darin steht, fehlt in den Listen, der Übersicht, den Auswertungen und den Steuerhilfen: Die Zahlen können unvollständig sein. Die Dateien bleiben unverändert im Ordner. Bis alle Dateien gelesen werden können, schreibt kontor keine tägliche Sicherung, damit die älteren, vollständigen Sicherungen erhalten bleiben.',
+    en: 'What they hold is missing from the lists, the overview, the reports and the tax aids: the figures may be incomplete. The files stay unchanged in the folder. Until every file can be read, kontor writes no daily backup, so that the older, complete backups are kept.',
   },
-  'toast.unreadablePayments': {
-    de: '{n} Zahlungsdatei(en) im Ordner konnten nicht gelesen werden; ihre Zahlungen fehlen in der Liste und im offenen Betrag.',
-    en: '{n} payment file(s) in the folder could not be read; their payments are missing from the list and from the open amount.',
+  'loadIssues.causes': {
+    de: 'Häufige Ursachen: Die Datei wird gerade synchronisiert, sie wurde von einer neueren kontor-Version auf einem anderen Gerät geschrieben, oder sie ist beschädigt. Nach dem Beheben die Seite neu laden.',
+    en: 'Common causes: the file is being synchronised right now, it was written by a newer version of kontor on another device, or it is damaged. Reload the page after fixing it.',
   },
-  'toast.unreadableDunnings': {
-    de: '{n} Mahnungsdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} dunning file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableDocuments': {
-    de: '{n} Dokumentdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} document file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableExpenses': {
-    de: '{n} Ausgabedatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} expense file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableItems': {
-    de: '{n} Artikeldatei(en) im Ordner konnten nicht gelesen werden und fehlen im Katalog.',
-    en: '{n} item file(s) in the folder could not be read and are missing from the catalogue.',
-  },
+  'loadIssues.files': { de: 'Betroffene Dateien', en: 'Affected files' },
 
   'crash.toast': { de: 'Ein Fehler ist aufgetreten. Ungespeicherte Änderungen wurden gesichert.', en: 'An error occurred. Unsaved changes were kept.' },
   'crash.title': { de: 'Dieser Bereich konnte nicht angezeigt werden.', en: 'This part could not be shown.' },

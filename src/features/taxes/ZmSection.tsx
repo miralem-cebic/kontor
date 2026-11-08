@@ -149,10 +149,7 @@ export function ZmSection() {
           ) : check.consistent ? (
             <p>{t('zm.check.ok', { amount: formatCents(check.zm, lang) })}</p>
           ) : (
-            <>
-              <p>{t('zm.check.differs', { zm: formatCents(check.zm, lang), ustva: formatCents(check.ustva, lang), difference: formatCents(check.difference, lang) })}</p>
-              {view.method === 'cash' && <p>{t('zm.check.cash')}</p>}
-            </>
+            <p>{t('zm.check.differs', { zm: formatCents(check.zm, lang), ustva: formatCents(check.ustva, lang), difference: formatCents(check.difference, lang) })}</p>
           )}
         </div>
       )}

@@ -27,7 +27,33 @@ const payments = [
 ];
 const common = { permanentExtension: false, expenses: [], invoices: [q1, q2], payments } as const;
 
+// #75: on the cash basis too, Kz 41 and Kz 21 follow § 18b UStG, not the payment. Read at https://dejure.org/gesetze/UStG/18b.html
+// (gesetze-im-internet.de did not answer on 8 November 2026). An intra-community supply of 3,000.00 € on 28 September,
+// invoiced on 2 October, and a service of 2,000.00 € to a business in Austria on 29 September; both paid in November.
+const euSupply = invoiceOf({ id: 'eu1', date: '2026-10-02', serviceEnd: '2026-09-28', treatment: 'intraCommunitySupply', country: 'FR' }, [{ net: 300_000 }]);
+const euService = invoiceOf({ id: 'eu2', date: '2026-09-29', treatment: 'reverseCharge', country: 'AT' }, [{ net: 200_000 }]);
+const euPayments = [paymentOf('pay5', 'eu1', '2026-11-10', 300_000), paymentOf('pay6', 'eu2', '2026-11-10', 200_000)];
+const eu = { method: 'cash', permanentExtension: false, expenses: [], invoices: [euSupply, euService], payments: euPayments } as const;
+// UNVERIFIED: Kz 60 and Kz 45 on the cash basis still follow the payment; § 13b Abs. 2 UStG says when the tax arises for the
+// recipient, not when the supplier declares the base, and the instructions of the form could not be read.
+
 export const scenarios: VatScenario[] = [
+  {
+    id: '04-cash-eu-q3',
+    title: 'cash basis, Q3: the EU service by the day it was performed, the supply not yet (invoiced in October)',
+    reasoning: 'Kz 21 in the period of the service (§ 18b Satz 3), Kz 41 in the period of the invoice (§ 18b Satz 2); the payments of November do not matter.',
+    sources: ['https://dejure.org/gesetze/UStG/18b.html (Satz 2 and 3)'],
+    input: { ...eu, period: Q3 },
+    expected: { euServices: { base: 200_000, shown: true }, intraCommunitySupply: { base: 0 } },
+  },
+  {
+    id: '04-cash-eu-q4',
+    title: 'cash basis, Q4: the supply by its invoice of 2 October; the EU service is not counted again',
+    reasoning: 'The invoice of 2 October lies before the end of the month after the supply (31 October), so it decides (§ 18b Satz 2).',
+    sources: ['https://dejure.org/gesetze/UStG/18b.html (Satz 2)'],
+    input: { ...eu, period: Q4 },
+    expected: { intraCommunitySupply: { base: 300_000, shown: true }, euServices: { base: 0 } },
+  },
   {
     id: '04-accrual-q3',
     title: 'accrual basis, Q3: both invoices count in full, whatever was paid',

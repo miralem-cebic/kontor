@@ -23,6 +23,7 @@ const NOT_COVERED: readonly MessageKey[] = [
   'ustva.notCovered.prepayments',
   'ustva.notCovered.refunds',
   'ustva.notCovered.corrections',
+  'ustva.notCovered.cashBases',
   'ustva.notCovered.extension',
   'ustva.notCovered.otherCompanies',
   'ustva.notCovered.summaryReport',

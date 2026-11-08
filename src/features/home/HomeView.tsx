@@ -6,6 +6,7 @@ import type { LimitWarning } from '../../domain/smallBusiness';
 import type { Cents } from '../../domain/money';
 import { useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
+import { LoadIssuesNotice } from '../shell/LoadIssuesNotice';
 
 // The overview ("Wo stehe ich?"): what came in and went out in this calendar year on the cash basis, what is open, the
 // months, and the small business limits. Every figure is an estimate for orientation (the note says so).
@@ -64,6 +65,7 @@ export function HomeView() {
         <h1>{t('home.title')}</h1>
       </header>
       <p className="lead">{asOf}</p>
+      <LoadIssuesNotice />
 
       {warning && (
         <div className="note warn" role="status" aria-label={t('overview.limitsTitle')}>

@@ -56,14 +56,15 @@ describe('buildZm', () => {
     expect(view?.zm.problems).toEqual([{ invoiceId: expect.any(String), number: 'RE-2026-0009', vatId: '', code: 'vatIdMissing' }]);
   });
 
-  it('cash basis: Kz 21 of the advance return follows the payment, so the check shows the difference to the report', () => {
+  it('cash basis: Kz 21 of the advance return counts by the service as the report does (§ 18b Satz 3 UStG, #75), paid or not', () => {
     const cash = sampleCompany({ tax: { ...sampleProfile().tax, vat: { kind: 'regular', method: 'cash', period: 'quarterly', permanentExtension: false } } });
     const original = issuedService();
     const unpaid = buildZm(cash, docs(original), none, none, Q4);
     expect(unpaid?.zm.total.service).toBe(136_250);
-    expect(unpaid?.check).toEqual({ zm: 136_250, ustva: 0, difference: 136_250, consistent: false });
+    expect(unpaid?.check).toEqual({ zm: 136_250, ustva: 136_250, difference: 0, consistent: true });
     expect(unpaid?.method).toBe('cash');
-    const paid = makePayment(original.id, { date: '2026-11-03', amount: cents(136_250), accountId: ACCOUNT_ID, note: '' });
+    // a payment in the next quarter changes neither
+    const paid = makePayment(original.id, { date: '2027-01-12', amount: cents(136_250), accountId: ACCOUNT_ID, note: '' });
     expect(buildZm(cash, docs(original), new Map([[paid.id, paid]]), none, Q4)?.check?.consistent).toBe(true);
   });
 

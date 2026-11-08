@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
+import { classifyError } from '../../src/data/repository';
 import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
@@ -576,5 +577,46 @@ describe('listFolder', () => {
     const files = must(await repo.listFolder());
     expect(files.map((f) => f.path)).toEqual(['belege/2026/x.pdf', 'company.json']);
     expect(new TextDecoder().decode(files[0]!.data)).toBe('%PDF-1.4 Beleg');
+  });
+});
+
+describe('classifyError', () => {
+  it('a file held by another program (Excel, a virus scanner, the sync client) is locked, a reason to try again (#94)', () => {
+    for (const name of ['NoModificationAllowedError', 'NotReadableError', 'InvalidStateError']) expect(classifyError(new DOMException('in use', name))).toBe('locked');
+    expect(classifyError(new DOMException('denied', 'NotAllowedError'))).toBe('permission');
+    expect(classifyError(new Error('boom'))).toBe('other');
+  });
+});
+
+describe('the key of the emergency copy (#69)', () => {
+  const stored = async () => (await (await (await root.getDirectoryHandle('.kontor')).getFileHandle('emergency-copy.key')).getFile()).text();
+
+  it('is made on first use in .kontor/emergency-copy.key, and read back after that, also by another window', async () => {
+    const key = must(await repo.copyKey());
+    expect(key).toHaveLength(32);
+    expect((await stored()).trim()).toMatch(/^[0-9a-f]{64}$/);
+    expect(must(await repo.copyKey())).toEqual(key);
+    expect(must(await new FsRepository(root.asHandle()).copyKey())).toEqual(key);
+  });
+
+  it('two folders get different keys', async () => {
+    const other = new FsRepository(new MemDir('y').asHandle());
+    expect(must(await other.copyKey())).not.toEqual(must(await repo.copyKey()));
+  });
+
+  it('a damaged key file is replaced by a new key', async () => {
+    const dir = await root.getDirectoryHandle('.kontor', { create: true });
+    await writeFile(dir.asHandle(), 'emergency-copy.key', 'not a key');
+    const key = must(await repo.copyKey());
+    expect(key).toHaveLength(32);
+    expect((await stored()).trim()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('is hidden: an otherwise empty folder stays empty, and the exit archive leaves it out', async () => {
+    const empty = new FsRepository(new MemDir('x').asHandle());
+    must(await empty.copyKey());
+    expect(must(await empty.isEmpty())).toBe(true);
+    must(await repo.copyKey());
+    expect(must(await repo.listFolder()).some((f) => f.path.startsWith('.kontor'))).toBe(false);
   });
 });

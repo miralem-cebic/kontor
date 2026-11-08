@@ -92,6 +92,7 @@ const SESSION_ERROR_KEY: Record<SessionError, MessageKey> = {
   permission: 'error.permission',
   notFound: 'error.notFound',
   quota: 'error.quota',
+  locked: 'error.locked',
   newerSchema: 'error.newerSchema',
   conflict: 'error.conflict',
   invalid: 'error.invalid',
@@ -231,6 +232,7 @@ export function issueFailureText(f: IssueFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -250,6 +252,7 @@ export function finalizeFailureText(f: IssueFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -269,6 +272,7 @@ export function cancelFailureText(f: IssueFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -303,6 +307,7 @@ export function paymentFailureText(f: PaymentFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -350,6 +355,7 @@ export function quoteDecisionFailureText(f: 'notReady' | 'date' | StorageErrorKi
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -374,6 +380,7 @@ export function dunningFailureText(f: DunningFailureKind): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':
@@ -396,6 +403,7 @@ export function sendFailureText(f: SendFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':

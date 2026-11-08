@@ -6,24 +6,26 @@ import { toSafeFileName } from '../data/fs/fileNames';
 import { ensureReadWrite } from '../data/fs/permission';
 import { StorageDir, storageHandleStore } from '../data/fs/storageFs';
 import { checkSupport } from '../data/fs/support';
+import { acquireCompanyLock, waitForClosed, type ClosedMessage, type CompanyLock } from './companyLock';
 import type { CompanyId } from '../data/ids';
 import { dailyBackup } from '../data/maintenance';
-import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
+import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayout, sameJson } from '../data/merge';
 import { migrate } from '../data/migrations';
-import { emergencyKey, Persister } from '../data/persister';
+import { emergencyKey, legacyEmergencyKey, Persister, readEmergencyCopy } from '../data/persister';
 import { classifyError, type Asset, type Repository, type StorageErrorKind } from '../data/repository';
 import { makeCompany } from '../data/schema';
 import type { CompanyFile } from '../data/types';
 import { isRecord } from '../data/validate';
 import { t } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
-import { applyRecovered, loadCompany, resetApp, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
+import { applyRecovered, loadCompany, resetApp, setLoadIssues, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
 import { setLastCompany, usePrefs } from '../store/prefs';
 
 // Startup flow: check the browser → known company folders → permission → load → app.
 // "Add company" runs the setup assistant while the current company stays open until the new one is ready.
 
-export type Phase = 'checking' | 'unsupported' | 'setup' | 'reconnect' | 'loading' | 'failed' | 'ready';
+/** `busy`: the company is open in another window of this browser, which holds its lock (#97) */
+export type Phase = 'checking' | 'unsupported' | 'setup' | 'reconnect' | 'loading' | 'busy' | 'failed' | 'ready';
 
 /** Why opening or setting up a folder failed */
 export type SessionError = StorageErrorKind | 'otherCompany' | 'copiedCompany' | 'noFolder';
@@ -42,6 +44,8 @@ interface SessionState {
   error: SessionError | null;
   /** The setup assistant was opened from an open company ("Add company") and can be cancelled */
   setupCancelable: boolean;
+  /** In `busy`: true when this window had the company open and another window took it over */
+  takenOver: boolean;
 }
 
 export const useSession = create<SessionState>()(() => ({
@@ -50,6 +54,7 @@ export const useSession = create<SessionState>()(() => ({
   currentId: null,
   error: null,
   setupCancelable: false,
+  takenOver: false,
 }));
 const set = useSession.setState;
 
@@ -70,6 +75,14 @@ export function currentRepository(): FsRepository | null {
   return repo;
 }
 let persister: Persister | null = null;
+/** The folder of the open company, to ask for its permission again when a write was refused */
+let openHandle: FileSystemDirectoryHandle | null = null;
+/** The lock of the open company: no other window of this browser opens it meanwhile (#97) */
+let companyLock: CompanyLock | null = null;
+/** Windows of kontor tell each other here that they closed a company they had open (companyLock.ts) */
+const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('kontor.session') : null;
+/** How long a window that takes a company over waits for the other window to save and close it */
+const TAKE_OVER_WAIT_MS = 3_000;
 let entries: CompanyEntry[] = [];
 let handleStore: HandleStore | null = null;
 /** The folder chosen in the setup assistant; nothing is written there before "Finish" */
@@ -154,20 +167,74 @@ async function closeCurrent() {
   persister?.stop();
   persister = null;
   repo = null;
+  openHandle = null;
   resetApp();
+  releaseLock();
 }
 
-async function load(entry: CompanyEntry) {
+function releaseLock() {
+  companyLock?.release();
+  companyLock = null;
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The lock of a company for this window, or null when another window has it open. A lock of a window that was just
+ * reloaded or closed can take a moment to go away, so a refused lock is asked for a few times. With `takeOver`, the
+ * lock is taken from the other window, and the folder is read only after that window saved and closed the company.
+ */
+async function lockCompany(id: CompanyId, takeOver: boolean): Promise<CompanyLock | null> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  const onLost = () => void lostToAnotherWindow(id);
+  // taking over needs no patience: the lock is taken anyway
+  for (let attempt = 0; attempt < (takeOver ? 1 : 4); attempt++) {
+    if (attempt > 0) await pause(250);
+    const free = await acquireCompanyLock(locks, id, { steal: false, onLost });
+    if (free) return free;
+  }
+  if (!takeOver) return null;
+  const taken = await acquireCompanyLock(locks, id, { steal: true, onLost });
+  if (!(await waitForClosed(channel, id, TAKE_OVER_WAIT_MS))) console.warn('The other window did not say that it closed the company');
+  return taken;
+}
+
+/** Another window took the open company over: what is pending is written, the company is closed, and that window is told */
+async function lostToAnotherWindow(id: CompanyId) {
+  companyLock = null;
+  if (useSession.getState().currentId !== id) return;
+  await closeCurrent();
+  set({ phase: 'busy', takenOver: true, error: null });
+  channel?.postMessage({ closed: id } satisfies ClosedMessage);
+}
+
+async function load(entry: CompanyEntry, takeOver = false) {
   set({ phase: 'loading', error: null, currentId: entry.id });
   const r = new FsRepository(entry.handle);
   const res = await r.readCompany();
   if (!res.ok) return set({ phase: 'failed', error: res.error.kind });
   if (res.value.id !== entry.id) return set({ phase: 'failed', error: 'otherCompany' });
-  await openLoaded(r, entry, res.value);
+  await openLoaded(r, entry, res.value, takeOver);
 }
 
-/** Opens a company whose company.json was read: its records, the persister, a recovered emergency copy, the logo, the backup */
-async function openLoaded(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
+/** Opens a company whose company.json was read, once this window holds its lock; else it shows where it is open (#97) */
+async function openLoaded(r: FsRepository, entry: CompanyEntry, company: CompanyFile, takeOver = false) {
+  releaseLock();
+  const lock = await lockCompany(company.id, takeOver);
+  if (!lock) return set({ phase: 'busy', takenOver: false, currentId: company.id, error: null });
+  companyLock = lock;
+  // the other window wrote what was pending before it gave the company up: company.json is read again after that
+  const current = takeOver ? await r.readCompany() : null;
+  if (current && !current.ok) {
+    releaseLock();
+    return set({ phase: 'failed', error: current.error.kind, currentId: company.id });
+  }
+  await openRecords(r, entry, current?.value ?? company);
+  if (useSession.getState().phase !== 'ready') releaseLock();
+}
+
+/** Opens the company: its records, the persister, a recovered emergency copy, the logo, the backup */
+async function openRecords(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
   const loadedContacts = await r.loadContacts();
   if (!loadedContacts.ok) return set({ phase: 'failed', error: loadedContacts.error.kind, currentId: company.id });
   const loadedItems = await r.loadItems();
@@ -195,30 +262,26 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     payouts: loadedPayouts.value.payouts,
   };
   repo = r;
+  openHandle = entry.handle;
   loadCompany(company, records);
-  persister = new Persister(r);
+  // the secret of the folder that signs the emergency copy; without it no copy is kept, and the sidebar says so
+  const copyKey = await r.copyKey();
+  if (!copyKey.ok) console.warn('No key for the emergency copy', copyKey.error.cause);
+  persister = new Persister(r, copyKey.ok ? copyKey.value : null);
   persister.start();
   // after the persister started with the file state as saved, so that it writes the recovered changes
-  const recovered = recoverEmergencyCopy(company, records);
+  const { recovered, rejected } = recoverEmergencyCopy(company, records, copyKey.ok ? copyKey.value : null);
   if (recovered) applyRecovered(recovered.company, recovered);
-  const unreadable = [
-    { issues: loadedContacts.value.issues, toast: 'toast.unreadableContacts' },
-    { issues: loadedItems.value.issues, toast: 'toast.unreadableItems' },
-    { issues: loadedDocuments.value.issues, toast: 'toast.unreadableDocuments' },
-    { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
-    { issues: loadedDunnings.value.issues, toast: 'toast.unreadableDunnings' },
-    { issues: loadedQuoteStatuses.value.issues, toast: 'toast.unreadableQuoteStatuses' },
-    { issues: loadedExpenses.value.issues, toast: 'toast.unreadableExpenses' },
-    { issues: loadedPayouts.value.issues, toast: 'payouts.unreadable' },
-  ] as const;
-  for (const { issues, toast } of unreadable) {
-    if (!issues.length) continue;
-    console.warn('Some files could not be read', issues);
-    showToast(t(toast, { n: issues.length }));
-  }
+  // the files that could not be read stay listed on the overview, the reports and the taxes (LoadIssuesNotice), since
+  // their records are missing from every figure; the toast only points there, in one message with the recovery (#96)
+  const unreadable = [loadedContacts, loadedItems, loadedDocuments, loadedPayments, loadedDunnings, loadedQuoteStatuses, loadedExpenses, loadedPayouts].flatMap((l) => l.value.issues);
+  setLoadIssues(unreadable);
+  if (unreadable.length) console.warn('Some files could not be read', unreadable);
+  const told = [recovered ? t('toast.recovered') : '', rejected ? t('toast.copyRejected') : '', unreadable.length ? t('toast.unreadable', { n: unreadable.length }) : ''].filter(Boolean);
+  if (told.length) showToast(told.join(' '));
   setLastCompany(company.id);
   if (entry.name !== company.name) await rememberCompany(entry.handle, company);
-  set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false });
+  set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false, takenOver: false });
   void loadLogo();
   void maintenance(r);
 }
@@ -251,40 +314,64 @@ function recoverRecords<T extends { id: string }>(saved: unknown, loaded: readon
   });
 }
 
-/**
- * Unsaved changes from an earlier session (the folder was not reachable then). The copy is data like any other
- * file: it is used only if it passes the same checks, belongs to this company and is newer.
- */
-function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ company: CompanyFile } & CompanyRecords) | null {
-  let copy: unknown;
+/** Removes a stored item; true when there was one */
+function removeStored(key: string): boolean {
   try {
-    const raw = localStorage.getItem(emergencyKey(company.id));
-    if (!raw) return null;
-    copy = JSON.parse(raw);
+    const had = localStorage.getItem(key) !== null;
+    localStorage.removeItem(key);
+    return had;
   } catch {
-    return null;
+    return false;
   }
-  if (!isRecord(copy)) return null;
+}
+
+/**
+ * Unsaved changes from an earlier session (the folder was not reachable then). Every page under file:// can read and
+ * write the browser's storage (#69), so the copy is used only when it carries the signature of the folder's key, and
+ * then like any other file: only what passes the same checks, belongs to this company and is newer. An unsigned or
+ * forged copy, and the unsigned copies of earlier versions, are removed and reported (`rejected`). Issued documents
+ * are never taken from a copy, nor payments, dunnings and decisions on quotes: they are written to the folder before
+ * they reach the store, so a copy has nothing of them that the folder lacks.
+ */
+export function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords, key: Uint8Array | null): { recovered: ({ company: CompanyFile } & CompanyRecords) | null; rejected: boolean } {
+  const legacy = removeStored(legacyEmergencyKey(company.id));
+  const none = { recovered: null, rejected: legacy };
+  const raw = orNull(() => localStorage.getItem(emergencyKey(company.id)));
+  // without the key the copy cannot be checked now: it stays for a later start
+  if (!raw || !key) return none;
+  const read = readEmergencyCopy(raw, key);
+  if (!read.ok) {
+    console.warn('An emergency copy without the signature of this folder was removed');
+    removeStored(emergencyKey(company.id));
+    return { recovered: null, rejected: true };
+  }
+  const copy = read.copy;
+  if (!isRecord(copy)) return none;
   const savedCompany = copy['company'] ? orNull(() => migrate('company', copy['company'])) : null;
   const nextCompany = savedCompany?.id === company.id ? mergeCompany(company, savedCompany) : company;
   const contacts = recoverRecords(copy['contacts'], loaded.contacts, (raw) => migrate('contact', raw), mergeContact);
   const items = recoverRecords(copy['items'], loaded.items, (raw) => migrate('item', raw), mergeItem);
-  const documents = recoverRecords(copy['documents'], loaded.documents, (raw) => migrate('document', raw), mergeDocument);
-  const payments = recoverRecords(copy['payments'], loaded.payments, (raw) => migrate('payment', raw), mergePayment);
-  // a dunning is never changed: the copy's version of one that the folder holds is not used
-  const dunnings = recoverRecords(copy['dunnings'], loaded.dunnings, (raw) => migrate('dunning', raw), (local) => local);
-  const quoteStatuses = recoverRecords(copy['quoteStatuses'], loaded.quoteStatuses, (raw) => migrate('quoteStatus', raw), mergeQuoteStatus);
+  const draft = (raw: unknown) => {
+    const document = migrate('document', raw);
+    if (document.issued) throw new Error('An issued document is never taken from the emergency copy');
+    return document;
+  };
+  const documents = recoverRecords(copy['documents'], loaded.documents, draft, mergeDocument);
   const expenses = recoverRecords(copy['expenses'], loaded.expenses, (raw) => migrate('expense', raw), mergeExpense);
   const payouts = recoverRecords(copy['payouts'], loaded.payouts, (raw) => migrate('payout', raw), mergePayout);
-  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length && !expenses.length && !payouts.length) return null;
-  showToast(t('toast.recovered'));
-  return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts };
+  if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !expenses.length && !payouts.length) return none;
+  return { recovered: { company: nextCompany, contacts, items, documents, payments: [], dunnings: [], quoteStatuses: [], expenses, payouts }, rejected: legacy };
 }
 
-/** Daily backup of the state in the store. Errors here must not disturb the work. */
+/**
+ * Daily backup of the state in the store. Errors here must not disturb the work. While files of the folder cannot be
+ * read, the state is known to be incomplete: no backup is written, so that the older, complete ones are not pushed out
+ * of the 14 that are kept (#96). The notice of the unreadable files says so.
+ */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts } = useApp.getState();
+  const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts, loadIssues } = useApp.getState();
   if (!company) return;
+  if (loadIssues.length) return console.warn('No daily backup: some files of the folder could not be read');
   const res = await dailyBackup(r, {
     company,
     contacts: [...contacts.values()],
@@ -299,13 +386,16 @@ async function maintenance(r: FsRepository) {
   if (!res.ok) console.warn('Backup of the company folder failed', res.error.cause);
 }
 
-/** User gesture: renew the permission for the company waiting in 'reconnect' or 'failed' */
-export async function reconnect() {
+/**
+ * User gesture: renew the permission for the company waiting in 'reconnect' or 'failed'. In 'busy', `takeOver` opens
+ * it here and closes it in the other window (#97).
+ */
+export async function reconnect(takeOver = false) {
   const id = useSession.getState().currentId;
   const entry = entries.find((e) => e.id === id);
   if (!entry) return startSetup();
   try {
-    if (await ensureReadWrite(entry.handle, true)) await load(entry);
+    if (await ensureReadWrite(entry.handle, true)) await load(entry, takeOver);
   } catch (e) {
     set({ phase: 'failed', error: classifyError(e) });
   }
@@ -449,14 +539,31 @@ useApp.subscribe((s, prev) => {
   if (entry && entry.name !== c.name) void rememberCompany(entry.handle, c);
 });
 
+/** User gesture: "Try again" in the sidebar. A folder that refused access is asked for the permission again first. */
 export function retrySave() {
-  return persister?.retry();
+  const handle = openHandle;
+  return persister?.retry(handle ? () => ensureReadWrite(handle, true) : undefined);
+}
+
+/**
+ * User gesture: drops a change the folder refused for good (#95) and reads the company from the folder again, so that
+ * the views show what the folder holds. Other refused changes stay in the emergency copy and come back after loading.
+ */
+export async function discardUnsaved(key: string) {
+  const entry = entries.find((e) => e.id === useSession.getState().currentId);
+  if (!persister || !entry) return;
+  persister.discard(key);
+  await closeCurrent();
+  await load(entry);
 }
 
 /** The folder of the open company, for the actions that need it beyond loading and saving (issuing, issued PDFs) */
 export const openRepository = (): Repository | null => repo;
 
-/** Writes what is pending now; true when everything is saved */
+/**
+ * Writes what is pending now; true when everything that can be written was. A change the folder refused for good
+ * (`unsaved` in the store) does not count: it must not stop issuing, payments or the export of other records (#95).
+ */
 export async function flushWrites(): Promise<boolean> {
   await persister?.flush();
   return useApp.getState().save.state === 'saved';

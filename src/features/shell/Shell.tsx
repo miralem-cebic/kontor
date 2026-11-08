@@ -19,6 +19,7 @@ import { ReportsView } from '../reports/ReportsView';
 import { SettingsView } from '../settings/SettingsView';
 import { TaxesView } from '../taxes/TaxesView';
 import { CompanySwitcher } from './CompanySwitcher';
+import { UnsavedChanges } from './UnsavedChanges';
 
 // The app frame: navigation on the left, the selected area on the right.
 // Areas that come in later phases are listed, but disabled.
@@ -86,6 +87,7 @@ export function Shell() {
           </p>
           <div className="sp" />
           <SaveStatus />
+          <UnsavedChanges />
         </nav>
       </ErrorBoundary>
       <main className="main">

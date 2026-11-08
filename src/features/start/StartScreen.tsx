@@ -4,7 +4,7 @@ import { LanguageSelect } from '../../components/LanguageSelect';
 import { t } from '../../i18n';
 import { errorText } from '../../lib/labels';
 
-/** Screens before a company is open: loading, unsupported browser, permission needed, opening failed. */
+/** Screens before a company is open: loading, unsupported browser, permission needed, open in another window, opening failed. */
 export function StartScreen() {
   const s = useSession();
   const current = s.companies.find((c) => c.id === s.currentId);
@@ -38,6 +38,15 @@ export function StartScreen() {
             </button>
           </>
         )}
+        {s.phase === 'busy' && (
+          <>
+            <h1>{t(s.takenOver ? 'start.takenOverTitle' : 'start.busyTitle', { name: current?.name ?? '' })}</h1>
+            <p className="onb-text">{t(s.takenOver ? 'start.takenOverText' : 'start.busyText')}</p>
+            <button type="button" className="btn primary lg" onClick={() => void reconnect(true)} autoFocus>
+              {t('start.openHere')}
+            </button>
+          </>
+        )}
         {s.phase === 'failed' && (
           <>
             <h1>{t('start.failedTitle')}</h1>
@@ -49,7 +58,7 @@ export function StartScreen() {
             </button>
           </>
         )}
-        {(s.phase === 'reconnect' || s.phase === 'failed') && (
+        {(s.phase === 'reconnect' || s.phase === 'failed' || s.phase === 'busy') && (
           <div className="onb-actions">
             {others.map((c) => (
               <button key={c.id} type="button" className="btn lg" onClick={() => void openCompany(c.id)}>

@@ -50,7 +50,7 @@ test('a change the folder refuses for good does not stop the work, and can be di
   await page.getByRole('group', { name: /^Die Änderung an Kontakt „Kunde AG“ verwerfen/ }).getByRole('button', { name: 'Ja, verwerfen' }).click();
   await expect(page.getByRole('heading', { name: 'Übersicht' })).toBeVisible();
   await expect(unsaved).toHaveCount(0);
-  await expect(page.getByRole('status').filter({ hasText: '1 Kontaktdatei(en) im Ordner konnten nicht gelesen werden' })).toBeVisible();
+  await expect(page.getByRole('status', { name: '1 Datei(en) im Ordner konnten nicht gelesen werden' })).toContainText('contacts/');
   // the folder still holds the newer file, untouched
   expect(JSON.parse((await readFolders(page))[contactPath!]!)).toMatchObject({ schemaVersion: 999, name: 'Kunde GmbH' });
   expect(errors).toEqual([]);

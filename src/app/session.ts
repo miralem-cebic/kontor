@@ -17,7 +17,7 @@ import type { CompanyFile } from '../data/types';
 import { isRecord } from '../data/validate';
 import { t } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
-import { applyRecovered, loadCompany, resetApp, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
+import { applyRecovered, loadCompany, resetApp, setLoadIssues, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
 import { setLastCompany, usePrefs } from '../store/prefs';
 
 // Startup flow: check the browser → known company folders → permission → load → app.
@@ -205,21 +205,13 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
   // after the persister started with the file state as saved, so that it writes the recovered changes
   const recovered = recoverEmergencyCopy(company, records);
   if (recovered) applyRecovered(recovered.company, recovered);
-  const unreadable = [
-    { issues: loadedContacts.value.issues, toast: 'toast.unreadableContacts' },
-    { issues: loadedItems.value.issues, toast: 'toast.unreadableItems' },
-    { issues: loadedDocuments.value.issues, toast: 'toast.unreadableDocuments' },
-    { issues: loadedPayments.value.issues, toast: 'toast.unreadablePayments' },
-    { issues: loadedDunnings.value.issues, toast: 'toast.unreadableDunnings' },
-    { issues: loadedQuoteStatuses.value.issues, toast: 'toast.unreadableQuoteStatuses' },
-    { issues: loadedExpenses.value.issues, toast: 'toast.unreadableExpenses' },
-    { issues: loadedPayouts.value.issues, toast: 'payouts.unreadable' },
-  ] as const;
-  for (const { issues, toast } of unreadable) {
-    if (!issues.length) continue;
-    console.warn('Some files could not be read', issues);
-    showToast(t(toast, { n: issues.length }));
-  }
+  // the files that could not be read stay listed on the overview, the reports and the taxes (LoadIssuesNotice), since
+  // their records are missing from every figure; the toast only points there, in one message with the recovery (#96)
+  const unreadable = [loadedContacts, loadedItems, loadedDocuments, loadedPayments, loadedDunnings, loadedQuoteStatuses, loadedExpenses, loadedPayouts].flatMap((l) => l.value.issues);
+  setLoadIssues(unreadable);
+  if (unreadable.length) console.warn('Some files could not be read', unreadable);
+  const told = [recovered ? t('toast.recovered') : '', unreadable.length ? t('toast.unreadable', { n: unreadable.length }) : ''].filter(Boolean);
+  if (told.length) showToast(told.join(' '));
   setLastCompany(company.id);
   if (entry.name !== company.name) await rememberCompany(entry.handle, company);
   set({ phase: 'ready', currentId: company.id, error: null, setupCancelable: false });
@@ -281,14 +273,18 @@ function recoverEmergencyCopy(company: CompanyFile, loaded: CompanyRecords): ({ 
   const expenses = recoverRecords(copy['expenses'], loaded.expenses, (raw) => migrate('expense', raw), mergeExpense);
   const payouts = recoverRecords(copy['payouts'], loaded.payouts, (raw) => migrate('payout', raw), mergePayout);
   if (sameJson(nextCompany, company) && !contacts.length && !items.length && !documents.length && !payments.length && !dunnings.length && !quoteStatuses.length && !expenses.length && !payouts.length) return null;
-  showToast(t('toast.recovered'));
   return { company: nextCompany, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts };
 }
 
-/** Daily backup of the state in the store. Errors here must not disturb the work. */
+/**
+ * Daily backup of the state in the store. Errors here must not disturb the work. While files of the folder cannot be
+ * read, the state is known to be incomplete: no backup is written, so that the older, complete ones are not pushed out
+ * of the 14 that are kept (#96). The notice of the unreadable files says so.
+ */
 async function maintenance(r: FsRepository) {
-  const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts } = useApp.getState();
+  const { company, contacts, items, documents, payments, dunnings, quoteStatuses, expenses, payouts, loadIssues } = useApp.getState();
   if (!company) return;
+  if (loadIssues.length) return console.warn('No daily backup: some files of the folder could not be read');
   const res = await dailyBackup(r, {
     company,
     contacts: [...contacts.values()],

@@ -10,6 +10,7 @@ import { formatCents, type Cents } from '../../domain/money';
 import { tabIndexForKey } from '../../lib/tabs';
 import { useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
+import { LoadIssuesNotice } from '../shell/LoadIssuesNotice';
 
 // Reports (Auswertungen, F11): the income per customer, the expenses per category, the open items and the year against
 // the year before, and a search over all records. Every figure is an estimate for orientation (the note says so); each
@@ -84,6 +85,7 @@ export function ReportsView() {
         </button>
       </header>
 
+      <LoadIssuesNotice />
       <GlobalSearch />
 
       <div className="list-tools report-tools">

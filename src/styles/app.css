@@ -75,6 +75,9 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backgrou
 .note{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:var(--r);background:var(--info-soft);color:var(--text);font-size:13px;line-height:1.5}
 .note p{margin:0}
 .note.warn{background:var(--warn-soft);border-left:3px solid var(--warn)}
+.load-issues p{margin:0 0 6px}
+.load-issues ul{margin:6px 0 0;padding-left:18px}
+.load-issues code{overflow-wrap:anywhere}
 .f-row{display:flex;gap:12px;flex-wrap:wrap}
 .f-row>.field{flex:1 1 180px}
 .f-row>.w-postal{flex:0 1 110px}

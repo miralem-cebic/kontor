@@ -9,7 +9,7 @@ import type { ItemProfile } from '../domain/item';
 import type { QuoteContent } from '../domain/quote';
 import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type PayoutId, type QuoteStatusId } from '../data/ids';
 import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
-import type { StorageErrorKind } from '../data/repository';
+import type { LoadIssue, StorageErrorKind } from '../data/repository';
 import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makePayout, makeQuote, nowIso } from '../data/schema';
 import type {
   BankAccount,
@@ -81,10 +81,12 @@ export interface AppState {
   unsaved: readonly UnsavedWrite[];
   /** The browser could not keep the emergency copy of the unsaved changes (its storage is full or blocked) */
   emergencyCopyFailed: boolean;
+  /** Files of the folder that could not be read when the company was opened: what they hold is missing everywhere */
+  loadIssues: readonly LoadIssue[];
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false, toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false, loadIssues: [], toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -515,6 +517,7 @@ export function setLogoUrl(url: string | null) {
 
 export const setSaveStatus = (save: SaveStatus) => set({ save });
 export const setUnsaved = (unsaved: readonly UnsavedWrite[]) => set({ unsaved });
+export const setLoadIssues = (loadIssues: readonly LoadIssue[]) => set({ loadIssues });
 export const setEmergencyCopyFailed = (emergencyCopyFailed: boolean) => {
   if (get().emergencyCopyFailed !== emergencyCopyFailed) set({ emergencyCopyFailed });
 };

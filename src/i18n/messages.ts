@@ -616,10 +616,6 @@ const MESSAGES_SRC = {
     de: 'Die Auszahlung ist gespeichert, aber der Eintrag im Protokoll konnte nicht geschrieben werden.',
     en: 'The payout is saved, but the entry in the audit log could not be written.',
   },
-  'payouts.unreadable': {
-    de: '{n} Auszahlungsdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} payout file(s) in the folder could not be read and are missing from the list.',
-  },
   'payouts.problemPayerRemoved': { de: 'Dieser Kontakt ist gelöscht oder kein Kunde. Bitte einen anderen Zahler wählen.', en: 'This contact is deleted or no customer. Please choose another payer.' },
   'payouts.problemPayerVatId': {
     de: 'Dafür braucht der Zahler eine gültige USt-IdNr. eines anderen EU-Staats (sie wird für die Zusammenfassende Meldung gebraucht). Bitte im Kontakt ergänzen.',
@@ -1794,34 +1790,20 @@ const MESSAGES_SRC = {
     en: 'Unsaved changes from the last session were restored.',
   },
 
-  'toast.unreadableContacts': {
-    de: '{n} Kontaktdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} contact file(s) in the folder could not be read and are missing from the list.',
+  'toast.unreadable': {
+    de: '{n} Datei(en) im Ordner konnten nicht gelesen werden. Die Übersicht zeigt, welche.',
+    en: '{n} file(s) in the folder could not be read. The overview shows which.',
   },
-  'toast.unreadableQuoteStatuses': {
-    de: '{n} Entscheidungsdatei(en) zu Angeboten konnten nicht gelesen werden; die Entscheidungen fehlen in der Liste.',
-    en: '{n} decision file(s) on quotes could not be read; their decisions are missing from the list.',
+  'loadIssues.title': { de: '{n} Datei(en) im Ordner konnten nicht gelesen werden', en: '{n} file(s) in the folder could not be read' },
+  'loadIssues.text': {
+    de: 'Was darin steht, fehlt in den Listen, der Übersicht, den Auswertungen und den Steuerhilfen: Die Zahlen können unvollständig sein. Die Dateien bleiben unverändert im Ordner. Bis alle Dateien gelesen werden können, schreibt kontor keine tägliche Sicherung, damit die älteren, vollständigen Sicherungen erhalten bleiben.',
+    en: 'What they hold is missing from the lists, the overview, the reports and the tax aids: the figures may be incomplete. The files stay unchanged in the folder. Until every file can be read, kontor writes no daily backup, so that the older, complete backups are kept.',
   },
-  'toast.unreadablePayments': {
-    de: '{n} Zahlungsdatei(en) im Ordner konnten nicht gelesen werden; ihre Zahlungen fehlen in der Liste und im offenen Betrag.',
-    en: '{n} payment file(s) in the folder could not be read; their payments are missing from the list and from the open amount.',
+  'loadIssues.causes': {
+    de: 'Häufige Ursachen: Die Datei wird gerade synchronisiert, sie wurde von einer neueren kontor-Version auf einem anderen Gerät geschrieben, oder sie ist beschädigt. Nach dem Beheben die Seite neu laden.',
+    en: 'Common causes: the file is being synchronised right now, it was written by a newer version of kontor on another device, or it is damaged. Reload the page after fixing it.',
   },
-  'toast.unreadableDunnings': {
-    de: '{n} Mahnungsdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} dunning file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableDocuments': {
-    de: '{n} Dokumentdatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} document file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableExpenses': {
-    de: '{n} Ausgabedatei(en) im Ordner konnten nicht gelesen werden und fehlen in der Liste.',
-    en: '{n} expense file(s) in the folder could not be read and are missing from the list.',
-  },
-  'toast.unreadableItems': {
-    de: '{n} Artikeldatei(en) im Ordner konnten nicht gelesen werden und fehlen im Katalog.',
-    en: '{n} item file(s) in the folder could not be read and are missing from the catalogue.',
-  },
+  'loadIssues.files': { de: 'Betroffene Dateien', en: 'Affected files' },
 
   'crash.toast': { de: 'Ein Fehler ist aufgetreten. Ungespeicherte Änderungen wurden gesichert.', en: 'An error occurred. Unsaved changes were kept.' },
   'crash.title': { de: 'Dieser Bereich konnte nicht angezeigt werden.', en: 'This part could not be shown.' },

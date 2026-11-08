@@ -35,6 +35,7 @@ function failureText(f: ReceiptFailure): string {
     case 'permission':
     case 'notFound':
     case 'quota':
+    case 'locked':
     case 'newerSchema':
     case 'invalid':
     case 'conflict':

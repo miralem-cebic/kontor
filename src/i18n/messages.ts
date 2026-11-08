@@ -290,6 +290,10 @@ const MESSAGES_SRC = {
   'error.permission': { de: 'Kein Zugriff auf den Ordner. Bitte Zugriff erlauben oder den Ordner neu wählen.', en: 'No access to the folder. Please allow access or choose the folder again.' },
   'error.notFound': { de: 'Der Ordner oder eine Datei darin wurde nicht gefunden.', en: 'The folder or a file in it was not found.' },
   'error.quota': { de: 'Auf dem Speicherort ist kein Platz mehr frei.', en: 'There is no space left at the storage location.' },
+  'error.locked': {
+    de: 'Eine Datei im Ordner wird gerade von einem anderen Programm benutzt (zum Beispiel Excel, ein Virenscanner oder der Sync-Client). Bitte gleich noch einmal versuchen.',
+    en: 'A file in the folder is in use by another program (for example Excel, a virus scanner or the sync client). Please try again in a moment.',
+  },
   'error.newerSchema': {
     de: 'Dieser Ordner wurde mit einer neueren kontor-Version gespeichert. Bitte kontor aktualisieren.',
     en: 'This folder was saved by a newer version of kontor. Please update kontor.',

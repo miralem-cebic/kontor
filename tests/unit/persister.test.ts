@@ -1,7 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
 import { MemDir } from '../../src/data/fs/memoryFs';
-import { emergencyKey, Persister } from '../../src/data/persister';
+import { emergencyKey, Persister, RETRY_DELAYS_MS } from '../../src/data/persister';
 import { err, must } from '../../src/data/result';
 import { brandId } from '../../src/data/ids';
 import { makePayment, nowIso } from '../../src/data/schema';
@@ -76,6 +76,91 @@ describe('Persister', () => {
     expect(await onDisk()).toEqual(state);
     // the merged state counts as saved: no further write
     expect(persister.pending).toBe(false);
+  });
+});
+
+describe('Persister: trying again (#94)', () => {
+  const denied = () => err({ kind: 'permission' as const, cause: new DOMException('denied', 'NotAllowedError') });
+
+  it('"Try again" after a permission failure asks for the permission first, and saves when it is granted', async () => {
+    const orig = repo.saveCompany.bind(repo);
+    repo.saveCompany = async () => denied();
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+    expect(A.useApp.getState().save).toEqual({ state: 'error', kind: 'permission' });
+
+    repo.saveCompany = orig;
+    const requestAccess = vi.fn(async () => true);
+    await persister.retry(requestAccess);
+    expect(requestAccess).toHaveBeenCalledOnce();
+    expect((await onDisk()).owner).toBe('Erika M.');
+    expect(A.useApp.getState().save).toEqual({ state: 'saved' });
+  });
+
+  it('a permission that is refused again keeps the change and the error, without writing', async () => {
+    const save = vi.fn(async () => denied());
+    repo.saveCompany = save;
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+    save.mockClear();
+    await persister.retry(async () => false);
+    expect(save).not.toHaveBeenCalled();
+    expect(A.useApp.getState().save).toEqual({ state: 'error', kind: 'permission' });
+    expect(persister.pending).toBe(true);
+  });
+
+  it('does not ask for a permission after another kind of failure', async () => {
+    const orig = repo.saveCompany.bind(repo);
+    repo.saveCompany = async () => err({ kind: 'quota', cause: new DOMException('full', 'QuotaExceededError') });
+    A.updateCompany({ owner: 'Erika M.' });
+    await persister.flush();
+    repo.saveCompany = orig;
+    const requestAccess = vi.fn(async () => true);
+    await persister.retry(requestAccess);
+    expect(requestAccess).not.toHaveBeenCalled();
+    expect((await onDisk()).owner).toBe('Erika M.');
+  });
+
+  describe('a file in use by another program', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('is tried again by itself, after 2 s, then 10 s, …', async () => {
+      const orig = repo.saveCompany.bind(repo);
+      let failures = 2;
+      repo.saveCompany = async (c) => (failures-- > 0 ? err({ kind: 'locked', cause: new DOMException('in use', 'NoModificationAllowedError') }) : orig(c));
+      A.updateCompany({ owner: 'Erika M.' });
+      await persister.flush();
+      expect(A.useApp.getState().save).toEqual({ state: 'error', kind: 'locked' });
+
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]!);
+      expect(A.useApp.getState().save).toEqual({ state: 'error', kind: 'locked' });
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[1]!);
+      expect(A.useApp.getState().save).toEqual({ state: 'saved' });
+      expect((await onDisk()).owner).toBe('Erika M.');
+    });
+
+    it('gives up after the last delay; "Try again" starts over', async () => {
+      const save = vi.fn(async () => err({ kind: 'other' as const, cause: new DOMException('busy', 'NotReadableError') }));
+      repo.saveCompany = save;
+      A.updateCompany({ owner: 'Erika M.' });
+      await persister.flush();
+      for (const ms of RETRY_DELAYS_MS) await vi.advanceTimersByTimeAsync(ms);
+      expect(save).toHaveBeenCalledTimes(1 + RETRY_DELAYS_MS.length);
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(save).toHaveBeenCalledTimes(1 + RETRY_DELAYS_MS.length);
+      await persister.retry();
+      expect(save).toHaveBeenCalledTimes(2 + RETRY_DELAYS_MS.length);
+    });
+
+    it('a failure that waits for the person is not tried again by itself', async () => {
+      const save = vi.fn(async () => denied());
+      repo.saveCompany = save;
+      A.updateCompany({ owner: 'Erika M.' });
+      await persister.flush();
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(save).toHaveBeenCalledOnce();
+    });
   });
 });
 

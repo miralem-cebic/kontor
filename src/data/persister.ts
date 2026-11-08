@@ -1,6 +1,6 @@
 import { integrateWrittenCompany, integrateWrittenContact, integrateWrittenDocument, integrateWrittenDunning, integrateWrittenExpense, integrateWrittenItem, integrateWrittenPayment, integrateWrittenPayout, integrateWrittenQuoteStatus, setSaveStatus, useApp, type AppState } from '../store/appStore';
 import type { CompanyId } from './ids';
-import { classifyError, type Repository, type StorageError } from './repository';
+import { classifyError, type Repository, type StorageError, type StorageErrorKind } from './repository';
 import { err, ok, type Result } from './result';
 import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, PaymentFile, PayoutFile, QuoteStatusFile } from './types';
 
@@ -9,6 +9,10 @@ import type { CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, 
 // and an emergency copy is kept in localStorage until it was written.
 
 export const DEBOUNCE_MS = 400;
+/** After a failure that may pass by itself (a file in use, an unexpected error), the queue is tried again after these delays */
+export const RETRY_DELAYS_MS: readonly number[] = [2_000, 10_000, 30_000, 60_000, 120_000];
+/** Failures that can pass without the person doing anything; the others wait for "Try again" or a new change */
+const RETRIED: readonly StorageErrorKind[] = ['locked', 'other'];
 export const emergencyKey = (id: CompanyId) => `kontor.unsaved.v1.${id}`;
 
 type Job = () => Promise<Result<void, StorageError>>;
@@ -20,6 +24,10 @@ export class Persister {
   private running: Promise<void> | null = null;
   private unsubscribe: (() => void) | null = null;
   private failed = false;
+  /** The kind of the last failed write, null after a flush that wrote everything */
+  private lastFailure: StorageErrorKind | null = null;
+  /** How many automatic retries were made since the last success or "Try again" */
+  private retries = 0;
 
   constructor(private readonly repo: Repository) {}
 
@@ -197,12 +205,16 @@ export class Persister {
         if (!r.ok) {
           if (!this.queue.has(key)) this.queue.set(key, job);
           this.failed = true;
+          this.lastFailure = r.error.kind;
           setSaveStatus({ state: 'error', kind: r.error.kind });
           this.writeEmergencyCopy();
           console.warn('Saving failed', key, r.error.cause);
+          this.scheduleRetry(r.error.kind);
           return;
         }
       }
+      this.lastFailure = null;
+      this.retries = 0;
       setSaveStatus({ state: 'saved' });
       this.clearEmergencyCopy();
     })();
@@ -213,8 +225,24 @@ export class Persister {
     }
   }
 
-  /** After a failed write: try the queue again */
-  retry() {
+  /** A failure that may pass by itself is tried again later, with growing delays; a new change flushes earlier */
+  private scheduleRetry(kind: StorageErrorKind) {
+    const delay = RETRY_DELAYS_MS[this.retries];
+    if (!RETRIED.includes(kind) || delay === undefined || this.timer) return;
+    this.retries++;
+    this.timer = setTimeout(() => void this.flush(), delay);
+  }
+
+  /**
+   * "Try again" after a failed write. When the folder refused access, `requestAccess` asks for the permission first;
+   * it must run from the click, which is the user gesture the browser needs. Refused again, nothing is written.
+   */
+  async retry(requestAccess?: () => Promise<boolean>): Promise<void> {
+    if (requestAccess && (this.lastFailure === 'permission' || this.lastFailure === 'notFound')) {
+      const granted = await requestAccess().catch(() => false);
+      if (!granted) return;
+    }
+    this.retries = 0;
     setSaveStatus({ state: 'saving' });
     return this.flush();
   }

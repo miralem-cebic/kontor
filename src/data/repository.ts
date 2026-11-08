@@ -19,8 +19,11 @@ export interface StorageError {
   cause: unknown;
 }
 
-/** `conflict`: another writer got there first (a number or an issued file that exists already); nothing was overwritten */
-export type StorageErrorKind = 'permission' | 'notFound' | 'quota' | 'newerSchema' | 'invalid' | 'conflict' | 'other';
+/**
+ * `conflict`: another writer got there first (a number or an issued file that exists already); nothing was overwritten.
+ * `locked`: another program holds the file (Excel, a virus scanner, the sync client); trying again later usually works.
+ */
+export type StorageErrorKind = 'permission' | 'notFound' | 'quota' | 'locked' | 'newerSchema' | 'invalid' | 'conflict' | 'other';
 
 /**
  * Storage of one company folder. The UI and the store only know this interface, not the folder of files;
@@ -118,6 +121,8 @@ export function classifyError(e: unknown): StorageErrorKind {
     if (e.name === 'NotAllowedError' || e.name === 'SecurityError') return 'permission';
     if (e.name === 'NotFoundError') return 'notFound';
     if (e.name === 'QuotaExceededError') return 'quota';
+    // the file is open in another program or being replaced by the sync client right now
+    if (e.name === 'NoModificationAllowedError' || e.name === 'NotReadableError' || e.name === 'InvalidStateError') return 'locked';
   }
   if (e instanceof Error && e.name === 'NewerSchemaError') return 'newerSchema';
   if (e instanceof Error && e.name === 'ConflictError') return 'conflict';

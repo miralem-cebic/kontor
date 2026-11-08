@@ -70,6 +70,8 @@ export function currentRepository(): FsRepository | null {
   return repo;
 }
 let persister: Persister | null = null;
+/** The folder of the open company, to ask for its permission again when a write was refused */
+let openHandle: FileSystemDirectoryHandle | null = null;
 let entries: CompanyEntry[] = [];
 let handleStore: HandleStore | null = null;
 /** The folder chosen in the setup assistant; nothing is written there before "Finish" */
@@ -154,6 +156,7 @@ async function closeCurrent() {
   persister?.stop();
   persister = null;
   repo = null;
+  openHandle = null;
   resetApp();
 }
 
@@ -195,6 +198,7 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
     payouts: loadedPayouts.value.payouts,
   };
   repo = r;
+  openHandle = entry.handle;
   loadCompany(company, records);
   persister = new Persister(r);
   persister.start();
@@ -449,8 +453,10 @@ useApp.subscribe((s, prev) => {
   if (entry && entry.name !== c.name) void rememberCompany(entry.handle, c);
 });
 
+/** User gesture: "Try again" in the sidebar. A folder that refused access is asked for the permission again first. */
 export function retrySave() {
-  return persister?.retry();
+  const handle = openHandle;
+  return persister?.retry(handle ? () => ensureReadWrite(handle, true) : undefined);
 }
 
 /** The folder of the open company, for the actions that need it beyond loading and saving (issuing, issued PDFs) */

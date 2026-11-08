@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsRepository } from '../../src/data/fs/FsRepository';
+import { classifyError } from '../../src/data/repository';
 import { writeFile } from '../../src/data/fs/jsonFile';
 import { MemDir, MemFile } from '../../src/data/fs/memoryFs';
 import { must } from '../../src/data/result';
@@ -576,5 +577,13 @@ describe('listFolder', () => {
     const files = must(await repo.listFolder());
     expect(files.map((f) => f.path)).toEqual(['belege/2026/x.pdf', 'company.json']);
     expect(new TextDecoder().decode(files[0]!.data)).toBe('%PDF-1.4 Beleg');
+  });
+});
+
+describe('classifyError', () => {
+  it('a file held by another program (Excel, a virus scanner, the sync client) is locked, a reason to try again (#94)', () => {
+    for (const name of ['NoModificationAllowedError', 'NotReadableError', 'InvalidStateError']) expect(classifyError(new DOMException('in use', name))).toBe('locked');
+    expect(classifyError(new DOMException('denied', 'NotAllowedError'))).toBe('permission');
+    expect(classifyError(new Error('boom'))).toBe('other');
   });
 });

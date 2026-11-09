@@ -72,7 +72,7 @@ Im ZIP-Export liegt jede Liste im Ordner `listen/` als CSV-Datei: Kontakte, Arti
 
 ## Das Archiv
 
-Der ZIP-Export enthält den Firmenordner so, wie er ist, auf oberster Ebene, dazu `listen/` mit den CSV-Dateien und eine Datei `LIESMICH.txt` mit einer kurzen Beschreibung. Jede Datei des Ordners steht unverändert im Archiv.
+Der ZIP-Export enthält den Firmenordner so, wie er ist, auf oberster Ebene, dazu `listen/` mit den CSV-Dateien und eine Datei `LIESMICH.txt` mit einer kurzen Beschreibung. Jede Datei des Ordners steht unverändert im Archiv, außer einer Datei, deren Name Zeichen enthält, die manche Programme beim Entpacken als Pfad lesen (`\`, `:`, `..`, Steuerzeichen, Leerzeichen am Anfang oder Ende): Sie fehlt im Archiv, und `LIESMICH.txt` nennt sie. Ein Ordner mit mehr als 65.000 Dateien oder 2 GB wird nicht exportiert; er lässt sich direkt kopieren.
 
 ## Was dieses Dokument nicht ist
 

@@ -1078,6 +1078,18 @@ const MESSAGES_SRC = {
     en: 'Some changes are not saved in the folder (see the bottom left). The export holds only what is in the folder.',
   },
   'exit.exportAnyway': { de: 'Ordner trotzdem exportieren, ohne diese Änderungen', en: 'Export the folder anyway, without these changes' },
+  'exit.tooLarge': {
+    de: 'Der Ordner ist für den Export zu groß (mehr als {files} Dateien oder {gb} GB). Kopiere stattdessen den Ordner selbst: Er ist vollständig und lässt sich ohne kontor lesen.',
+    en: 'The folder is too large for the export (more than {files} files or {gb} GB). Copy the folder itself instead: it is complete and can be read without kontor.',
+  },
+  'exit.skipped': {
+    de: '{n} Datei(en) mit einem Namen, den manche Programme als Pfad lesen, sind nicht im Export. LIESMICH.txt im Export nennt sie; im Ordner bleiben sie unverändert.',
+    en: '{n} file(s) with a name that some programs read as a path are not in the export. LIESMICH.txt in the export names them; they stay unchanged in the folder.',
+  },
+  'exit.readme.skipped': {
+    de: 'Diese Dateien des Ordners sind nicht in diesem Archiv, weil ihr Name Zeichen enthält, die manche Programme beim Entpacken als Pfad lesen (zum Beispiel \\, : oder ..). Sie liegen unverändert im Ordner:',
+    en: 'These files of the folder are not in this archive, because their name holds characters that some programs read as a path when unpacking (for example \\, : or ..). They are unchanged in the folder:',
+  },
   'exit.notReady': { de: 'Ohne geöffneten Ordner gibt es nichts zu exportieren.', en: 'There is no open folder to export.' },
   'exit.failed': { de: 'Der Export ist fehlgeschlagen: {reason}', en: 'The export failed: {reason}' },
   'exit.readme.intro': { de: 'Kopie des Ordners einer Firma aus kontor, Stand {date}. Sie ist vollständig und lässt sich ohne kontor lesen.', en: 'Copy of the folder of a company from kontor, as of {date}. It is complete and can be read without kontor.' },

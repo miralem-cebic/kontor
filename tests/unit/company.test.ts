@@ -2,13 +2,17 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   checkLogo,
+  checkStoredLogo,
   DEFAULT_FOOTER_PARTS,
   detectLogoType,
   draftFromProfile,
   emptyDraft,
+  logoDimensions,
   logoFileName,
   LOGO_FILE,
   MAX_LOGO_BYTES,
+  MAX_LOGO_PIXELS,
+  MAX_LOGO_SIDE,
   readProfile,
   readSection,
   SECTION_FIELDS,
@@ -161,9 +165,28 @@ describe('draft ↔ profile', () => {
     ));
 });
 
+/** The start of a PNG: signature and IHDR chunk with the size (the pixel data does not matter for the checks) */
+function pngHeader(width: number, height: number): Uint8Array {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  bytes.set([8, 6, 0, 0, 0], 24);
+  return bytes;
+}
+
+/** The start of a JPEG: SOI, an APP0 segment, a DQT segment, then the frame header (SOF0 or SOF2) with the size */
+function jpegHeader(width: number, height: number, sof = 0xc0): Uint8Array {
+  const app0 = [0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0];
+  const dqt = [0xff, 0xdb, 0, 4, 0, 0];
+  const sofSegment = [0xff, sof, 0, 11, 8, height >> 8, height & 0xff, width >> 8, width & 0xff, 1, 1, 0x11, 0];
+  return new Uint8Array([0xff, 0xd8, ...app0, ...dqt, ...sofSegment, 0xff, 0xd9]);
+}
+
 describe('logo', () => {
-  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+  const png = pngHeader(400, 120);
+  const jpeg = jpegHeader(400, 120);
   const svg = (text: string) => new TextEncoder().encode(text);
 
   it('detects the type by content', () => {
@@ -181,6 +204,35 @@ describe('logo', () => {
     big.set(png);
     expect(checkLogo(big)).toEqual({ ok: false, error: 'tooLarge' });
     expect(checkLogo(png)).toEqual({ ok: true, value: 'image/png' });
+  });
+
+  it('reads the size in pixels from the header of a PNG or a JPEG (#78)', () => {
+    expect(logoDimensions(png, 'image/png')).toEqual({ width: 400, height: 120 });
+    expect(logoDimensions(jpeg, 'image/jpeg')).toEqual({ width: 400, height: 120 });
+    expect(logoDimensions(jpegHeader(640, 480, 0xc2), 'image/jpeg')).toEqual({ width: 640, height: 480 });
+    // no frame header before the image data, or a header cut off: no size
+    expect(logoDimensions(new Uint8Array([0xff, 0xd8, 0xff, 0xda, 0, 2]), 'image/jpeg')).toBeNull();
+    expect(logoDimensions(png.subarray(0, 20), 'image/png')).toBeNull();
+    expect(logoDimensions(jpeg.subarray(0, 30), 'image/jpeg')).toBeNull();
+  });
+
+  it('refuses a picture larger in pixels than a logo needs, or without a size, before it is decoded (#78)', () => {
+    expect(checkLogo(pngHeader(MAX_LOGO_SIDE, 2_000))).toEqual({ ok: true, value: 'image/png' });
+    expect(checkLogo(pngHeader(MAX_LOGO_SIDE + 1, 10))).toEqual({ ok: false, error: 'dimensions' });
+    expect(checkLogo(pngHeader(MAX_LOGO_SIDE, Math.ceil((MAX_LOGO_PIXELS + 1) / MAX_LOGO_SIDE)))).toEqual({ ok: false, error: 'dimensions' });
+    expect(checkLogo(jpegHeader(20_000, 20_000))).toEqual({ ok: false, error: 'dimensions' });
+    expect(checkLogo(pngHeader(0, 10))).toEqual({ ok: false, error: 'dimensions' });
+    expect(checkLogo(new Uint8Array([0xff, 0xd8, 0xff, 0xda, 0, 2]))).toEqual({ ok: false, error: 'dimensions' });
+    // an SVG has no pixels: it is drawn into a canvas of a bounded size
+    expect(checkLogo(svg('<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="100000"/>'))).toEqual({ ok: true, value: 'image/svg+xml' });
+  });
+
+  it('a logo file of the folder is used only with the SHA-256 and the type company.json names (#78)', () => {
+    const ref = { file: 'logo-abababababababab.png', type: 'image/png' as const, sha256: 'ab'.repeat(32) };
+    expect(checkStoredLogo(png, 'ab'.repeat(32), ref)).toEqual({ ok: true, value: 'image/png' });
+    expect(checkStoredLogo(png, 'cd'.repeat(32), ref)).toEqual({ ok: false, error: 'changed' });
+    expect(checkStoredLogo(jpeg, 'ab'.repeat(32), ref)).toEqual({ ok: false, error: 'changed' });
+    expect(checkStoredLogo(pngHeader(30_000, 30_000), 'ab'.repeat(32), ref)).toEqual({ ok: false, error: 'dimensions' });
   });
 
   it('names the file after its hash', () => {

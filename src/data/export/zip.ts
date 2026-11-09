@@ -8,6 +8,12 @@ export interface ZipEntry {
   data: Uint8Array;
 }
 
+/** An entry whose bytes are read only when it is written, so that a large archive does not hold every file at once */
+export interface LazyZipEntry {
+  name: string;
+  read: () => Promise<Uint8Array>;
+}
+
 const CRC_TABLE: Uint32Array = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -46,16 +52,20 @@ export async function deflateRaw(data: Uint8Array): Promise<Uint8Array> {
 const DOS_DATE = (0 << 9) | (1 << 5) | 1;
 const DOS_TIME = 0;
 
-/** The ZIP file of the entries: local headers and data, then the central directory and its end record */
-export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array> {
+/**
+ * The ZIP file of the entries: local headers and data, then the central directory and its end record. A lazy entry is
+ * read just before it is deflated, and its bytes are dropped after that.
+ */
+export async function writeZip(entries: readonly (ZipEntry | LazyZipEntry)[]): Promise<Uint8Array> {
   const encoder = new TextEncoder();
   const parts: Uint8Array[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
   for (const entry of entries) {
     const name = encoder.encode(entry.name);
-    const packed = await deflateRaw(entry.data);
-    const crc = crc32(entry.data);
+    const data = 'data' in entry ? entry.data : await entry.read();
+    const packed = await deflateRaw(data);
+    const crc = crc32(data);
 
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
@@ -66,7 +76,7 @@ export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array
     local.setUint16(12, DOS_DATE, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, packed.length, true);
-    local.setUint32(22, entry.data.length, true);
+    local.setUint32(22, data.length, true);
     local.setUint16(26, name.length, true);
     parts.push(new Uint8Array(local.buffer), name, packed);
 
@@ -80,7 +90,7 @@ export async function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array
     head.setUint16(14, DOS_DATE, true);
     head.setUint32(16, crc, true);
     head.setUint32(20, packed.length, true);
-    head.setUint32(24, entry.data.length, true);
+    head.setUint32(24, data.length, true);
     head.setUint16(28, name.length, true);
     head.setUint32(42, offset, true);
     central.push(new Uint8Array(head.buffer), name);

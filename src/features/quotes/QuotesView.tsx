@@ -32,6 +32,7 @@ import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '
 import { DocumentDiscount, LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
 import { IssuedQuoteView } from './IssuedQuoteView';
+import { LogoProblemNote } from '../company/LogoProblemNote';
 
 // Quotes: a searchable list and a form for a new or an existing quote. The form edits a draft; only "Save" puts
 // the checked quote into the store (and the persister writes it). Finalizing ("Angebot abschließen", app/issue.ts)
@@ -509,6 +510,7 @@ function FinalizeAction({ prepare }: { prepare: () => DocumentId | null }) {
   return (
     <div className="confirm" role="group" aria-label={t('quotes.finalizeConfirm')}>
       <span>{t('quotes.finalizeConfirm')}</span>
+      <LogoProblemNote beforeIssue />
       <button type="button" className="btn primary" onClick={() => void run()} disabled={busy} autoFocus>
         {busy ? t('quotes.finalizeBusy') : t('quotes.finalizeNow')}
       </button>

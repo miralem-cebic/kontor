@@ -570,13 +570,27 @@ describe('audit lines of receipts', () => {
 });
 
 describe('listFolder', () => {
-  it('lists every file of the folder with its path and bytes, nested ones included, and skips hidden files', async () => {
+  it('lists every file of the folder with its path and size, nested ones included, and skips hidden files', async () => {
     const pdf = new TextEncoder().encode('%PDF-1.4 Beleg');
     must(await repo.writeReceipt('2026', 'x.pdf', pdf));
     await writeFile(root.asHandle(), '.DS_Store', 'versteckt');
     const files = must(await repo.listFolder());
     expect(files.map((f) => f.path)).toEqual(['belege/2026/x.pdf', 'company.json']);
-    expect(new TextDecoder().decode(files[0]!.data)).toBe('%PDF-1.4 Beleg');
+    expect(files[0]!.size).toBe(pdf.length);
+    expect(new TextDecoder().decode(await files[0]!.read())).toBe('%PDF-1.4 Beleg');
+  });
+
+  it('reads no bytes while listing: a file is read only when the archive is written (#80)', async () => {
+    must(await repo.writeReceipt('2026', 'x.pdf', new Uint8Array(1_000)));
+    const arrayBuffer = vi.spyOn(Blob.prototype, 'arrayBuffer');
+    try {
+      const files = must(await repo.listFolder());
+      expect(arrayBuffer).not.toHaveBeenCalled();
+      await files[0]!.read();
+      expect(arrayBuffer).toHaveBeenCalledOnce();
+    } finally {
+      arrayBuffer.mockRestore();
+    }
   });
 });
 

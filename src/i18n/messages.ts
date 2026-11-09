@@ -223,6 +223,26 @@ const MESSAGES_SRC = {
   'logo.empty': { de: 'Die Datei ist leer.', en: 'The file is empty.' },
   'logo.tooLarge': { de: 'Die Datei ist größer als {max}.', en: 'The file is larger than {max}.' },
   'logo.unsupported': { de: 'Nur PNG, JPG und SVG werden unterstützt.', en: 'Only PNG, JPG and SVG are supported.' },
+  'logo.dimensions': {
+    de: 'Das Bild ist zu groß oder seine Größe lässt sich nicht lesen: höchstens {side} Pixel je Seite und {megapixels} Megapixel. Für ein Logo reichen etwa 1.300 × 570 Pixel.',
+    en: 'The picture is too large, or its size cannot be read: at most {side} pixels a side and {megapixels} megapixels. About 1,300 × 570 pixels are enough for a logo.',
+  },
+  'logo.problem.changed': {
+    de: 'Die Logodatei im Ordner ist nicht mehr die gespeicherte (ihre Prüfsumme stimmt nicht). Sie wird weder angezeigt noch gedruckt. Bitte das Logo neu wählen.',
+    en: 'The logo file in the folder is no longer the one that was saved (its checksum differs). It is neither shown nor printed. Please choose the logo again.',
+  },
+  'logo.problem.invalid': {
+    de: 'Die Logodatei im Ordner wird weder angezeigt noch gedruckt: {reason} Bitte das Logo neu wählen.',
+    en: 'The logo file in the folder is neither shown nor printed: {reason} Please choose the logo again.',
+  },
+  'logo.problem.unreadable': {
+    de: 'Die Logodatei im Ordner lässt sich nicht lesen. Sie wird weder angezeigt noch gedruckt.',
+    en: 'The logo file in the folder cannot be read. It is neither shown nor printed.',
+  },
+  'logo.problem.onIssue': {
+    de: 'Das Dokument wird ohne Logo erstellt: Die Logodatei im Ordner wurde nicht angenommen (siehe Einstellungen).',
+    en: 'The document is made without the logo: the logo file in the folder was not accepted (see the settings).',
+  },
 
   'problem.required': { de: 'Bitte ausfüllen.', en: 'Please fill in.' },
   'problem.tooLong': { de: 'Zu lang.', en: 'Too long.' },
@@ -1058,6 +1078,18 @@ const MESSAGES_SRC = {
     en: 'Some changes are not saved in the folder (see the bottom left). The export holds only what is in the folder.',
   },
   'exit.exportAnyway': { de: 'Ordner trotzdem exportieren, ohne diese Änderungen', en: 'Export the folder anyway, without these changes' },
+  'exit.tooLarge': {
+    de: 'Der Ordner ist für den Export zu groß (mehr als {files} Dateien oder {gb} GB). Kopiere stattdessen den Ordner selbst: Er ist vollständig und lässt sich ohne kontor lesen.',
+    en: 'The folder is too large for the export (more than {files} files or {gb} GB). Copy the folder itself instead: it is complete and can be read without kontor.',
+  },
+  'exit.skipped': {
+    de: '{n} Datei(en) mit einem Namen, den manche Programme als Pfad lesen, sind nicht im Export. LIESMICH.txt im Export nennt sie; im Ordner bleiben sie unverändert.',
+    en: '{n} file(s) with a name that some programs read as a path are not in the export. LIESMICH.txt in the export names them; they stay unchanged in the folder.',
+  },
+  'exit.readme.skipped': {
+    de: 'Diese Dateien des Ordners sind nicht in diesem Archiv, weil ihr Name Zeichen enthält, die manche Programme beim Entpacken als Pfad lesen (zum Beispiel \\, : oder ..). Sie liegen unverändert im Ordner:',
+    en: 'These files of the folder are not in this archive, because their name holds characters that some programs read as a path when unpacking (for example \\, : or ..). They are unchanged in the folder:',
+  },
   'exit.notReady': { de: 'Ohne geöffneten Ordner gibt es nichts zu exportieren.', en: 'There is no open folder to export.' },
   'exit.failed': { de: 'Der Export ist fehlgeschlagen: {reason}', en: 'The export failed: {reason}' },
   'exit.readme.intro': { de: 'Kopie des Ordners einer Firma aus kontor, Stand {date}. Sie ist vollständig und lässt sich ohne kontor lesen.', en: 'Copy of the folder of a company from kontor, as of {date}. It is complete and can be read without kontor.' },

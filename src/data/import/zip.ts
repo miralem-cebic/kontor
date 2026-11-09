@@ -10,6 +10,12 @@ export const ZIP_LIMITS = {
   entries: 100,
   /** All entries together, unpacked: 20 MB */
   unpacked: 20_000_000,
+  /**
+   * An entry larger than `ratioFrom` that unpacks to more than `ratio` times its packed size is a bomb, not a sheet: the
+   * XML of a real workbook packs to about a tenth (#76). A small entry may pack better.
+   */
+  ratio: 100,
+  ratioFrom: 1_000_000,
 } as const;
 
 export type ZipProblem = 'invalid' | 'tooManyEntries' | 'tooLarge' | 'unsafeName' | 'unsupported';
@@ -82,6 +88,7 @@ export async function readZip(bytes: Uint8Array): Promise<Result<Map<string, Uin
     if (flags & 0x1) return err({ kind: 'unsupported' }); // encrypted
     if (method !== 0 && method !== 8) return err({ kind: 'unsupported' });
     if (!isSafeEntryName(name)) return err({ kind: 'unsafeName' });
+    if (size > ZIP_LIMITS.ratioFrom && size > packedSize * ZIP_LIMITS.ratio) return err({ kind: 'tooLarge' });
     unpacked += size;
     if (unpacked > ZIP_LIMITS.unpacked) return err({ kind: 'tooLarge' });
     if (out.has(name)) return err({ kind: 'invalid' });

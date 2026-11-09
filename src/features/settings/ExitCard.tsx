@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { exportCompanyArchive, type ExitFailure } from '../../app/exit';
-import { t } from '../../i18n';
+import { ARCHIVE_LIMITS } from '../../data/export/exit';
+import { currentLang, t } from '../../i18n';
 import { errorText } from '../../lib/labels';
 import { showToast } from '../../store/appStore';
 
@@ -12,6 +13,8 @@ function failureText(f: ExitFailure): string {
       return t('exit.notReady');
     case 'unsaved':
       return t('exit.unsaved');
+    case 'tooLarge':
+      return t('exit.tooLarge', { files: ARCHIVE_LIMITS.files.toLocaleString(currentLang()), gb: String(ARCHIVE_LIMITS.bytes / 1024 ** 3) });
     case 'permission':
     case 'notFound':
     case 'quota':
@@ -28,9 +31,10 @@ export function ExitCard() {
   // set when changes are not in the folder: the person may export the folder as it is, without them
   const [unsaved, setUnsaved] = useState(false);
   const run = async (leaveOutUnsaved: boolean) => {
-    const failure = await exportCompanyArchive(leaveOutUnsaved);
-    setUnsaved(failure === 'unsaved');
-    if (failure !== null && failure !== 'unsaved') showToast(failureText(failure));
+    const result = await exportCompanyArchive(leaveOutUnsaved);
+    setUnsaved(!result.ok && result.failure === 'unsaved');
+    if (!result.ok && result.failure !== 'unsaved') showToast(failureText(result.failure));
+    if (result.ok && result.skipped > 0) showToast(t('exit.skipped', { n: result.skipped }));
   };
   return (
     <div className="exit-card">

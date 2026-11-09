@@ -10,6 +10,7 @@ import { showToast, updateCompany, useApp } from '../../store/appStore';
 import { InvoiceFields, LogoField, MasterFields, TaxFields, thisYear, type FieldsProps } from '../company/CompanyFields';
 import { BankAccountsCard } from './BankAccountsCard';
 import { ExitCard } from './ExitCard';
+import { LogoProblemNote } from '../company/LogoProblemNote';
 
 // Settings: the fields of the setup assistant, one section at a time. A side panel on the right lists the sections
 // and shows one of them. A section is edited as a draft and applied with "Save" after its check; issued documents keep their
@@ -178,6 +179,7 @@ function LogoCard() {
   return (
     <section className="card" aria-labelledby="settings-logo">
       <h2 id="settings-logo">{t('logo.label')}</h2>
+      <LogoProblemNote />
       <LogoField
         url={url}
         onPick={async (logo) => {

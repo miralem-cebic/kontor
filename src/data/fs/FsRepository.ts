@@ -1,6 +1,6 @@
 import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../merge';
 import { InvalidFileError, migrate } from '../migrations';
-import { classifyError, ConflictError, type Asset, type BackupInfo, type LoadIssue, type Repository, type StorageError } from '../repository';
+import { classifyError, ConflictError, type Asset, type BackupInfo, type FolderFile, type LoadIssue, type Repository, type StorageError } from '../repository';
 import { err, ok, type Result } from '../result';
 import { SCHEMA_VERSION } from '../schema';
 import type { AuditEntry, BackupFile, BackupSnapshot, CompanyFile, ContactFile, DocumentFile, DunningFile, ExpenseFile, ItemFile, NumberingFile, NumberRange, PaymentFile, PayoutFile, QuoteStatusFile } from '../types';
@@ -449,16 +449,19 @@ export class FsRepository implements Repository {
     });
   }
 
-  /** Every file of the folder with its path and bytes, in path order. Hidden files and the helper files of sync clients are left out. */
+  /** Every file of the folder with its path and size, in path order; read on demand. Hidden files and the helper files of sync clients are left out. */
   listFolder() {
     return attempt(async () => {
-      const files: { path: string; data: Uint8Array }[] = [];
+      const files: FolderFile[] = [];
       const walk = async (dir: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
         for await (const [name, h] of dir.entries()) {
-          if (name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp')) continue;
+          if (isHelperFile(name)) continue;
           const path = prefix === '' ? name : `${prefix}/${name}`;
           if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, path);
-          else files.push({ path, data: new Uint8Array(await (await (h as FileSystemFileHandle).getFile()).arrayBuffer()) });
+          else {
+            const file = await (h as FileSystemFileHandle).getFile();
+            files.push({ path, size: file.size, read: async () => new Uint8Array(await file.arrayBuffer()) });
+          }
         }
       };
       await walk(this.root, '');

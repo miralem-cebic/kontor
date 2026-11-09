@@ -10,6 +10,7 @@ import type { QuoteContent } from '../domain/quote';
 import { keysOf, type AccountId, type ContactId, type DocumentId, type DunningId, type ExpenseId, type ImportBatchId, type ItemId, type PaymentId, type PayoutId, type QuoteStatusId } from '../data/ids';
 import { mergeCompany, mergeContact, mergeDocument, mergeExpense, mergeItem, mergePayment, mergePayout, mergeQuoteStatus, sameJson } from '../data/merge';
 import type { LoadIssue, StorageErrorKind } from '../data/repository';
+import type { StoredLogoProblem } from '../domain/company';
 import { makeAccount, makeContact, makeExpense, makeInvoice, makeItem, makePayout, makeQuote, nowIso } from '../data/schema';
 import type {
   BankAccount,
@@ -83,10 +84,12 @@ export interface AppState {
   emergencyCopyFailed: boolean;
   /** Files of the folder that could not be read when the company was opened: what they hold is missing everywhere */
   loadIssues: readonly LoadIssue[];
+  /** Why the logo of company.json is neither shown nor printed (#78); null when it is fine or there is none */
+  logoProblem: StoredLogoProblem | 'unreadable' | null;
   toast: Toast | null;
 }
 
-const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false, loadIssues: [], toast: null };
+const initial: AppState = { company: null, contacts: new Map(), items: new Map(), documents: new Map(), payments: new Map(), dunnings: new Map(), quoteStatuses: new Map(), expenses: new Map(), payouts: new Map(), logoUrl: null, save: { state: 'saved' }, unsaved: [], emergencyCopyFailed: false, loadIssues: [], logoProblem: null, toast: null };
 
 export const useApp = create<AppState>()(() => ({ ...initial }));
 const get = useApp.getState;
@@ -518,6 +521,9 @@ export function setLogoUrl(url: string | null) {
 export const setSaveStatus = (save: SaveStatus) => set({ save });
 export const setUnsaved = (unsaved: readonly UnsavedWrite[]) => set({ unsaved });
 export const setLoadIssues = (loadIssues: readonly LoadIssue[]) => set({ loadIssues });
+export const setLogoProblem = (logoProblem: AppState['logoProblem']) => {
+  if (get().logoProblem !== logoProblem) set({ logoProblem });
+};
 export const setEmergencyCopyFailed = (emergencyCopyFailed: boolean) => {
   if (get().emergencyCopyFailed !== emergencyCopyFailed) set({ emergencyCopyFailed });
 };

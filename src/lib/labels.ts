@@ -7,7 +7,7 @@ import type { DecisionProblem } from '../domain/quoteStatus';
 import type { SessionError } from '../app/session';
 import type { AccountDetails } from '../domain/bankAccount';
 import type { FieldError, FieldProblem } from '../domain/check';
-import { MAX_LOGO_BYTES, type LogoProblem } from '../domain/company';
+import { MAX_LOGO_BYTES, MAX_LOGO_PIXELS, MAX_LOGO_SIDE, type LogoProblem, type StoredLogoProblem } from '../domain/company';
 import type { Discount } from '../domain/discount';
 import { DOCUMENT_LIMITS } from '../domain/document';
 import { formatIban } from '../domain/iban';
@@ -17,7 +17,7 @@ import type { PaymentState } from '../domain/payment';
 import type { QuoteProblem } from '../domain/quote';
 import type { UnitCode } from '../domain/units';
 import { minMultiplierPercent } from '../domain/tax/tradeTax';
-import { t, tIn, type Lang, type MessageKey } from '../i18n';
+import { currentLang, t, tIn, type Lang, type MessageKey } from '../i18n';
 import type { ExpenseTaxTreatment } from '../domain/expense';
 import type { PayoutTaxTreatment } from '../domain/payout';
 
@@ -108,9 +108,18 @@ const LOGO_PROBLEM_KEY: Record<LogoProblem, MessageKey> = {
   empty: 'logo.empty',
   tooLarge: 'logo.tooLarge',
   unsupportedType: 'logo.unsupported',
+  dimensions: 'logo.dimensions',
 };
 
-export const logoProblemText = (p: LogoProblem): string => t(LOGO_PROBLEM_KEY[p], { max: `${MAX_LOGO_BYTES / 1_000_000} MB` });
+export const logoProblemText = (p: LogoProblem): string =>
+  t(LOGO_PROBLEM_KEY[p], { max: `${MAX_LOGO_BYTES / 1_000_000} MB`, side: MAX_LOGO_SIDE.toLocaleString(currentLang()), megapixels: String(MAX_LOGO_PIXELS / 1_000_000) });
+
+/** Why the logo of the folder is not shown nor printed (#78): another file than company.json names, or one the checks refuse */
+export function storedLogoProblemText(p: StoredLogoProblem | 'unreadable'): string {
+  if (p === 'changed') return t('logo.problem.changed');
+  if (p === 'unreadable') return t('logo.problem.unreadable');
+  return t('logo.problem.invalid', { reason: logoProblemText(p) });
+}
 
 const UNIT_KEY: Record<UnitCode, MessageKey> = {
   H87: 'unit.H87',

@@ -13,6 +13,7 @@ import { showToast, useApp } from '../../store/appStore';
 import { formatDate } from '../documents/common';
 import { Fact, IssuedLines } from '../documents/IssuedParts';
 import { PdfButton } from '../documents/PdfButton';
+import { LogoProblemNote } from '../company/LogoProblemNote';
 
 // An issued invoice: what it says, with the master data it was issued with, and its PDF in the folder. Nothing can be
 // changed or deleted (ADR 0004). A mistake is undone by cancelling the invoice: its cancellation invoice reverses
@@ -161,6 +162,7 @@ function CancelConfirm({ invoice, onClose, onCancelled }: { invoice: IssuedInvoi
   return (
     <div className="confirm" role="group" aria-label={t('invoices.cancelConfirm', { number })}>
       <span>{t('invoices.cancelConfirm', { number })}</span>
+      <LogoProblemNote beforeIssue />
       <button type="button" className="btn danger" onClick={() => void run()} disabled={busy} autoFocus>
         {busy ? t('invoices.cancelBusy') : t('invoices.cancelNow')}
       </button>

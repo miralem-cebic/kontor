@@ -44,6 +44,7 @@ import { customerOptions, focusFirstError, formatDate, useSmallBusiness } from '
 import { DocumentDiscount, LinesEditor, newLineKey, Totals } from '../documents/LinesEditor';
 import { PdfButton } from '../documents/PdfButton';
 import { IssuedInvoiceView } from './IssuedInvoiceView';
+import { LogoProblemNote } from '../company/LogoProblemNote';
 
 // Invoices: a searchable list and a form for a new or an existing draft. Like a quote, the form edits a draft; only
 // "Save" puts the checked invoice into the store (and the persister writes it). The form shows what a draft still needs
@@ -624,6 +625,7 @@ function IssueAction({ prepare }: { prepare: () => DocumentId | null }) {
   return (
     <div className="confirm" role="group" aria-label={t('invoices.issueConfirm')}>
       <span>{t('invoices.issueConfirm')}</span>
+      <LogoProblemNote beforeIssue />
       <button type="button" className="btn primary" onClick={() => void run()} disabled={busy} autoFocus>
         {busy ? t('invoices.issueBusy') : t('invoices.issueNow')}
       </button>

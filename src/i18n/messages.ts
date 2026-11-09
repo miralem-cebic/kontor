@@ -223,6 +223,26 @@ const MESSAGES_SRC = {
   'logo.empty': { de: 'Die Datei ist leer.', en: 'The file is empty.' },
   'logo.tooLarge': { de: 'Die Datei ist größer als {max}.', en: 'The file is larger than {max}.' },
   'logo.unsupported': { de: 'Nur PNG, JPG und SVG werden unterstützt.', en: 'Only PNG, JPG and SVG are supported.' },
+  'logo.dimensions': {
+    de: 'Das Bild ist zu groß oder seine Größe lässt sich nicht lesen: höchstens {side} Pixel je Seite und {megapixels} Megapixel. Für ein Logo reichen etwa 1.300 × 570 Pixel.',
+    en: 'The picture is too large, or its size cannot be read: at most {side} pixels a side and {megapixels} megapixels. About 1,300 × 570 pixels are enough for a logo.',
+  },
+  'logo.problem.changed': {
+    de: 'Die Logodatei im Ordner ist nicht mehr die gespeicherte (ihre Prüfsumme stimmt nicht). Sie wird weder angezeigt noch gedruckt. Bitte das Logo neu wählen.',
+    en: 'The logo file in the folder is no longer the one that was saved (its checksum differs). It is neither shown nor printed. Please choose the logo again.',
+  },
+  'logo.problem.invalid': {
+    de: 'Die Logodatei im Ordner wird weder angezeigt noch gedruckt: {reason} Bitte das Logo neu wählen.',
+    en: 'The logo file in the folder is neither shown nor printed: {reason} Please choose the logo again.',
+  },
+  'logo.problem.unreadable': {
+    de: 'Die Logodatei im Ordner lässt sich nicht lesen. Sie wird weder angezeigt noch gedruckt.',
+    en: 'The logo file in the folder cannot be read. It is neither shown nor printed.',
+  },
+  'logo.problem.onIssue': {
+    de: 'Das Dokument wird ohne Logo erstellt: Die Logodatei im Ordner wurde nicht angenommen (siehe Einstellungen).',
+    en: 'The document is made without the logo: the logo file in the folder was not accepted (see the settings).',
+  },
 
   'problem.required': { de: 'Bitte ausfüllen.', en: 'Please fill in.' },
   'problem.tooLong': { de: 'Zu lang.', en: 'Too long.' },

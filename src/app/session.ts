@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { logoFileName, type LogoRef, type LogoType, type NewCompany } from '../domain/company';
+import { checkStoredLogo, logoFileName, MAX_LOGO_BYTES, type LogoRef, type LogoType, type NewCompany } from '../domain/company';
 import { indexedDbHandleStore, type CompanyEntry, type HandleStore } from '../data/fs/handleStore';
 import { FsRepository } from '../data/fs/FsRepository';
 import { toSafeFileName } from '../data/fs/fileNames';
@@ -18,7 +18,7 @@ import type { CompanyFile } from '../data/types';
 import { isRecord } from '../data/validate';
 import { t } from '../i18n';
 import { sha256Hex } from '../lib/sha256';
-import { applyRecovered, loadCompany, resetApp, setLoadIssues, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
+import { applyRecovered, loadCompany, resetApp, setLoadIssues, setLogoProblem, setLogoUrl, showToast, updateCompany, useApp, type CompanyRecords } from '../store/appStore';
 import { setLastCompany, usePrefs } from '../store/prefs';
 
 // Startup flow: check the browser → known company folders → permission → load → app.
@@ -492,25 +492,47 @@ export async function finishSetup({ account, ...profile }: NewCompany, logo: Log
 
 /* ---------- Logo ---------- */
 
-async function loadLogo() {
+/**
+ * The logo file of the open company, checked before it is used (#78): its size before it is read, then its SHA-256,
+ * type and size in pixels against company.json and the limits of an upload (`checkStoredLogo`). Another or a broken
+ * file is neither shown nor printed, and the store says why (`logoProblem`). Null without a logo or a valid file.
+ */
+async function readCheckedLogo(): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: LogoType } | null> {
   const company = useApp.getState().company;
-  if (!repo || !company?.logo) return setLogoUrl(null);
-  const res = await repo.readAsset(company.logo.file);
-  // the type comes from company.json, not from the file name, so that an SVG is shown as an image
-  if (res.ok) setLogoUrl(URL.createObjectURL(new Blob([res.value], { type: company.logo.type })));
-  else console.warn('Could not read the logo', res.error.cause);
-}
-
-/** The logo file of the open company, for a PDF; null when there is none or it cannot be read */
-export async function readLogo(): Promise<{ bytes: Uint8Array; type: LogoType } | null> {
-  const company = useApp.getState().company;
-  if (!repo || !company?.logo) return null;
+  if (!repo || !company?.logo) {
+    setLogoProblem(null);
+    return null;
+  }
   const res = await repo.readAsset(company.logo.file);
   if (!res.ok) {
     console.warn('Could not read the logo', res.error.cause);
+    setLogoProblem('unreadable');
     return null;
   }
-  return { bytes: new Uint8Array(await res.value.arrayBuffer()), type: company.logo.type };
+  if (res.value.size > MAX_LOGO_BYTES) {
+    setLogoProblem('tooLarge');
+    return null;
+  }
+  const bytes = new Uint8Array(await res.value.arrayBuffer());
+  const checked = checkStoredLogo(bytes, await sha256Hex(bytes), company.logo);
+  if (!checked.ok) {
+    console.warn('The logo file of the folder is not used', checked.error);
+    setLogoProblem(checked.error);
+    return null;
+  }
+  setLogoProblem(null);
+  return { bytes, type: checked.value };
+}
+
+async function loadLogo() {
+  const logo = await readCheckedLogo();
+  // the type comes from company.json, not from the file name, so that an SVG is shown as an image
+  setLogoUrl(logo ? URL.createObjectURL(new Blob([logo.bytes], { type: logo.type })) : null);
+}
+
+/** The logo file of the open company, for a PDF; null when there is none, or it cannot be read or is not the one saved */
+export async function readLogo(): Promise<{ bytes: Uint8Array; type: LogoType } | null> {
+  return readCheckedLogo();
 }
 
 /** Settings: a new logo is written as a new file (named after its hash); the old file stays in the folder. */
@@ -527,6 +549,7 @@ export async function replaceLogo(logo: LogoUpload): Promise<StorageErrorKind | 
 export function removeLogo() {
   updateCompany({ logo: null });
   setLogoUrl(null);
+  setLogoProblem(null);
 }
 
 /* ---------- Runtime ---------- */

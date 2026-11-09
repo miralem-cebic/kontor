@@ -339,7 +339,15 @@ export const LOGO_EXTENSION: Record<LogoType, string> = { 'image/png': 'png', 'i
 /** Name of a logo file in assets/: "logo-" and the first 16 hex digits of its SHA-256 */
 export const LOGO_FILE = /^logo-([0-9a-f]{16})\.(png|jpg|svg)$/;
 
-export type LogoProblem = 'empty' | 'tooLarge' | 'unsupportedType';
+/**
+ * The largest logo in pixels, read from the header before the picture is decoded (#78). The logo box of a document
+ * (55 × 24 mm) needs about 1300 × 570 pixels at 600 dpi; a small file can declare far more and fill the memory.
+ */
+export const MAX_LOGO_SIDE = 10_000;
+export const MAX_LOGO_PIXELS = 25_000_000;
+
+/** `dimensions`: larger in pixels than allowed, or a PNG or JPEG whose size cannot be read from its header */
+export type LogoProblem = 'empty' | 'tooLarge' | 'unsupportedType' | 'dimensions';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG_SIGNATURE = [0xff, 0xd8, 0xff];
@@ -356,11 +364,67 @@ export function detectLogoType(bytes: Uint8Array): LogoType | null {
   return SVG_START.test(head) ? 'image/svg+xml' : null;
 }
 
+/** A JPEG marker that starts a frame header with the size: SOF0 to SOF15 without DHT (C4), JPG (C8) and DAC (CC) */
+const isFrameMarker = (m: number) => m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc;
+
+/**
+ * The size of a PNG (its IHDR chunk) or of a JPEG (its frame header), read from the bytes without decoding the picture.
+ * Null when the header cannot be found; an SVG has no size in pixels.
+ */
+export function logoDimensions(bytes: Uint8Array, type: LogoType): { width: number; height: number } | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (type === 'image/png') {
+    // signature (8), chunk length (4), "IHDR" (4), width (4), height (4)
+    if (bytes.length < 24 || String.fromCharCode(...bytes.subarray(12, 16)) !== 'IHDR') return null;
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+  if (type !== 'image/jpeg') return null;
+  let at = 2; // after SOI
+  while (at + 4 <= bytes.length) {
+    if (bytes[at] !== 0xff) return null;
+    const marker = bytes[at + 1] as number;
+    // fill bytes, and the markers without a length
+    if (marker === 0xff) {
+      at += 1;
+      continue;
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      at += 2;
+      continue;
+    }
+    // the image data or its end before a frame header: no size
+    if (marker === 0xda || marker === 0xd9) return null;
+    const length = view.getUint16(at + 2);
+    if (isFrameMarker(marker)) return at + 9 <= bytes.length ? { width: view.getUint16(at + 7), height: view.getUint16(at + 5) } : null;
+    at += 2 + length;
+  }
+  return null;
+}
+
 export function checkLogo(bytes: Uint8Array): Result<LogoType, LogoProblem> {
   if (bytes.length === 0) return err('empty');
   if (bytes.length > MAX_LOGO_BYTES) return err('tooLarge');
   const type = detectLogoType(bytes);
-  return type ? ok(type) : err('unsupportedType');
+  if (!type) return err('unsupportedType');
+  if (type === 'image/svg+xml') return ok(type);
+  const size = logoDimensions(bytes, type);
+  if (!size || size.width === 0 || size.height === 0 || size.width > MAX_LOGO_SIDE || size.height > MAX_LOGO_SIDE || size.width * size.height > MAX_LOGO_PIXELS) return err('dimensions');
+  return ok(type);
+}
+
+/** Why a logo file of the folder is not used: `changed` when it is not the file company.json names (another hash or type) */
+export type StoredLogoProblem = LogoProblem | 'changed';
+
+/**
+ * Checks a logo read from the folder before it is shown or printed (#78): it must be the file company.json names (its
+ * SHA-256, computed by the caller, and its type) and pass the checks of an upload. Another file under the same name
+ * (a shared folder, a sync conflict) is not used.
+ */
+export function checkStoredLogo(bytes: Uint8Array, sha256: string, ref: LogoRef): Result<LogoType, StoredLogoProblem> {
+  if (sha256 !== ref.sha256) return err('changed');
+  const checked = checkLogo(bytes);
+  if (!checked.ok) return checked;
+  return checked.value === ref.type ? checked : err('changed');
 }
 
 export const logoFileName = (sha256: string, type: LogoType): string => `logo-${sha256.slice(0, 16)}.${LOGO_EXTENSION[type]}`;

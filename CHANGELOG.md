@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Opening a company is faster (#87): the files of a collection are read 16 at a time instead of one after the other, and the eight collections (contacts, items, documents, payments, dunnings, quote decisions, expenses, payouts) are read at the same time. In a test with 5,000 files this is about four times faster. The records and the unreadable files are listed in the order of the file names. No format change. A progress display on the start screen is not part of this change yet.
 - The emergency copy in the browser has a new name (`kontor.unsaved.v2.<companyId>`) and the form `<signature>.<JSON>`; the folder gets the hidden file `.kontor/emergency-copy.key`. No file of the format changes.
 - All files of a company folder have schema version 17: payouts are a new kind of file (`payouts/`); no existing file changes.
 - All files of a company folder have schema version 16: `company.json` has `invoiceDefaults.footerParts` (which parts the footer shows; all three for existing companies), and the company in the snapshot of an issued document gets it too; no other file changes.

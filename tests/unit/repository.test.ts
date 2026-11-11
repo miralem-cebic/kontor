@@ -167,6 +167,59 @@ describe('contacts in the folder', () => {
   });
 });
 
+describe('reading many records (#87)', () => {
+  /** Makes every getFile() of the directory take a moment and counts how many are in flight at once */
+  async function slowReads(dir: MemDir) {
+    const stats = { inFlight: 0, peak: 0, total: 0 };
+    for (const child of dir.children.values()) {
+      const file = child as MemFile;
+      const original = file.getFile.bind(file);
+      file.getFile = async () => {
+        stats.total++;
+        stats.peak = Math.max(stats.peak, ++stats.inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        stats.inFlight--;
+        return original();
+      };
+    }
+    return stats;
+  }
+
+  it('reads the files with several reads in flight, but never more than 32', async () => {
+    for (let i = 0; i < 100; i++) must(await repo.saveContact(makeContact(sampleContact({ name: `C${i}`, customerNumber: `K-${i}` }))));
+    const stats = await slowReads(await root.getDirectoryHandle('contacts'));
+    const { contacts, issues } = must(await new FsRepository(root.asHandle()).loadContacts());
+    expect(contacts).toHaveLength(100);
+    expect(issues).toEqual([]);
+    expect(stats.total).toBe(100);
+    expect(stats.peak).toBeGreaterThan(1);
+    expect(stats.peak).toBeLessThanOrEqual(32);
+  });
+
+  it('returns the records and the problems in the order of the file names, whatever read finishes first', async () => {
+    for (let i = 0; i < 40; i++) must(await repo.saveContact(makeContact(sampleContact({ name: `C${i}`, customerNumber: `K-${i}` }))));
+    const dir = await root.getDirectoryHandle('contacts');
+    const ids = [...dir.children.keys()].map((n) => n.replace('.json', '')).sort();
+    // two broken files, named so that they sort at both ends
+    ((await dir.getFileHandle('00000000-0000-4000-8000-000000000000.json', { create: true })) as MemFile).content = new Blob(['{']);
+    ((await dir.getFileHandle('ffffffff-ffff-4fff-8fff-ffffffffffff.json', { create: true })) as MemFile).content = new Blob(['{']);
+    // earlier files take longer, so the reads finish in the reverse order
+    let delay = 40;
+    for (const child of dir.children.values()) {
+      const file = child as MemFile;
+      const original = file.getFile.bind(file);
+      const wait = delay--;
+      file.getFile = async () => {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        return original();
+      };
+    }
+    const { contacts, issues } = must(await new FsRepository(root.asHandle()).loadContacts());
+    expect(contacts.map((c) => c.id)).toEqual(ids);
+    expect(issues.map((i) => i.file)).toEqual(['contacts/00000000-0000-4000-8000-000000000000.json', 'contacts/ffffffff-ffff-4fff-8fff-ffffffffffff.json']);
+  });
+});
+
 describe('items in the folder', () => {
   it('saves and loads items, deleted ones included', async () => {
     const a = makeItem(sampleItem({ name: 'A' }));

@@ -55,6 +55,20 @@ async function attempt<T>(run: () => Promise<T>): Promise<Result<T, StorageError
   }
 }
 
+/** How many files of a collection are read at once: enough to hide the latency of the browser API, few enough for a sync client */
+const READ_CONCURRENCY = 16;
+
+/** Maps the items with at most `limit` calls in flight; the result keeps the order of the items. */
+async function mapPool<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  const pending = items.entries(); // one iterator shared by all workers: each item is taken once
+  const worker = async () => {
+    for (const [i, item] of pending) out[i] = await run(item);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 /** Helper files of the system, the browser or a sync client (.DS_Store, ~$…, .crswap, .tmp), never read */
 const isHelperFile = (name: string) => name.startsWith('.') || name.startsWith('~') || name.endsWith('.crswap') || name.endsWith('.tmp');
 
@@ -329,20 +343,27 @@ export class FsRepository implements Repository {
   /** The records of a directory, one file per record named after its ID. A broken file is reported; the others still load. */
   private async loadRecords<T extends { id: string }>(dirName: string, read: (raw: unknown) => T): Promise<{ records: T[]; issues: LoadIssue[] }> {
     const dir = await this.root.getDirectoryHandle(dirName, { create: true });
-    const records: T[] = [];
-    const issues: LoadIssue[] = [];
-    for await (const [name, h] of dir.entries()) {
-      if (h.kind !== 'file' || !RECORD_FILE.test(name)) continue;
+    // the listing is fast; the reads are one round trip each, so they run in a bounded pool (#87)
+    const entries: [string, FileSystemFileHandle][] = [];
+    for await (const [name, h] of dir.entries()) if (h.kind === 'file' && RECORD_FILE.test(name)) entries.push([name, h as FileSystemFileHandle]);
+    entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const results = await mapPool(entries, READ_CONCURRENCY, async ([name, handle]): Promise<{ record: T } | { issue: LoadIssue }> => {
       const path = `${dirName}/${name}`;
       try {
-        const file = await (h as FileSystemFileHandle).getFile();
+        const file = await handle.getFile();
         this.known.set(path, stampOf(file));
         const record = read(JSON.parse(await file.text()));
         if (`${record.id}.json` !== name) throw new InvalidFileError('The file name does not match the ID in the file');
-        records.push(record);
+        return { record };
       } catch (e) {
-        issues.push({ file: path, message: e instanceof Error ? e.message : String(e) });
+        return { issue: { file: path, message: e instanceof Error ? e.message : String(e) } };
       }
+    });
+    const records: T[] = [];
+    const issues: LoadIssue[] = [];
+    for (const result of results) {
+      if ('record' in result) records.push(result.record);
+      else issues.push(result.issue);
     }
     return { records, issues };
   }

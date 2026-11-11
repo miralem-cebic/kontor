@@ -1,6 +1,6 @@
 # Continuous integration for pull requests and the main branch.
 # Required status checks for the main branch ruleset: pr-title, markdown-lint, e2e and
-# build / package (job "build" calling build.yml). "conformance" is not required,
+# build / package (job "build" calling build.yml). "conformance" and "docker" are not required,
 # see "Repository settings" in CONTRIBUTING.md.
 name: CI
 
@@ -78,6 +78,11 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       version: dev-${{ github.run_number }}
+
+  # The container image (ADR 0007): built for amd64 and smoke tested, not published. Not a required check.
+  docker:
+    name: docker
+    uses: ./.github/workflows/docker.yml
 
   # Pinned to engineering-baseline v0.1.0. baseline-ref selects the checker the workflow runs; without it
   # the workflow runs main. baseline-ref is the tag, not the commit: npx (npm 10) cannot fetch a GitHub

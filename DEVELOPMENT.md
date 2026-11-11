@@ -27,6 +27,7 @@ The project should not live inside a synced folder such as OneDrive, because `no
 | `npm run check:file` | Build acceptance test: opens `dist/index.html` via `file://` and checks console, secure context, API, font |
 | `npm run verify` | The definition of done: `lint:md`, `lint`, `test`, `build` and `check:file`, in this order, stopping at the first failure. It does not run `typecheck` separately, because `build` does |
 | `npm run verify:full` | `verify`, then `test:e2e`. Needs an installed Chrome and takes longer, which is why e2e is not part of `verify` |
+| `scripts/docker-smoke.sh [image]` | Smoke test of the container image (default `kontor:test`, built with `docker build -t kontor:test .`): starts it like `compose.yaml` does and checks the page, the script, the security headers, compression, 404, the non-root user and the health check. Runs in CI for every pull request (job `docker`) |
 
 Playwright uses the installed Chrome (`channel: 'chrome'`), so no browsers are downloaded. `HEADED=1` shows the window.
 
@@ -45,9 +46,10 @@ CI (`.github/workflows/ci.yml`) runs these jobs for every pull request and for `
 | `markdown-lint` | markdownlint-cli2 on `**/*.md`; locally `npm run lint:md` | yes |
 | `e2e` | `npm run build`, `npm run check:file`, `npx playwright test` in the Chrome of the runner image; locally `npm run test:e2e` | yes |
 | `build / package` | `.github/workflows/build.yml`: typecheck, lint, tests, build, then `npm audit --omit=dev --audit-level=high`, then the zip with its SHA-256 | yes |
+| `docker` | Builds the container image and runs `scripts/docker-smoke.sh` against it, see "Container image" | no |
 | `conformance` | Checks the repository against [engineering-baseline](https://github.com/miralem-cebic/engineering-baseline), see below | no |
 
-`npm run verify` covers the Markdown lint and everything in `build / package` except `npm audit` (it needs the network). It does not cover `e2e` (use `npm run verify:full`), `pr-title` or `conformance`. Both workflows read the Node version from `.nvmrc`.
+`npm run verify` covers the Markdown lint and everything in `build / package` except `npm audit` (it needs the network). It does not cover `e2e` (use `npm run verify:full`), `pr-title`, `docker` or `conformance`. Both workflows read the Node version from `.nvmrc`.
 
 ### Conformance (engineering-baseline)
 
@@ -74,6 +76,16 @@ Chrome blocks module scripts and CORS requests under `file://`. Therefore:
 - The Inter font (`@fontsource/inter`, Latin subset: umlauts, ß and € included) is embedded as a `data:` URL in the CSS.
 - The PDFs embed Inter as static TTF files (`@expo-google-fonts/inter`, full character set) and an sRGB ICC profile (`src/pdf/assets/`). `src/pdf/assets.ts` imports them with `?inline`, so they are part of the script as `data:` URLs and decoded when the first PDF is made; `*.icc` is listed in `assetsInclude` of `vite.config.ts` and `vitest.config.ts`. With pdf-lib and fontkit the script is about 2.3 MB.
 - The same plugin adds a Content Security Policy (`CONTENT_SECURITY_POLICY`): no network access (`connect-src 'none'`), scripts only from the build, images from the build, `data:` and `blob:` (the logo). It is not added in `npm run dev`, because the dev server injects inline scripts. `npm run check:file` reports a refused inline script as a console error, which fails the check.
+
+## Container image
+
+`Dockerfile` builds `dist/` on the build platform (`node:22-alpine`, the version of `.nvmrc`) and copies it into `nginxinc/nginx-unprivileged`, which serves it on port 8080 with `docker/default.conf` (ADR 0007). The last stage has no `RUN` step, so the image for `linux/arm64` and `linux/arm/v7` needs no emulation.
+
+- `docker/default.conf` sends the Content Security Policy of the build plus `frame-ancestors 'none'`. `tests/unit/docker.test.ts` fails when it differs from `CONTENT_SECURITY_POLICY` in `build/fileProtocol.ts`: change both together.
+- Do not add `listen [::]:8080`: nginx stops on a host without IPv6.
+- `compose.yaml` runs the published image (`build: .` builds it instead); `compose.https.yaml` adds Caddy with `tls internal` (`docker/Caddyfile`).
+- `.github/workflows/docker.yml` builds and smoke tests the image (called by `ci.yml` and `release.yml`). The job `docker` in `release.yml` publishes `ghcr.io/miralem-cebic/kontor` for a release tag. A package that a workflow creates is private at first: after the first release, set its visibility to public in the package settings on GitHub, or `docker pull` asks for a login.
+- Dependabot keeps the base images (`docker`) and `compose.yaml` (`docker-compose`) current.
 
 ## Architecture
 

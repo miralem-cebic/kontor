@@ -59,6 +59,14 @@ Angebotsstatus (angenommen, abgelehnt), Rechnungskorrekturen und Gutschriften, G
 
 Nach einem Neustart des Browsers fragt der Browser einmal nach, ob kontor wieder auf den Ordner zugreifen darf.
 
+### Als Container (Raspberry Pi)
+
+kontor gibt es auch als Docker-Image für `amd64`, `arm64` und `arm/v7`. Der Container liefert nur die App aus; deine Daten bleiben im Ordner, den du im Browser wählst. Für den Zugriff aus dem Heimnetz brauchst du HTTPS, sonst sperrt der Browser den Ordnerdialog. Anleitung: [kontor im Container](docs/docker.md).
+
+```bash
+docker compose up -d   # mit compose.yaml, dann http://localhost:8080
+```
+
 ### Aus dem Quellcode
 
 ```bash
@@ -82,6 +90,7 @@ Architektur, Datenformat und alle Skripte stehen in [DEVELOPMENT.md](DEVELOPMENT
 ## Dokumentation
 
 - [Roadmap](docs/roadmap.md): geplante Funktionen, Weg zu Version 1.0 und Finanzamt-Exporte
+- [kontor im Container](docs/docker.md): Docker, Raspberry Pi und HTTPS im Heimnetz
 - [Wettbewerb](docs/competition.md): andere Anbieter und was sie exportieren
 - [Architekturentscheidungen](docs/adr/)
 - [Entwicklung](DEVELOPMENT.md), [Mitarbeit](CONTRIBUTING.md), [Verhaltenskodex](CODE_OF_CONDUCT.md), [Sicherheit](SECURITY.md), [Änderungen](CHANGELOG.md)

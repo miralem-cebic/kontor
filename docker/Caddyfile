@@ -1,0 +1,6 @@
+# HTTPS in front of kontor for the home network (compose.https.yaml). The certificate comes from Caddy's own
+# authority, because a name like raspberrypi.local cannot get a public one.
+{$KONTOR_HOST} {
+	tls internal
+	reverse_proxy kontor:8080
+}

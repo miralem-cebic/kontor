@@ -1,0 +1,22 @@
+# kontor as a container (ADR 0007, docs/docker.md). The container only serves the app; the data of a company
+# stays in the folder that the browser opens.
+#
+#   docker compose up -d        then open http://localhost:8080
+#
+# The port is published on the loopback address only. A browser allows the folder picker on localhost and on
+# HTTPS, but not on plain http://<address-of-the-pi>. For the home network add compose.https.yaml.
+services:
+  kontor:
+    image: ghcr.io/miralem-cebic/kontor:latest
+    build: .
+    container_name: kontor
+    restart: unless-stopped
+    ports:
+      - "${KONTOR_BIND:-127.0.0.1}:${KONTOR_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

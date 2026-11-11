@@ -23,7 +23,7 @@ npm run test:e2e      # builds, then Playwright against dist/index.html (needs i
 - **Test first.** Write the failing test, watch it fail for the right reason, then implement. A bug fix starts with a test that reproduces the bug.
 - **Done means verified.** A change is done when `npm run verify` is green (zero lint warnings, zero Markdown lint findings) and you have read its output. `verify` does not repeat `typecheck`, because `build` runs `tsc --noEmit` first.
 - **E2E is separate on purpose.** It needs Chrome and is slow, so it is not part of `verify`. If a change can affect the running app (`src/app/`, `src/components/`, `src/features/`, `src/store/`, `vite.config.ts`, `build/`), also run `npm run verify:full` when Chrome is installed; otherwise say that e2e was not run.
-- **CI runs more than `verify`.** The pull request checks are `pr-title`, `markdown-lint`, `e2e`, `build / package` (typecheck, lint, tests, build and `npm audit --omit=dev --audit-level=high`) and `conformance`. Local `verify` covers the Markdown lint, but not `e2e` (use `verify:full`), `npm audit`, `pr-title` or `conformance`.
+- **CI runs more than `verify`.** The pull request checks are `pr-title`, `markdown-lint`, `e2e`, `build / package` (typecheck, lint, tests, build and `npm audit --omit=dev --audit-level=high`), `docker` (builds the container image and smoke tests it) and `conformance`. Local `verify` covers the Markdown lint, but not `e2e` (use `verify:full`), `npm audit`, `pr-title`, `docker` or `conformance`.
 
 ## Layering
 

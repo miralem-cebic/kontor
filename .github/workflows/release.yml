@@ -35,6 +35,56 @@ jobs:
     with:
       version: ${{ github.ref_name }}
 
+  # The container image (ADR 0007): built and smoke tested first, then published for amd64, arm64 and arm/v7
+  # (Raspberry Pi) to ghcr.io as ghcr.io/<owner>/kontor:<version>, <major>.<minor> and, not for a pre-release, latest.
+  # The last stage of the Dockerfile has no RUN step and the build stage runs on the build platform,
+  # so no emulation (QEMU) is needed for the other platforms.
+  docker-test:
+    name: docker-test
+    needs: build
+    uses: ./.github/workflows/docker.yml
+
+  docker:
+    name: docker
+    needs: docker-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
   publish:
     name: publish
     needs: build

@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # Only this stage is built per platform: linux/amd64, linux/arm64 (Raspberry Pi, 64-bit) and linux/arm/v7 (32-bit).
-FROM nginxinc/nginx-unprivileged:1.30-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 LABEL org.opencontainers.image.title="kontor" \
       org.opencontainers.image.description="Local invoicing and cash-basis accounting for self-employed people in Germany" \
       org.opencontainers.image.source="https://github.com/miralem-cebic/kontor" \

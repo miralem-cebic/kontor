@@ -9,7 +9,7 @@
 # Anything other than localhost needs HTTPS, or the browser hides the folder picker (see docs/docker.md).
 
 # dist/ is the same for every CPU, so it is built once on the build platform and never under emulation.
-FROM --platform=$BUILDPLATFORM node:26-alpine AS build
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --ignore-scripts

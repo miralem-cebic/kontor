@@ -235,21 +235,24 @@ async function openLoaded(r: FsRepository, entry: CompanyEntry, company: Company
 
 /** Opens the company: its records, the persister, a recovered emergency copy, the logo, the backup */
 async function openRecords(r: FsRepository, entry: CompanyEntry, company: CompanyFile) {
-  const loadedContacts = await r.loadContacts();
+  // the collections are independent, so they are read at the same time (#87); the first failure in this order is reported
+  const [loadedContacts, loadedItems, loadedDocuments, loadedPayments, loadedDunnings, loadedQuoteStatuses, loadedExpenses, loadedPayouts] = await Promise.all([
+    r.loadContacts(),
+    r.loadItems(),
+    r.loadDocuments(),
+    r.loadPayments(),
+    r.loadDunnings(),
+    r.loadQuoteStatuses(),
+    r.loadExpenses(),
+    r.loadPayouts(),
+  ]);
   if (!loadedContacts.ok) return set({ phase: 'failed', error: loadedContacts.error.kind, currentId: company.id });
-  const loadedItems = await r.loadItems();
   if (!loadedItems.ok) return set({ phase: 'failed', error: loadedItems.error.kind, currentId: company.id });
-  const loadedDocuments = await r.loadDocuments();
   if (!loadedDocuments.ok) return set({ phase: 'failed', error: loadedDocuments.error.kind, currentId: company.id });
-  const loadedPayments = await r.loadPayments();
   if (!loadedPayments.ok) return set({ phase: 'failed', error: loadedPayments.error.kind, currentId: company.id });
-  const loadedDunnings = await r.loadDunnings();
   if (!loadedDunnings.ok) return set({ phase: 'failed', error: loadedDunnings.error.kind, currentId: company.id });
-  const loadedQuoteStatuses = await r.loadQuoteStatuses();
   if (!loadedQuoteStatuses.ok) return set({ phase: 'failed', error: loadedQuoteStatuses.error.kind, currentId: company.id });
-  const loadedExpenses = await r.loadExpenses();
   if (!loadedExpenses.ok) return set({ phase: 'failed', error: loadedExpenses.error.kind, currentId: company.id });
-  const loadedPayouts = await r.loadPayouts();
   if (!loadedPayouts.ok) return set({ phase: 'failed', error: loadedPayouts.error.kind, currentId: company.id });
   const records: CompanyRecords = {
     contacts: loadedContacts.value.contacts,

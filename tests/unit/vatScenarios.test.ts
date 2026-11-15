@@ -1,6 +1,7 @@
 // The VAT reference scenarios of #37: worked examples with exact cents, one fixture file per topic in tests/fixtures/vat/.
 // The expected values and the paragraph and URL behind each are in those files. Scenarios that need features that are not
-// built yet (payouts, expenses with § 13b) are `it.todo` entries; their reasoning is in tests/fixtures/vat/pending.ts.
+// built yet are `it.todo` entries; their reasoning is in tests/fixtures/vat/pending.ts. Payouts and expenses with § 13b (#34) are
+// scenarios in tests/fixtures/vat/08-reverse-charge-and-payouts.ts.
 
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';

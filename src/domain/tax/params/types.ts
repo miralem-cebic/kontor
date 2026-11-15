@@ -19,6 +19,16 @@ export interface VatReturnFields {
   inputTax: string;
   /** Remaining prepayment (positive) or surplus (negative) */
   remainingPrepayment: string;
+  /** Services of a supplier in another EU state for which the recipient owes the tax (§ 13b Abs. 1 UStG): base */
+  euReverseCharge: string;
+  /** The tax beside it */
+  euReverseChargeTax: string;
+  /** Other services for which the recipient owes the tax, among them those of a supplier established abroad (§ 13b Abs. 2 Nr. 1 UStG): base */
+  otherReverseCharge: string;
+  /** The tax beside it */
+  otherReverseChargeTax: string;
+  /** Input tax from services under § 13b UStG (§ 15 Abs. 1 Satz 1 Nr. 4 UStG) */
+  inputTaxReverseCharge: string;
 }
 
 export interface TaxYearParams {

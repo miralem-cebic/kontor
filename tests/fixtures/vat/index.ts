@@ -6,8 +6,9 @@ import { scenarios as foreign } from './02-eu-and-foreign-supplies';
 import { scenarios as boundaries } from './03-period-boundaries';
 import { scenarios as cashAccrual } from './04-cash-and-accrual';
 import { scenarios as smallBusiness } from './05-small-business-and-expenses';
+import { scenarios as reverseCharge } from './08-reverse-charge-and-payouts';
 
-export const scenarios: VatScenario[] = [...rounding, ...foreign, ...boundaries, ...cashAccrual, ...smallBusiness];
+export const scenarios: VatScenario[] = [...rounding, ...foreign, ...boundaries, ...cashAccrual, ...smallBusiness, ...reverseCharge];
 export { limitCases } from './06-small-business-limits';
 export { pendingScenarios } from './pending';
 export { zmScenarios, type ZmScenario } from './07-zm-lines';

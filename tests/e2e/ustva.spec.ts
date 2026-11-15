@@ -83,3 +83,71 @@ test('a small business sees that no summary report is needed', async ({ page }) 
   await expect(page.getByText('Keine Zusammenfassende Meldung nötig')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('reverse charge (#34): the 99 € fee of an EU supplier is owed and deducted (46/47, 67), with the booking behind the number', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Alpha Studio', smallBusiness: false });
+
+  await page.getByRole('button', { name: 'Ausgaben' }).click();
+  await page.getByRole('button', { name: 'Neue Ausgabe' }).click();
+  await page.getByLabel('Lieferant').fill('Apple Distribution International');
+  await page.getByLabel('Betrag in € (brutto)').fill('99');
+  await page.getByLabel('Umsatzsteuer auf dem Beleg').selectOption({ label: 'Lieferant aus der EU (Reverse-Charge)' });
+  await page.getByRole('button', { name: 'Ausgabe speichern' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'gespeichert' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Steuern' }).click();
+  const section = page.getByRole('region', { name: 'Umsatzsteuer-Voranmeldung' });
+  const now = new Date();
+  await section.getByLabel('Art', { exact: true }).selectOption('month');
+  await section.getByLabel('Jahr', { exact: true }).selectOption(String(now.getFullYear()));
+  await section.getByLabel('Monat', { exact: true }).selectOption(String(now.getMonth() + 1));
+
+  // line 30 of the form: base 46, tax 47; the same tax as input tax in 67; nothing left to pay
+  const owed = section.getByRole('row', { name: /^46 \/ 47 / });
+  await expect(owed).toContainText('99,00');
+  await expect(owed).toContainText('18,81');
+  await expect(section.getByRole('row', { name: /^67 / })).toContainText('18,81');
+  await expect(section.getByRole('row', { name: /^83 / })).toContainText('0,00');
+  await expect(owed.getByRole('button', { name: 'Steuer 47 kopieren (18,81)' })).toBeVisible();
+
+  // the booking behind the number
+  await owed.getByText('Buchungen dahinter (1)').click();
+  await expect(owed.getByText('Ausgabe Apple Distribution International')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('reverse charge (#34): a small business gets a return only for that tax, without input tax', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto(APP_URL);
+  await setUpCompany(page, { name: 'Beta Studio', smallBusiness: true });
+
+  await page.getByRole('button', { name: 'Ausgaben' }).click();
+  await page.getByRole('button', { name: 'Neue Ausgabe' }).click();
+  await page.getByLabel('Lieferant').fill('Apple Distribution International');
+  await page.getByLabel('Betrag in € (brutto)').fill('99');
+  await page.getByLabel('Umsatzsteuer auf dem Beleg').selectOption({ label: 'Lieferant aus der EU (Reverse-Charge)' });
+  await page.getByRole('button', { name: 'Ausgabe speichern' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'gespeichert' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Steuern' }).click();
+  const section = page.getByRole('region', { name: 'Umsatzsteuer-Voranmeldung' });
+  const now = new Date();
+  await section.getByLabel('Art', { exact: true }).selectOption('month');
+  await section.getByLabel('Jahr', { exact: true }).selectOption(String(now.getFullYear()));
+  await section.getByLabel('Monat', { exact: true }).selectOption(String(now.getMonth() + 1));
+
+  await expect(section.getByText('Voranmeldung nur für die Steuer nach § 13b UStG')).toBeVisible();
+  await expect(section.getByRole('row', { name: /^46 \/ 47 / })).toContainText('18,81');
+  await expect(section.getByRole('row', { name: /^83 / })).toContainText('18,81');
+  // no supplies and no input tax on this return
+  await expect(section.getByRole('row', { name: /^81 / })).toHaveCount(0);
+  await expect(section.getByRole('row', { name: /^66 / })).toHaveCount(0);
+  await expect(section.getByRole('row', { name: /^67 / })).toHaveCount(0);
+
+  // a period without such an expense: the small business note
+  await section.getByLabel('Monat', { exact: true }).selectOption(String(((now.getMonth() + 1) % 12) + 1));
+  await expect(section.getByText('Keine Voranmeldung nötig')).toBeVisible();
+  expect(errors).toEqual([]);
+});

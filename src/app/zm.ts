@@ -5,16 +5,20 @@
 
 import { encodeCsv, num } from '../data/export/csv';
 import type { DocumentId } from '../data/ids';
-import type { CompanyFile, DocumentFile, ExpenseFile, PaymentFile } from '../data/types';
+import type { CompanyFile, ContactFile, DocumentFile, ExpenseFile, PaymentFile, PayoutFile } from '../data/types';
 import { isInvoice } from '../data/types';
 import { invoiceTotals } from '../domain/invoice';
 import { cents, toDecimalString } from '../domain/money';
-import { periodOfDate, periodStart, type UstvaPeriod } from '../domain/ustva';
+import { periodEnd, periodOfDate, periodStart, type UstvaPeriod } from '../domain/ustva';
 import { zm, zmUstvaCheck, zmWholeEuros, type ZmConsistency, type ZmInvoice, type ZmKind, type ZmLine, type ZmNoticeCode, type ZmProblemCode, type ZmResult } from '../domain/zm';
 import { t, type MessageKey } from '../i18n';
 import { saveFile } from '../lib/browser';
-import { buildUstva, ustvaPeriodSlug } from './ustva';
+import { payoutNet } from '../domain/payout';
+import { buildUstva, payerCountry, ustvaPeriodSlug, type UstvaRecords } from './ustva';
+import { smallBusinessOn } from './vatStatus';
 import type { Table } from './csvExport';
+
+const coveredMonthEnd = (month: string): string => periodEnd({ year: Number(month.slice(0, 4)), kind: 'month', index: Number(month.slice(5)) });
 
 export interface ZmView {
   zm: ZmResult;
@@ -34,6 +38,7 @@ export function buildZm(
   payments: ReadonlyMap<string, PaymentFile>,
   expenses: ReadonlyMap<string, ExpenseFile>,
   period: UstvaPeriod,
+  records: UstvaRecords = {},
 ): ZmView | null {
   if (!company || company.tax.vat.kind !== 'regular') return null;
 
@@ -56,13 +61,39 @@ export function buildZm(
         net: invoiceTotals(inv, smallBusiness).net,
       };
     });
-  const result = zm({ period, invoices });
+  const result = zm({ period, invoices: [...invoices, ...payoutZmRows(records.payouts ?? new Map(), records.contacts ?? new Map(), smallBusinessOn(company, documents.values()))] });
 
   // the services of a quarter are reported in a quarter, or in the last month of it
   const span = period.kind === 'quarter' ? period : period.index % 3 === 0 ? periodOfDate(periodStart(period), 'quarter') : null;
-  const kz21 = span ? buildUstva(company, documents, payments, expenses, span)?.fields.find((f) => f.id === 'euServices')?.base : undefined;
+  const kz21 = span ? buildUstva(company, documents, payments, expenses, span, records)?.fields.find((f) => f.id === 'euServices')?.base : undefined;
   const check = span ? zmUstvaCheck(result, cents(kz21 ?? 0)) : null;
   return { zm: result, check, method: company.tax.vat.method };
+}
+
+/**
+ * The payouts of a payer in another EU state as rows of the report: a service not taxable in Germany (§ 3a Abs. 2 UStG) is reported
+ * with the VAT ID of the payer (§ 18a Abs. 2 UStG), like the same service with an invoice. They are the same payouts that
+ * go to Kz 21 of the advance return (`payoutReturnRows`), so the check of the two agrees.
+ */
+export function payoutZmRows(payouts: ReadonlyMap<string, PayoutFile>, contacts: ReadonlyMap<string, ContactFile>, smallOn: (date: string) => boolean): ZmInvoice[] {
+  return [...payouts.values()]
+    .filter((p) => p.deletedAt === null && p.taxTreatment === 'euB2bNotTaxable')
+    .map((p) => {
+      const payer = contacts.get(p.payerId);
+      return {
+        id: p.id,
+        number: `${payer?.name ?? '?'}, ${p.date}`,
+        source: 'payout' as const,
+        date: p.date,
+        serviceEnd: /^\d{4}-\d{2}$/.test(p.period) ? coveredMonthEnd(p.period) : p.date,
+        treatment: 'reverseCharge' as const,
+        customerCountry: payerCountry(payer),
+        customerVatId: payer?.vatId ?? '',
+        isCancellation: false,
+        smallBusiness: smallOn(p.date),
+        net: payoutNet(p),
+      };
+    });
 }
 
 /** The value of a line as it is typed into the portal: the country code, the number of the VAT ID without it, the amount in whole euros */

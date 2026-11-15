@@ -153,7 +153,7 @@ describe('the VAT ID of the recipient is checked before the report is sent', () 
 
   it('a missing VAT ID', () => {
     const r = run([service({ customerVatId: '  ' })]);
-    expect(r.problems).toEqual([{ invoiceId: 's1', number: 'RE-2026-0001', vatId: '', code: 'vatIdMissing' }]);
+    expect(r.problems).toEqual([{ invoiceId: 's1', number: 'RE-2026-0001', source: 'invoice', vatId: '', code: 'vatIdMissing' }]);
     expect(r.lines[0]).toMatchObject({ vatId: '', problem: 'vatIdMissing', country: 'IE' });
   });
 

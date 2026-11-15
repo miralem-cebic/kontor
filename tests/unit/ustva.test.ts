@@ -37,7 +37,8 @@ const invoice = (over: Partial<UstvaInvoice> = {}): UstvaInvoice => ({
   ...over,
 });
 
-const expense = (over: Partial<UstvaExpense> = {}): UstvaExpense => ({ date: '2026-10-20', taxTreatment: 'domestic', gross: cents(11_900), vat: cents(1_900), ...over });
+let expenseSeq = 0;
+const expense = (over: Partial<UstvaExpense> = {}): UstvaExpense => ({ id: `e${++expenseSeq}`, date: '2026-10-20', taxTreatment: 'domestic', gross: cents(11_900), vat: cents(1_900), smallBusiness: false, ...over });
 
 const run = (over: Partial<UstvaInput> = {}): UstvaResult =>
   ustva({ period: OCT_2026, method: 'accrual', permanentExtension: false, invoices: [], payments: [], expenses: [], ...over });
@@ -329,16 +330,107 @@ describe('expenses: input tax by the date of the expense', () => {
     expect(field(r, 'inputTax')?.tax).toBe(2_600);
   });
 
+  it('leaves out an expense of a day on which the business was a small business (no input tax, #77)', () => {
+    const r = run({ expenses: [expense(), expense({ smallBusiness: true }), expense({ smallBusiness: true, taxTreatment: 'euReverseCharge', vat: cents(0) })] });
+    expect(field(r, 'inputTax')?.tax).toBe(1_900);
+    expect(r.notices).toEqual([]);
+  });
+
   it('a surplus is a negative remaining prepayment', () => {
     const r = run({ expenses: [expense()] });
     expect(field(r, 'remainingPrepayment')?.tax).toBe(-1_900);
   });
 
-  it('reverse charge and third-country expenses are reported, not computed', () => {
+  it('reverse charge and third-country expenses owe and deduct the tax: Kz 46/47, 84/85 and 67 (#34)', () => {
     const r = run({ expenses: [expense({ taxTreatment: 'euReverseCharge', gross: cents(30_000), vat: cents(0) }), expense({ taxTreatment: 'thirdCountry', gross: cents(5_000), vat: cents(0) })] });
-    expect(r.notices).toContainEqual({ code: 'expenseReverseCharge', count: 1, amount: 30_000 });
-    expect(r.notices).toContainEqual({ code: 'expenseThirdCountry', count: 1, amount: 5_000 });
+    expect(field(r, 'euReverseCharge')).toMatchObject({ kz: '46', taxKz: '47', base: 30_000, tax: 5_700 });
+    expect(field(r, 'otherReverseCharge')).toMatchObject({ kz: '84', taxKz: '85', base: 5_000, tax: 950 });
+    expect(field(r, 'inputTaxReverseCharge')).toMatchObject({ kz: '67', tax: 6_650 });
     expect(field(r, 'inputTax')?.tax).toBe(0);
+    expect(field(r, 'remainingPrepayment')?.tax).toBe(0);
+    expect(r.notices).toEqual([]);
+  });
+
+  it('the tax of a reverse charge expense is rounded half away from zero, once per expense', () => {
+    // 0.10 € at 19 % is 0.019 €: 2 cents; 0.03 € at 19 % is 0.0057 €: 1 cent
+    const r = run({ expenses: [expense({ taxTreatment: 'euReverseCharge', gross: cents(10), vat: cents(0) }), expense({ taxTreatment: 'euReverseCharge', gross: cents(3), vat: cents(0) })] });
+    expect(field(r, 'euReverseCharge')?.tax).toBe(3);
+  });
+
+  it('the fields of lines 30 and 32 are shown only with an amount, the input tax of a small business day is not deducted', () => {
+    expect(field(run(), 'euReverseCharge')?.shown).toBe(false);
+    const r = run({ expenses: [expense({ taxTreatment: 'euReverseCharge', gross: cents(9_900), vat: cents(0), smallBusiness: true })] });
+    expect(field(r, 'euReverseCharge')).toMatchObject({ base: 9_900, tax: 1_881, shown: true });
+    expect(field(r, 'inputTaxReverseCharge')?.tax).toBe(0);
+    expect(field(r, 'remainingPrepayment')?.tax).toBe(1_881);
+  });
+
+  it('a small business files only for the tax it owes: no supplies, no input tax (§ 18 Abs. 4a UStG)', () => {
+    const r = run({
+      mode: 'smallBusiness',
+      invoices: [invoice()],
+      expenses: [expense({ smallBusiness: true }), expense({ taxTreatment: 'thirdCountry', gross: cents(5_000), vat: cents(0), smallBusiness: true })],
+    });
+    expect(r.mode).toBe('smallBusiness');
+    expect(field(r, 'taxable19')).toMatchObject({ base: 0, tax: 0, shown: false });
+    expect(field(r, 'inputTax')).toMatchObject({ tax: 0, shown: false });
+    expect(field(r, 'otherReverseCharge')).toMatchObject({ base: 5_000, tax: 950, shown: true });
+    expect(field(r, 'remainingPrepayment')).toMatchObject({ tax: 950, shown: true });
+  });
+
+  it('adds the notices the caller passes', () => {
+    const r = run({ extraNotices: [{ code: 'payoutPlatformVat', count: 2, amount: cents(5_000) }] });
+    expect(r.notices).toEqual([{ code: 'payoutPlatformVat', count: 2, amount: 5_000 }]);
+  });
+});
+
+describe('the records behind every number (#34)', () => {
+  const full = () =>
+    run({
+      period: Q3_2026,
+      invoices: [
+        invoice({ id: 'i1', date: '2026-08-10', serviceEnd: '2026-08-10' }),
+        { ...invoice({ id: 'p1', date: '2026-09-02', serviceEnd: '2026-09-02', treatment: 'reverseCharge', customerCountry: 'IE', lines: [{ rate: basisPoints(0), net: cents(50_000), tax: cents(0) }] }), source: 'payout' as const },
+      ],
+      expenses: [
+        expense({ id: 'x1', date: '2026-07-20' }),
+        expense({ id: 'x2', date: '2026-08-20', gross: cents(10_700), vat: cents(700) }),
+        expense({ id: 'x3', date: '2026-09-20', taxTreatment: 'euReverseCharge', gross: cents(9_900), vat: cents(0) }),
+      ],
+    });
+
+  it('names the invoice, the payout and the expenses behind each field', () => {
+    const r = full();
+    expect(field(r, 'taxable19')?.bookings).toEqual([{ kind: 'invoice', id: 'i1', base: 100_000, tax: 19_000 }]);
+    expect(field(r, 'euServices')?.bookings).toEqual([{ kind: 'payout', id: 'p1', base: 50_000, tax: 0 }]);
+    expect(field(r, 'inputTax')?.bookings).toEqual([
+      { kind: 'expense', id: 'x1', base: null, tax: 1_900 },
+      { kind: 'expense', id: 'x2', base: null, tax: 700 },
+    ]);
+    expect(field(r, 'euReverseCharge')?.bookings).toEqual([{ kind: 'expense', id: 'x3', base: 9_900, tax: 1_881 }]);
+    expect(field(r, 'remainingPrepayment')?.bookings).toEqual([]);
+  });
+
+  it('the bookings of every field add up to its base and tax', () => {
+    for (const f of full().fields.filter((x) => x.id !== 'remainingPrepayment')) {
+      const base = f.bookings.reduce((s, b) => s + (b.base ?? 0), 0);
+      const tax = f.bookings.reduce((s, b) => s + (b.tax ?? 0), 0);
+      expect(base, `${f.id} base`).toBe(f.base ?? 0);
+      expect(tax, `${f.id} tax`).toBe(f.tax ?? 0);
+    }
+  });
+
+  it('on the cash basis the shares of the payments of one invoice are one booking that adds up to the field', () => {
+    const inv = invoice({ id: 'i1', date: '2026-10-01', serviceEnd: '2026-10-01' });
+    const r = run({
+      method: 'cash',
+      invoices: [inv],
+      payments: [
+        { id: 'a', invoiceId: 'i1', date: '2026-10-05', amount: cents(59_500) },
+        { id: 'b', invoiceId: 'i1', date: '2026-10-20', amount: cents(59_500) },
+      ],
+    });
+    expect(field(r, 'taxable19')?.bookings).toEqual([{ kind: 'invoice', id: 'i1', base: 100_000, tax: 19_000 }]);
   });
 });
 

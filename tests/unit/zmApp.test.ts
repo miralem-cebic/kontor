@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { makeCancellation, makeContact, makeInvoice, makePayment } from '../../src/data/schema';
+import { makeCancellation, makeContact, makeInvoice, makePayment, makePayout } from '../../src/data/schema';
 import type { DocumentFile, InvoiceFile } from '../../src/data/types';
 import { brandId } from '../../src/data/ids';
 import type { DocumentId } from '../../src/data/ids';
 import { buildZm, zmCopyValue, zmTable } from '../../src/app/zm';
 import { cents } from '../../src/domain/money';
 import { usePrefs } from '../../src/store/prefs';
-import { sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleIssued, sampleProfile } from './fixtures';
+import { sampleAccount, sampleCompany, sampleContact, sampleInvoice, sampleIssued, samplePayout, sampleProfile } from './fixtures';
 
 beforeEach(() => usePrefs.setState({ language: 'de' }));
 
@@ -53,7 +53,7 @@ describe('buildZm', () => {
   it('a recipient without a usable VAT ID is a problem named by the invoice number', () => {
     const noId = makeContact(sampleContact({ address: { street: 'Main Street 1', postalCode: 'D01', city: 'Dublin', country: 'IE' }, vatId: '' }));
     const view = buildZm(COMPANY, docs(issuedService('RE-2026-0009', noId)), none, none, Q4);
-    expect(view?.zm.problems).toEqual([{ invoiceId: expect.any(String), number: 'RE-2026-0009', vatId: '', code: 'vatIdMissing' }]);
+    expect(view?.zm.problems).toEqual([{ invoiceId: expect.any(String), number: 'RE-2026-0009', source: 'invoice', vatId: '', code: 'vatIdMissing' }]);
   });
 
   it('cash basis: Kz 21 of the advance return counts by the service as the report does (§ 18b Satz 3 UStG, #75), paid or not', () => {
@@ -101,5 +101,35 @@ describe('copy values and CSV', () => {
     const table = zmTable(view.zm);
     expect(table.header).toEqual(['Land', 'USt-IdNr.', 'Art', 'Betrag (volle Euro)', 'Betrag (genau)']);
     expect(table.rows).toEqual([['IE', 'IE6388047V', 'Sonstige Leistung', { number: '1363' }, { number: '1362,50' }]]);
+  });
+});
+
+describe('buildZm with payouts (#34)', () => {
+  const apple = makeContact(sampleContact({ name: 'Apple Distribution International', address: { street: 'Hollyhill', postalCode: 'T23', city: 'Cork', country: 'IE' }, vatId: 'IE9700053D' }));
+  const records = (over: Parameters<typeof samplePayout>[2] = {}, payer = apple) => {
+    const p = makePayout({ ...samplePayout(ACCOUNT_ID, payer.id, { date: '2026-11-03', period: '2026-10', ...over }), accountId: ACCOUNT_ID, payerId: payer.id });
+    return { payouts: new Map([[p.id as string, p]]), contacts: new Map([[payer.id as string, payer]]) };
+  };
+
+  it('a payout from an EU business is a service line of the payer, and the check against Kz 21 agrees', () => {
+    const view = buildZm(COMPANY, docs(), none, none, Q4, records());
+    expect(view?.zm.lines).toMatchObject([{ country: 'IE', vatId: 'IE9700053D', kind: 'service', base: 123_456, problem: null }]);
+    expect(view?.check).toEqual({ zm: 123_456, ustva: 123_456, difference: 0, consistent: true });
+  });
+
+  it('is reported with the invoices of the same payer in one line', () => {
+    const view = buildZm(COMPANY, docs(issuedService()), none, none, Q4, records());
+    expect(view?.zm.lines).toMatchObject([{ vatId: 'IE6388047V', base: 136_250 }, { vatId: 'IE9700053D', base: 123_456 }]);
+    expect(view?.check?.consistent).toBe(true);
+  });
+
+  it('a payer without a VAT ID is a problem named by the payer and the day, not an invoice number', () => {
+    const view = buildZm(COMPANY, docs(), none, none, Q4, records({}, makeContact(sampleContact({ name: 'No Id Ltd', vatId: '', address: { street: 'X', postalCode: '1', city: 'Dublin', country: 'IE' } }))));
+    expect(view?.zm.problems).toMatchObject([{ source: 'payout', code: 'vatIdMissing', number: 'No Id Ltd, 2026-11-03' }]);
+  });
+
+  it('a payout from outside the EU or one the platform taxes is not in the report', () => {
+    expect(buildZm(COMPANY, docs(), none, none, Q4, records({ taxTreatment: 'thirdCountryB2bNotTaxable' }))?.zm.lines).toEqual([]);
+    expect(buildZm(COMPANY, docs(), none, none, Q4, records({ taxTreatment: 'platformCollectsVat' }))?.zm.lines).toEqual([]);
   });
 });

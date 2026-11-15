@@ -87,4 +87,28 @@ export const gross = (inv: UstvaInvoice): Cents => cents(inv.lines.reduce((s, l)
 
 export const paymentOf = (id: string, invoiceId: string, date: string, amount: number): UstvaPayment => ({ id, invoiceId, date, amount: cents(amount) });
 
-export const domesticExpense = (date: string, grossAmount: number, vat: number): UstvaExpense => ({ date, taxTreatment: 'domestic', gross: cents(grossAmount), vat: cents(vat) });
+let expenseCounter = 0;
+
+/** A domestic expense with the VAT as its receipt shows it */
+export const domesticExpense = (date: string, grossAmount: number, vat: number): UstvaExpense => ({ id: `e${++expenseCounter}`, date, taxTreatment: 'domestic', gross: cents(grossAmount), vat: cents(vat), smallBusiness: false });
+
+/** An expense without German VAT on its receipt: the treatment says who owes the tax (§ 13b UStG) or that none is owed */
+export const foreignExpense = (date: string, treatment: Exclude<UstvaExpense['taxTreatment'], 'domestic'>, grossAmount: number, over: Partial<UstvaExpense> = {}): UstvaExpense => ({
+  id: `e${++expenseCounter}`,
+  date,
+  taxTreatment: treatment,
+  gross: cents(grossAmount),
+  vat: cents(0),
+  smallBusiness: false,
+  ...over,
+});
+
+/**
+ * A payout as `src/app/ustva.ts` hands it to the return: an invoice-like row without VAT (`source: 'payout'`) for the
+ * amount, the day the money arrived as the invoice date, the last day of the month it covers as the day of the service, and
+ * the payment of the same day that settles it. A payout that has VAT inside is passed as a taxed invoice with its rate.
+ */
+export function payoutRows(opts: { id: string; received: string; coveredEnd?: string; amount: number; treatment: 'reverseCharge' | 'notTaxable'; country: string }): { invoice: UstvaInvoice; payment: UstvaPayment } {
+  const invoice = invoiceOf({ id: opts.id, date: opts.received, serviceEnd: opts.coveredEnd ?? opts.received, treatment: opts.treatment, country: opts.country }, [{ net: opts.amount }]);
+  return { invoice: { ...invoice, source: 'payout' }, payment: paymentOf(`pay-${opts.id}`, opts.id, opts.received, opts.amount) };
+}

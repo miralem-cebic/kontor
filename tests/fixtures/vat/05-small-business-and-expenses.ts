@@ -7,11 +7,10 @@
 // Expenses: only the German VAT of a domestic expense is input tax, and only when an invoice with VAT shown exists
 // (§ 15 Abs. 1 Satz 1 Nr. 1 UStG, https://www.gesetze-im-internet.de/ustg_1980/__15.html). If a foreign supplier charged the VAT
 // of its own country, that VAT is no German input tax: it stays inside the gross expense (the "no VAT" treatment). An
-// expense with reverse charge (§ 13b UStG) would need Kz 46/47 and 67, which kontor does not compute yet: it reports it.
+// expense with reverse charge (§ 13b UStG) goes to Kz 46/47 or 84/85 and to Kz 67 (scenarios 14 and 15).
 
 import type { VatScenario } from './helpers';
-import { cents } from '../../../src/domain/money';
-import { domesticExpense, invoiceOf } from './helpers';
+import { domesticExpense, foreignExpense, invoiceOf } from './helpers';
 
 const OCT = { year: 2026, kind: 'month', index: 10 } as const;
 const base = { method: 'accrual', permanentExtension: false, payments: [] } as const;
@@ -43,7 +42,7 @@ export const scenarios: VatScenario[] = [
     title: 'input tax only from domestic expenses with VAT; foreign VAT stays in the expense; reverse charge is reported',
     reasoning:
       'Domestic: 119.00 € (19.00 € VAT) and 107.00 € (7.00 € VAT) in October give 26.00 € in Kz 66; 30 September and 1 November are other periods. ' +
-      'The "no VAT" expense of 119.00 € (a foreign supplier charged its own VAT) gives no German input tax. The EU reverse charge expense (99.00 €) and the third country expense (50.00 €) are in the notices.',
+      'The "no VAT" expense of 119.00 € (a foreign supplier charged its own VAT) gives no German input tax. The EU reverse charge expense (99.00 €) and the third country expense (50.00 €) owe and deduct the same tax: Kz 46/47 and 84/85, Kz 67 (18.81 € and 9.50 €).',
     sources: ['https://www.gesetze-im-internet.de/ustg_1980/__15.html (Abs. 1 Satz 1 Nr. 1)', 'https://www.gesetze-im-internet.de/ustg_1980/__13b.html', 'https://www.gesetze-im-internet.de/ustg_1980/__16.html (Abs. 2)'],
     input: {
       ...base,
@@ -54,15 +53,19 @@ export const scenarios: VatScenario[] = [
         domesticExpense('2026-10-31', 10_700, 700),
         domesticExpense('2026-09-30', 11_900, 1_900),
         domesticExpense('2026-11-01', 11_900, 1_900),
-        { date: '2026-10-15', taxTreatment: 'noVat', gross: cents(11_900), vat: cents(0) },
-        { date: '2026-10-16', taxTreatment: 'euReverseCharge', gross: cents(9_900), vat: cents(0) },
-        { date: '2026-10-17', taxTreatment: 'thirdCountry', gross: cents(5_000), vat: cents(0) },
+        foreignExpense('2026-10-15', 'noVat', 11_900),
+        foreignExpense('2026-10-16', 'euReverseCharge', 9_900),
+        foreignExpense('2026-10-17', 'thirdCountry', 5_000),
       ],
     },
-    expected: { inputTax: { tax: 2_600, shown: true }, remainingPrepayment: { tax: -2_600 } },
-    notices: [
-      { code: 'expenseReverseCharge', count: 1, amount: 9_900 },
-      { code: 'expenseThirdCountry', count: 1, amount: 5_000 },
-    ],
+    expected: {
+      inputTax: { tax: 2_600, shown: true },
+      // the reverse charge expenses owe and deduct the same tax (scenarios 14 and 15): the prepayment stays the input tax alone
+      euReverseCharge: { base: 9_900, tax: 1_881 },
+      otherReverseCharge: { base: 5_000, tax: 950 },
+      inputTaxReverseCharge: { tax: 2_831 },
+      remainingPrepayment: { tax: -2_600 },
+    },
+    notices: [],
   },
 ];

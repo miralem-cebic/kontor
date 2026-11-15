@@ -23,11 +23,13 @@ export function ZmSection() {
   const documents = useApp((s) => s.documents);
   const payments = useApp((s) => s.payments);
   const expenses = useApp((s) => s.expenses);
+  const payouts = useApp((s) => s.payouts);
+  const contacts = useApp((s) => s.contacts);
   const today = isoDateOf(new Date());
   const regular = company?.tax.vat.kind === 'regular';
   const [kind, setKind] = useState<UstvaPeriodKind>('quarter');
   const [period, setPeriod] = useState<UstvaPeriod>(() => lastCompletedPeriod(today, 'quarter'));
-  const view = useMemo(() => buildZm(company, documents, payments, expenses, period), [company, documents, payments, expenses, period]);
+  const view = useMemo(() => buildZm(company, documents, payments, expenses, period, { payouts, contacts }), [company, documents, payments, expenses, period, payouts, contacts]);
 
   if (!company) return null;
   if (!regular || !view) {
@@ -101,7 +103,7 @@ export function ZmSection() {
             <strong>{t('zm.problems.title')}</strong>
           </p>
           {zm.problems.map((p) => (
-            <p key={`${p.invoiceId}-${p.code}`}>{t('zm.problems.item', { number: p.number, text: zmProblemText(p.code) })}</p>
+            <p key={`${p.invoiceId}-${p.code}`}>{t(p.source === 'payout' ? 'zm.problems.payoutItem' : 'zm.problems.item', { number: p.number, text: zmProblemText(p.code) })}</p>
           ))}
           <p>{t('zm.problems.hint')}</p>
         </div>

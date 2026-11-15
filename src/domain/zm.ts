@@ -63,6 +63,8 @@ export interface ZmInvoice {
   smallBusiness: boolean;
   /** The net amount of the invoice; negative for a cancellation */
   net: Cents;
+  /** An invoice, or a payout without an invoice of kontor (then `number` names the payer and the day); default: an invoice */
+  source?: 'invoice' | 'payout';
 }
 
 export interface ZmInput {
@@ -78,7 +80,9 @@ export type ZmProblemCode = 'vatIdMissing' | 'vatIdInvalid' | 'vatIdGerman' | 'v
 
 export interface ZmProblem {
   invoiceId: string;
+  /** The invoice number, or for a payout the payer and the day */
   number: string;
+  source: 'invoice' | 'payout';
   /** The VAT ID as normalized; empty if missing */
   vatId: string;
   code: ZmProblemCode;
@@ -232,7 +236,7 @@ export function zm(input: ZmInput): ZmResult {
     if (base === 0) continue;
     const found = g.entries.flatMap((e) => {
       const code = problemOf(e.inv, g.vatId);
-      return code ? [{ invoiceId: e.inv.id, number: e.inv.number, vatId: g.vatId, code }] : [];
+      return code ? [{ invoiceId: e.inv.id, number: e.inv.number, source: e.inv.source ?? 'invoice', vatId: g.vatId, code }] : [];
     });
     const first = g.entries[0]?.inv;
     const usable = found.length === 0 || found.every((p) => p.code === 'vatIdCountry');

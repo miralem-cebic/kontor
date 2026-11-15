@@ -33,6 +33,12 @@ export const PARAMS_2026: TaxYearParams = {
       otherNotTaxable: '45', // place of supply abroad (§§ 3a ff. UStG)
       inputTax: '66', // § 15 Abs. 1 Satz 1 Nr. 1 UStG
       remainingPrepayment: '83', // advance payment, calculated from the lines above
+      // § 13b UStG, the recipient owes the tax (#34). Checked against the lines of the official form (tests/fixtures/vat/form-2026.ts)
+      euReverseCharge: '46', // line 30: services under § 3a Abs. 2 UStG of a supplier in another EU state (§ 13b Abs. 1 UStG): base
+      euReverseChargeTax: '47', // the tax beside it
+      otherReverseCharge: '84', // line 32: other services, among them those of a supplier established abroad (§ 13b Abs. 2 Nr. 1 UStG): base
+      otherReverseChargeTax: '85', // the tax beside it
+      inputTaxReverseCharge: '67', // line 41: input tax from services under § 13b UStG (§ 15 Abs. 1 Satz 1 Nr. 4 UStG)
     },
   },
   summaryReport: {

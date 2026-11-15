@@ -37,7 +37,7 @@ const invoice = (over: Partial<UstvaInvoice> = {}): UstvaInvoice => ({
   ...over,
 });
 
-const expense = (over: Partial<UstvaExpense> = {}): UstvaExpense => ({ date: '2026-10-20', taxTreatment: 'domestic', gross: cents(11_900), vat: cents(1_900), ...over });
+const expense = (over: Partial<UstvaExpense> = {}): UstvaExpense => ({ date: '2026-10-20', taxTreatment: 'domestic', gross: cents(11_900), vat: cents(1_900), smallBusiness: false, ...over });
 
 const run = (over: Partial<UstvaInput> = {}): UstvaResult =>
   ustva({ period: OCT_2026, method: 'accrual', permanentExtension: false, invoices: [], payments: [], expenses: [], ...over });
@@ -327,6 +327,12 @@ describe('expenses: input tax by the date of the expense', () => {
   it('sums the VAT of domestic expenses of the period', () => {
     const r = run({ expenses: [expense(), expense({ gross: cents(10_700), vat: cents(700) }), expense({ date: '2026-11-01' }), expense({ taxTreatment: 'noVat', vat: cents(0) })] });
     expect(field(r, 'inputTax')?.tax).toBe(2_600);
+  });
+
+  it('leaves out an expense of a day on which the business was a small business (no input tax, #77)', () => {
+    const r = run({ expenses: [expense(), expense({ smallBusiness: true }), expense({ smallBusiness: true, taxTreatment: 'euReverseCharge', vat: cents(0) })] });
+    expect(field(r, 'inputTax')?.tax).toBe(1_900);
+    expect(r.notices).toEqual([]);
   });
 
   it('a surplus is a negative remaining prepayment', () => {

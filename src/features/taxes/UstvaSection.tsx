@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { buildUstva, exportUstvaCsv, ustvaCopyValue, ustvaFieldText } from '../../app/ustva';
+import { buildUstva, exportUstvaCsv, ustvaCopyValue, ustvaFieldText, ustvaTerms } from '../../app/ustva';
 import { SelectField } from '../../components/Field';
 import { isoDateOf, toLocalDate } from '../../domain/dates';
 import { cents, formatCents, type Cents } from '../../domain/money';
@@ -39,12 +39,86 @@ export function UstvaSection() {
   const payments = useApp((s) => s.payments);
   const expenses = useApp((s) => s.expenses);
   const today = isoDateOf(new Date());
-  const regular = company?.tax.vat.kind === 'regular' ? company.tax.vat : null;
+  // the terms of the company, or of its last regular invoice when it has become a small business since (#77)
+  const regular = useMemo(() => ustvaTerms(company, documents), [company, documents]);
   const [kind, setKind] = useState<UstvaPeriodKind>(regular?.period === 'monthly' ? 'month' : 'quarter');
   const [period, setPeriod] = useState<UstvaPeriod>(() => lastCompletedPeriod(today, kind));
   const result = useMemo(() => buildUstva(company, documents, payments, expenses, period), [company, documents, payments, expenses, period]);
 
   if (!company) return <p className="empty">{t('overview.noCompany')}</p>;
+  const lang = currentLang();
+  const thisYear = new Date().getFullYear();
+  const years = range(Math.min(thisYear - 3, period.year), Math.max(thisYear, period.year));
+  const changeKind = (next: UstvaPeriodKind) => {
+    setKind(next);
+    setPeriod(lastCompletedPeriod(today, next));
+  };
+  const indexOptions =
+    period.kind === 'month'
+      ? range(1, 12).map((m) => ({
+          value: String(m),
+          label: fmt(new Date(2000, m - 1, 1), 'LLLL'),
+        }))
+      : range(1, 4).map((q) => ({
+          value: String(q),
+          label: t('ustva.period.quarterName', { n: q }),
+        }));
+
+  const picker = (
+    <div className="f-row" role="group" aria-label={t('ustva.period.title')}>
+      <SelectField<UstvaPeriodKind>
+        label={t('ustva.period.kind')}
+        value={kind}
+        options={[
+          { value: 'month', label: t('ustva.period.kindMonth') },
+          { value: 'quarter', label: t('ustva.period.kindQuarter') },
+        ]}
+        onChange={changeKind}
+      />
+      <SelectField
+        label={t('ustva.period.year')}
+        value={String(period.year)}
+        options={years.map((y) => ({ value: String(y), label: String(y) }))}
+        onChange={(y) => setPeriod({ ...period, year: Number(y) })}
+      />
+      <SelectField
+        label={period.kind === 'month' ? t('ustva.period.month') : t('ustva.period.quarter')}
+        value={String(period.index)}
+        options={indexOptions}
+        onChange={(i) => setPeriod({ ...period, index: Number(i) })}
+      />
+    </div>
+  );
+
+  if (!regular) {
+    return (
+      <section className="card" aria-label={t('ustva.title')}>
+        <h2>{t('ustva.title')}</h2>
+        <div className="note">
+          <p>
+            <strong>{t('ustva.smallBusiness.title')}</strong>
+          </p>
+          <p>{t('ustva.smallBusiness.text')}</p>
+        </div>
+      </section>
+    );
+  }
+  if (!result) {
+    // a business that has become a small business keeps the periods before the change: the picker stays
+    return (
+      <section className="card" aria-label={t('ustva.title')}>
+        <h2>{t('ustva.title')}</h2>
+        {picker}
+        <div className="note">
+          <p>
+            <strong>{t('ustva.smallBusiness.title')}</strong>
+          </p>
+          <p>{t('ustva.smallBusiness.text')}</p>
+        </div>
+      </section>
+    );
+  }
+
   if (!regular || !result) {
     return (
       <section className="card" aria-label={t('ustva.title')}>
@@ -59,18 +133,6 @@ export function UstvaSection() {
     );
   }
 
-  const lang = currentLang();
-  const thisYear = new Date().getFullYear();
-  const years = range(Math.min(thisYear - 3, period.year), Math.max(thisYear, period.year));
-  const changeKind = (next: UstvaPeriodKind) => {
-    setKind(next);
-    setPeriod(lastCompletedPeriod(today, next));
-  };
-  const indexOptions =
-    period.kind === 'month'
-      ? range(1, 12).map((m) => ({ value: String(m), label: fmt(new Date(2000, m - 1, 1), 'LLLL') }))
-      : range(1, 4).map((q) => ({ value: String(q), label: t('ustva.period.quarterName', { n: q }) }));
-
   return (
     <section className="card" aria-label={t('ustva.title')}>
       <h2>{t('ustva.title')}</h2>
@@ -79,32 +141,11 @@ export function UstvaSection() {
       </div>
       {regular.period === 'yearly' && <p className="f-label">{t('ustva.period.yearlyHint')}</p>}
 
-      <div className="f-row" role="group" aria-label={t('ustva.period.title')}>
-        <SelectField<UstvaPeriodKind>
-          label={t('ustva.period.kind')}
-          value={kind}
-          options={[
-            { value: 'month', label: t('ustva.period.kindMonth') },
-            { value: 'quarter', label: t('ustva.period.kindQuarter') },
-          ]}
-          onChange={changeKind}
-        />
-        <SelectField
-          label={t('ustva.period.year')}
-          value={String(period.year)}
-          options={years.map((y) => ({ value: String(y), label: String(y) }))}
-          onChange={(y) => setPeriod({ ...period, year: Number(y) })}
-        />
-        <SelectField
-          label={period.kind === 'month' ? t('ustva.period.month') : t('ustva.period.quarter')}
-          value={String(period.index)}
-          options={indexOptions}
-          onChange={(i) => setPeriod({ ...period, index: Number(i) })}
-        />
-      </div>
+      {picker}
 
       <p>
-        <strong>{t('ustva.due', { date: fmt(toLocalDate(result.dueDate), 'P') })}</strong> ({regular.permanentExtension ? t('ustva.dueExtension') : t('ustva.dueNoExtension')}). {t('ustva.dueHint')}
+        <strong>{t('ustva.due', { date: fmt(toLocalDate(result.dueDate), 'P') })}</strong> ({regular.permanentExtension ? t('ustva.dueExtension') : t('ustva.dueNoExtension')}
+        ). {t('ustva.dueHint')}
       </p>
       <p>{t(result.method === 'cash' ? 'ustva.method.cash' : 'ustva.method.accrual')}</p>
 
@@ -143,7 +184,12 @@ export function UstvaSection() {
             <strong>{t('ustva.notices.title')}</strong>
           </p>
           {result.notices.map((n) => (
-            <p key={n.code}>{t(NOTICE_TEXT[n.code], { n: n.count, amount: formatCents(n.amount, lang) })}</p>
+            <p key={n.code}>
+              {t(NOTICE_TEXT[n.code], {
+                n: n.count,
+                amount: formatCents(n.amount, lang),
+              })}
+            </p>
           ))}
         </div>
       )}
@@ -186,7 +232,15 @@ function Value({ kz, what, amount, lang }: { kz: string; what: 'base' | 'tax'; a
   return (
     <span className="ustva-value">
       {formatCents(shown, lang)}
-      <button type="button" className="btn sm ghost" aria-label={t(what === 'base' ? 'ustva.copyBase' : 'ustva.copyTax', { kz, value: copy })} onClick={() => void copyText(copy)}>
+      <button
+        type="button"
+        className="btn sm ghost"
+        aria-label={t(what === 'base' ? 'ustva.copyBase' : 'ustva.copyTax', {
+          kz,
+          value: copy,
+        })}
+        onClick={() => void copyText(copy)}
+      >
         {t('ustva.copy')}
       </button>
     </span>

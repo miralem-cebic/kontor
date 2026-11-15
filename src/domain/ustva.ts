@@ -129,6 +129,8 @@ export interface UstvaExpense {
   gross: Cents;
   /** The German VAT inside the gross amount; 0 without it */
   vat: Cents;
+  /** Paid on a day on which the business was a small business: no input tax (§ 15 UStG), and it is no part of the return */
+  smallBusiness: boolean;
 }
 
 export interface UstvaInput {
@@ -280,7 +282,7 @@ export function ustva(input: UstvaInput): UstvaResult {
   const parts = recognized(input);
   const total = (target: Target, what: 'net' | 'tax'): Cents => sum(parts.filter((p) => p.target === target).map((p) => p[what]));
 
-  const expenses = input.expenses.filter((e) => inPeriod(e.date, period));
+  const expenses = input.expenses.filter((e) => !e.smallBusiness && inPeriod(e.date, period));
   const inputTax = sum(expenses.filter((e) => e.taxTreatment === 'domestic').map((e) => e.vat));
   const tax19 = total('taxable19', 'tax');
   const tax7 = total('taxable7', 'tax');

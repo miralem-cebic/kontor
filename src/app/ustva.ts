@@ -6,18 +6,43 @@
 import { encodeCsv, num } from '../data/export/csv';
 import type { DocumentId } from '../data/ids';
 import type { CompanyFile, DocumentFile, ExpenseFile, PaymentFile } from '../data/types';
+import type { VatScheme } from '../domain/company';
 import { isInvoice } from '../data/types';
 import { expenseVat } from '../domain/expense';
 import { invoiceTotals } from '../domain/invoice';
 import { toDecimalString, type Cents } from '../domain/money';
-import { ustva, wholeEuros, type UstvaExpense, type UstvaFieldId, type UstvaInvoice, type UstvaPayment, type UstvaPeriod, type UstvaResult } from '../domain/ustva';
+import { periodEnd, periodStart, ustva, wholeEuros, type UstvaExpense, type UstvaFieldId, type UstvaInvoice, type UstvaPayment, type UstvaPeriod, type UstvaResult } from '../domain/ustva';
 import { t, type MessageKey } from '../i18n';
 import { saveFile } from '../lib/browser';
+import { smallBusinessOn } from './vatStatus';
 import type { Table } from './csvExport';
 
+/** The terms of an advance return: how VAT is accounted for, how often it is returned and whether the due date is extended */
+export type UstvaTerms = Extract<VatScheme, { kind: 'regular' }>;
+
 /**
- * The advance return of a period for the open company, from its records. Null without a company and for a small
- * business, which files no advance return (§ 19 UStG).
+ * The terms the advance returns are filed with: those of the company if it has regular VAT, otherwise (a small business
+ * today) those of its latest regular invoice, whose snapshot kept them. Null for a business that never had regular VAT,
+ * which has no advance return to file (§ 19 UStG).
+ */
+export function ustvaTerms(company: CompanyFile | null, documents: ReadonlyMap<DocumentId, DocumentFile>): UstvaTerms | null {
+  if (!company) return null;
+  if (company.tax.vat.kind === 'regular') return company.tax.vat;
+  let latest: { date: string; issuedAt: string; vat: UstvaTerms } | null = null;
+  for (const d of documents.values()) {
+    if (!isInvoice(d) || d.issued === null || d.cancels !== null || d.deletedAt) continue;
+    const vat = d.issued.snapshot.company.tax.vat;
+    if (vat.kind !== 'regular') continue;
+    if (!latest || d.date > latest.date || (d.date === latest.date && d.issued.issuedAt > latest.issuedAt)) latest = { date: d.date, issuedAt: d.issued.issuedAt, vat };
+  }
+  return latest?.vat ?? null;
+}
+
+/**
+ * The advance return of a period for the open company, from its records. Null without a company and for a period in
+ * which the business was a small business throughout, which files no advance return (§ 19 UStG). The status of a day
+ * comes from the issued invoices (`smallBusinessOn`), so the last periods of a business that has become a small
+ * business since still get their return, and expenses from the days of a small business are left out (#77).
  */
 export function buildUstva(
   company: CompanyFile | null,
@@ -26,8 +51,13 @@ export function buildUstva(
   expenses: ReadonlyMap<string, ExpenseFile>,
   period: UstvaPeriod,
 ): UstvaResult | null {
-  if (!company || company.tax.vat.kind !== 'regular') return null;
-  const { method, permanentExtension } = company.tax.vat;
+  const terms = ustvaTerms(company, documents);
+  if (!company || !terms) return null;
+  const { method, permanentExtension } = terms;
+  const smallOn = smallBusinessOn(company, documents.values());
+  // A business with regular VAT today always gets its return (the invoices and expenses of its small business days drop
+  // out below). A small business today gets one only for a period in which it was regular on the first or the last day.
+  if (company.tax.vat.kind !== 'regular' && smallOn(periodStart(period)) && smallOn(periodEnd(period))) return null;
 
   const invoices: UstvaInvoice[] = [...documents.values()]
     .filter(isInvoice)
@@ -47,10 +77,32 @@ export function buildUstva(
         lines: totals.byRate.map(({ rate, net, tax }) => ({ rate, net, tax })),
       };
     });
-  const paymentRows: UstvaPayment[] = [...payments.values()].filter((p) => p.deletedAt === null).map((p) => ({ id: p.id, invoiceId: p.invoiceId, date: p.date, amount: p.amount }));
-  const expenseRows: UstvaExpense[] = [...expenses.values()].filter((e) => e.deletedAt === null).map((e) => ({ date: e.date, taxTreatment: e.taxTreatment, gross: e.gross, vat: expenseVat(e) }));
+  const paymentRows: UstvaPayment[] = [...payments.values()]
+    .filter((p) => p.deletedAt === null)
+    .map((p) => ({
+      id: p.id,
+      invoiceId: p.invoiceId,
+      date: p.date,
+      amount: p.amount,
+    }));
+  const expenseRows: UstvaExpense[] = [...expenses.values()]
+    .filter((e) => e.deletedAt === null)
+    .map((e) => ({
+      date: e.date,
+      taxTreatment: e.taxTreatment,
+      gross: e.gross,
+      vat: expenseVat(e),
+      smallBusiness: smallOn(e.date),
+    }));
 
-  return ustva({ period, method, permanentExtension, invoices, payments: paymentRows, expenses: expenseRows });
+  return ustva({
+    period,
+    method,
+    permanentExtension,
+    invoices,
+    payments: paymentRows,
+    expenses: expenseRows,
+  });
 }
 
 /**

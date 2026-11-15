@@ -4,7 +4,7 @@ import { makeCancellation, makeContact, makeExpense, makeInvoice, makePayment } 
 import type { DocumentFile, ExpenseFile, InvoiceFile, PaymentFile } from '../../src/data/types';
 import { brandId } from '../../src/data/ids';
 import type { DocumentId } from '../../src/data/ids';
-import { buildUstva, ustvaCopyValue, ustvaTable } from '../../src/app/ustva';
+import { buildUstva, ustvaCopyValue, ustvaTable, ustvaTerms } from '../../src/app/ustva';
 import { cents } from '../../src/domain/money';
 import { usePrefs } from '../../src/store/prefs';
 import { sampleCompany, sampleContact, sampleExpense, sampleInvoice, sampleIssued, sampleProfile } from './fixtures';
@@ -97,5 +97,104 @@ describe('ustvaTable', () => {
     expect(lines[1]).toMatch(/^81;.*;1062;1062,50;201,88$/);
     // header, 81, 86, 66, 83 and the empty piece after the last line break
     expect(lines).toHaveLength(6);
+  });
+});
+
+describe('the VAT status of the day (#77)', () => {
+  const smallProfile = sampleProfile({
+    tax: { ...sampleProfile().tax, vat: { kind: 'smallBusiness' } },
+  });
+  const smallNow = sampleCompany({
+    tax: { ...sampleProfile().tax, vat: { kind: 'smallBusiness' } },
+  });
+  const Q2 = { year: 2026, kind: 'quarter', index: 2 } as const;
+  const Q3 = { year: 2026, kind: 'quarter', index: 3 } as const;
+  const Q4 = { year: 2026, kind: 'quarter', index: 4 } as const;
+  const Q1_2027 = { year: 2027, kind: 'quarter', index: 1 } as const;
+  const issuedOn = (date: string, number: string, small: boolean): InvoiceFile & { issued: NonNullable<InvoiceFile['issued']> } => ({
+    ...makeInvoice(customer.id, ACCOUNT_ID, sampleInvoice({ date, service: { kind: 'date', date } }), null),
+    issued: sampleIssued(number, {
+      issuedAt: `${date}T10:00:00.000Z`,
+      snapshot: {
+        ...sampleIssued().snapshot,
+        company: small ? smallProfile : sampleProfile(),
+      },
+    }),
+  });
+
+  it('leaves out the expenses of a day on which the business was a small business (no right to deduct input tax)', () => {
+    // small business until the invoice of 15 July, regular from then on, accrual method
+    const history = docs(issuedOn('2026-03-01', 'RE-2026-0001', true), issuedOn('2026-07-15', 'RE-2026-0002', false));
+    const before = makeExpense(
+      sampleExpense({
+        date: '2026-07-05',
+        gross: cents(11_900),
+        accountId: null,
+      }),
+    );
+    const after = makeExpense(
+      sampleExpense({
+        date: '2026-08-01',
+        gross: cents(11_900),
+        accountId: null,
+      }),
+    );
+    // the quarter of the change: only the expense after it has input tax
+    const q3 = buildUstva(COMPANY, history, none, expensesOf(before, after), Q3);
+    expect(field(q3, 'inputTax')?.tax).toBe(1_900);
+    // the output tax of the invoice of 15 July (20,188 + 2,100) less that input tax
+    expect(field(q3, 'remainingPrepayment')?.tax).toBe(20_388);
+    // the quarter before it was a small business throughout: no input tax, so no refund claim (the case of #77)
+    const q2 = buildUstva(
+      COMPANY,
+      history,
+      none,
+      expensesOf(
+        before,
+        after,
+        makeExpense(
+          sampleExpense({
+            date: '2026-05-10',
+            gross: cents(11_900),
+            accountId: null,
+          }),
+        ),
+      ),
+      Q2,
+    );
+    expect(field(q2, 'inputTax')?.tax).toBe(0);
+    expect(field(q2, 'remainingPrepayment')?.tax).toBe(0);
+  });
+
+  it('gives the return of the last regular periods to a business that is a small business today', () => {
+    const history = docs(issuedInvoice());
+    const r = buildUstva(smallNow, history, none, none, Q4);
+    expect(field(r, 'taxable19')).toMatchObject({ base: 106_250, tax: 20_188 });
+    // the terms are those of the invoice's snapshot: quarterly, permanent extension
+    expect(r?.dueDate).toBe(buildUstva(COMPANY, history, none, none, Q4)?.dueDate);
+  });
+
+  it('files no return for a period after the change to small business, nor for a business that was never regular', () => {
+    expect(buildUstva(smallNow, docs(issuedInvoice()), none, none, Q1_2027)).toBeNull();
+    // while a business that is regular today always gets its return
+    expect(buildUstva(COMPANY, docs(issuedOn('2026-10-31', 'RE-2026-0001', true)), none, none, Q4)).not.toBeNull();
+    expect(buildUstva(smallNow, docs(), none, none, Q4)).toBeNull();
+  });
+
+  it('ustvaTerms: the terms of the company, or of the last regular invoice for a small business today, or null', () => {
+    expect(ustvaTerms(COMPANY, docs())).toEqual({
+      kind: 'regular',
+      method: 'accrual',
+      period: 'quarterly',
+      permanentExtension: true,
+    });
+    expect(ustvaTerms(smallNow, docs(issuedInvoice()))).toEqual({
+      kind: 'regular',
+      method: 'accrual',
+      period: 'quarterly',
+      permanentExtension: true,
+    });
+    expect(ustvaTerms(smallNow, docs(issuedOn('2026-03-01', 'RE-2026-0001', true)))).toBeNull();
+    expect(ustvaTerms(null, docs())).toBeNull();
   });
 });

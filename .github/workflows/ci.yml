@@ -90,7 +90,7 @@ jobs:
   # commit in uses:, baseline-ref and "baseline" in baseline.json together: Dependabot only updates uses:.
   conformance:
     name: conformance
-    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@41304f703e5607321b696040cd586870a7f0f886 # v0.1.1
+    uses: miralem-cebic/engineering-baseline/.github/workflows/conformance.yml@a7e3acb3d2adb28d6a42d9c335bd35f2916d0e2c # v0.2.0
     with:
       strict: false
       baseline-ref: v0.1.0
